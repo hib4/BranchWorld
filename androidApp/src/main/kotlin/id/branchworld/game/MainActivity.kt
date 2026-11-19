@@ -2,6 +2,7 @@ package id.branchworld.game
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
@@ -13,7 +14,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            App()
+            App { enabled, onBack ->
+                BackHandler(enabled = enabled, onBack = onBack)
+            }
         }
     }
 }

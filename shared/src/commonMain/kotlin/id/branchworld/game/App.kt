@@ -1,49 +1,198 @@
 package id.branchworld.game
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
-import org.jetbrains.compose.resources.painterResource
-
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import branchworld.shared.generated.resources.Res
-import branchworld.shared.generated.resources.compose_multiplatform
+import branchworld.shared.generated.resources.back_to_home
+import branchworld.shared.generated.resources.branchworld_tagline
+import branchworld.shared.generated.resources.branchworld_title
+import branchworld.shared.generated.resources.diagnostics_lifecycle
+import branchworld.shared.generated.resources.diagnostics_platform
+import branchworld.shared.generated.resources.diagnostics_seed
+import branchworld.shared.generated.resources.diagnostics_title
+import branchworld.shared.generated.resources.hide_diagnostics
+import branchworld.shared.generated.resources.open_world
+import branchworld.shared.generated.resources.show_diagnostics
+import branchworld.shared.generated.resources.world_title
+import org.jetbrains.compose.resources.stringResource
+
+private const val PreviewSeed = 104729L
+
+private val BranchWorldColors = lightColorScheme(
+    primary = Color(0xFF285648),
+    onPrimary = Color.White,
+    background = Color(0xFFF4F5ED),
+    onBackground = Color(0xFF152C25),
+    surface = Color(0xFFF4F5ED),
+    onSurface = Color(0xFF152C25),
+    surfaceContainerHigh = Color(0xFFF7F8EF),
+)
 
 @Composable
-@Preview
-fun App() {
-    MaterialTheme {
-        var showContent by remember { mutableStateOf(false) }
-        Column(
-            modifier = Modifier
-                .background(MaterialTheme.colorScheme.primaryContainer)
-                .safeContentPadding()
-                .fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Button(onClick = { showContent = !showContent }) {
-                Text("Click me!")
-            }
-            AnimatedVisibility(showContent) {
-                val greeting = remember { Greeting().greet() }
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Image(painterResource(Res.drawable.compose_multiplatform), null)
-                    Text("Compose: $greeting")
+fun App(
+    registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
+) {
+    var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
+    val goHome = { state = state.back() }
+    registerBackHandler(state.route == ShellRoute.World, goHome)
+
+    MaterialTheme(colorScheme = BranchWorldColors) {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(modifier = Modifier.fillMaxSize().safeContentPadding()) {
+                val viewportHeight = (maxHeight * 0.58f).coerceIn(208.dp, 480.dp)
+                when (state.route) {
+                    ShellRoute.Home -> HomeScreen(
+                        onOpenWorld = { state = state.openWorld() },
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+                    ShellRoute.World -> WorldScreen(
+                        seed = PreviewSeed,
+                        viewportHeight = viewportHeight,
+                        diagnosticsVisible = state.diagnosticsVisible,
+                        onToggleDiagnostics = { state = state.toggleDiagnostics() },
+                        onBack = goHome,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .widthIn(max = 640.dp)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = stringResource(Res.string.branchworld_title),
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.displayMedium,
+            textAlign = TextAlign.Center,
+        )
+        Text(
+            text = stringResource(Res.string.branchworld_tagline),
+            style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
+        )
+        Button(onClick = onOpenWorld) {
+            Text(stringResource(Res.string.open_world))
+        }
+    }
+}
+
+@Composable
+private fun WorldScreen(
+    seed: Long,
+    viewportHeight: Dp,
+    diagnosticsVisible: Boolean,
+    onToggleDiagnostics: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .widthIn(max = 1000.dp)
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Text(
+            text = stringResource(Res.string.world_title),
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineMedium,
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = viewportHeight)
+                .clip(MaterialTheme.shapes.large),
+        ) {
+            WorldViewport(Modifier.matchParentSize())
+            if (diagnosticsVisible) {
+                Diagnostics(
+                    seed = seed,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
+                )
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                Text(stringResource(Res.string.back_to_home), textAlign = TextAlign.Center)
+            }
+            Button(onClick = onToggleDiagnostics, modifier = Modifier.weight(1f)) {
+                val label = if (diagnosticsVisible) Res.string.hide_diagnostics else Res.string.show_diagnostics
+                Text(stringResource(label), textAlign = TextAlign.Center)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Diagnostics(seed: Long, modifier: Modifier = Modifier) {
+    val platform = remember { getPlatform().name }
+    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    Surface(
+        modifier = modifier.widthIn(max = 264.dp).fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = stringResource(Res.string.diagnostics_title),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.titleSmall,
+            )
+            Text(stringResource(Res.string.diagnostics_platform, platform))
+            Text(stringResource(Res.string.diagnostics_seed, seed.toString()))
+            Text(stringResource(Res.string.diagnostics_lifecycle, lifecycle.name))
         }
     }
 }
