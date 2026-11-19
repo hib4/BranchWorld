@@ -7,17 +7,37 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import id.branchworld.renderer.AndroidDiorama
 
 class MainActivity : ComponentActivity() {
+    private val renderer by lazy { AndroidDiorama(applicationContext) }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
         setContent {
-            App { enabled, onBack ->
-                BackHandler(enabled = enabled, onBack = onBack)
-            }
+            App(
+                viewport = { modifier, active -> renderer.Viewport(modifier, active) },
+                viewportHud = { renderer.Hud() },
+                registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
+            )
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        renderer.resume()
+    }
+
+    override fun onPause() {
+        renderer.pause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        if (!isChangingConfigurations) renderer.close()
+        super.onDestroy()
     }
 }
 

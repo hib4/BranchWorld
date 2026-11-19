@@ -1,6 +1,6 @@
 # BranchWorld
 
-BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The current foundation opens a shared Compose world preview and displays its seed and live application lifecycle.
+BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The current prototype opens a 3D island diorama with a shared Compose HUD.
 
 ## Build and run
 
@@ -8,7 +8,7 @@ Use the checked-in Gradle wrapper. Its daemon toolchain selects Azul JDK 21. For
 
 ```sh
 ./gradlew :androidApp:assembleDebug :androidApp:lintDebug :desktopApp:assemble
-./gradlew :shared:jvmTest :shared:testAndroidHostTest
+./gradlew :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest
 ```
 
 With one emulator or device connected, install and launch the debug APK. Add `-s <serial>` after `adb` when more than one device is connected.
@@ -25,12 +25,25 @@ Run the Desktop app in a graphical session.
 ./gradlew :desktopApp:run
 ```
 
-On either app, select **Open world**, then **Show diagnostics**. The overlay reports seed `104729`, the current platform, and the live lifecycle state. On Android, press Home and reopen the app, then rotate the device. The viewport and open overlay should return. System Back or **Back to home** should return to the title. On Desktop, use Tab and Enter or the mouse to navigate. Resize, minimize, and restore the window with the overlay open. Closing and relaunching Desktop starts at the title screen.
+For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
+
+Select **Open world**. The island loads with pines, rocks, and an animated bunny. **Focus island** resets the camera, and **Pause animation** holds the bunny pose while you move the camera. **Show diagnostics** reports the display seed `104729`, platform, and lifecycle state.
+
+| Action | Android | Desktop |
+| --- | --- | --- |
+| Orbit | Drag one finger | Drag the primary mouse button or use the arrow keys |
+| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or use Shift and the arrow keys |
+| Zoom | Pinch | Scroll |
+
+To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. On either target, use **Back to home** and reopen the world three times. Each return should show a usable scene and HUD.
+
+Run the Android on-device gesture and Activity recreation test with `./gradlew :androidApp:connectedDebugAndroidTest` while an emulator or device is connected.
 
 ## Architecture
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
-- `shared/src/commonMain` owns the Compose shell, its navigation state, and the read-only viewport. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
+- `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
+- `renderer` owns the Kool prototype, authored scene and animation, camera controls, and platform surface adapters. Android hosts GLES under Compose. Desktop renders a Vulkan color attachment and delivers its pixels to Compose. The three runtime GLBs and the bunny's texture are bundled from one shared resource directory.
 - The shared simulation will own authoritative state and accept tick-indexed commands. It will expose read-only render projections to platform rendering adapters. Platform storage adapters will handle file I/O for portable, versioned save data. Compose, renderer, and platform objects stay outside authoritative state and save models.
 
 ## Source asset inventory

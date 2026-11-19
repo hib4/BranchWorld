@@ -64,29 +64,42 @@ private val BranchWorldColors = lightColorScheme(
 
 @Composable
 fun App(
+    viewport: (@Composable (Modifier, Boolean) -> Unit)? = null,
+    viewportHud: (@Composable () -> Unit)? = null,
     registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
+    val isWorld = state.route == ShellRoute.World
+    var hasOpenedWorld by remember { mutableStateOf(isWorld) }
     val goHome = { state = state.back() }
-    registerBackHandler(state.route == ShellRoute.World, goHome)
+    registerBackHandler(isWorld, goHome)
 
     MaterialTheme(colorScheme = BranchWorldColors) {
         Surface(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize().safeContentPadding()) {
-                val viewportHeight = (maxHeight * 0.58f).coerceIn(208.dp, 480.dp)
-                when (state.route) {
-                    ShellRoute.Home -> HomeScreen(
-                        onOpenWorld = { state = state.openWorld() },
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                    ShellRoute.World -> WorldScreen(
+                val viewportHeight = (maxHeight * 0.58f).coerceIn(176.dp, 480.dp)
+                if (isWorld || (hasOpenedWorld && viewport != null)) {
+                    WorldScreen(
                         seed = PreviewSeed,
                         viewportHeight = viewportHeight,
+                        active = isWorld,
+                        viewport = viewport,
+                        viewportHud = viewportHud,
                         diagnosticsVisible = state.diagnosticsVisible,
                         onToggleDiagnostics = { state = state.toggleDiagnostics() },
                         onBack = goHome,
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
+                }
+                if (!isWorld) {
+                    Surface(modifier = Modifier.fillMaxSize()) {
+                        Box(contentAlignment = Alignment.Center) {
+                            HomeScreen(onOpenWorld = {
+                                hasOpenedWorld = true
+                                state = state.openWorld()
+                            })
+                        }
+                    }
                 }
             }
         }
@@ -125,6 +138,9 @@ private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
 private fun WorldScreen(
     seed: Long,
     viewportHeight: Dp,
+    active: Boolean,
+    viewport: (@Composable (Modifier, Boolean) -> Unit)?,
+    viewportHud: (@Composable () -> Unit)?,
     diagnosticsVisible: Boolean,
     onToggleDiagnostics: () -> Unit,
     onBack: () -> Unit,
@@ -138,26 +154,37 @@ private fun WorldScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(Res.string.world_title),
-            modifier = Modifier.semantics { heading() },
-            style = MaterialTheme.typography.headlineMedium,
-        )
+        Box {
+            if (active) {
+                Text(
+                    text = stringResource(Res.string.world_title),
+                    modifier = Modifier.semantics { heading() },
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .heightIn(min = viewportHeight)
                 .clip(MaterialTheme.shapes.large),
         ) {
-            WorldViewport(Modifier.matchParentSize())
-            if (diagnosticsVisible) {
+            if (viewport == null) {
+                WorldViewport(Modifier.matchParentSize())
+            } else {
+                viewport(Modifier.matchParentSize(), active)
+            }
+            if (active && viewportHud != null) {
+                Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { viewportHud() }
+            }
+            if (active && diagnosticsVisible) {
                 Diagnostics(
                     seed = seed,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 )
             }
         }
-        Row(
+        if (active) Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
