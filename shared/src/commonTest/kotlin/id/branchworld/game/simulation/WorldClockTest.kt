@@ -1,5 +1,8 @@
 package id.branchworld.game.simulation
 
+import id.branchworld.game.terrain.IslandGenerator
+import id.branchworld.game.terrain.TerrainKey
+import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -10,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -17,15 +21,20 @@ import kotlin.time.Duration.Companion.seconds
 
 class WorldClockTest {
     @Test
-    fun equalTicksAcrossRatesAndRenderSampling() = runBlocking {
+    fun equalLegacyTicksAcrossRatesAndRenderSampling() = verifyPlayback(null)
+
+    @Test
+    fun equalTerrainTicksAcrossRatesAndRenderSampling() = verifyPlayback(IslandGenerator.generate(TerrainKey(104729)))
+
+    private fun verifyPlayback(terrain: TerrainMap?) = runBlocking {
         withTimeout(10.seconds) {
             val checkpoints = listOf(300L, 600L, 900L)
-            val reference = WorldEngine(WorldState.start(104729))
+            val reference = terrain?.let { WorldEngine.onTerrain(it) } ?: WorldEngine(WorldState.start(104729))
             val inputs = mapOf(0L to listOf(true), 299L to listOf(true, false), 600L to listOf(true))
             val expected = checkpoints.associateWith { tick ->
                 while (reference.state.tick < tick) {
                     inputs[reference.state.tick]?.forEach { left ->
-                        assertTrue(reference.submitNext(GridCell(if (left) -8 else 7, 12)))
+                        assertTrue(reference.submitNext(assertNotNull(reference.steeringTarget(left))))
                     }
                     reference.advance()
                 }
@@ -33,7 +42,7 @@ class WorldClockTest {
             }
 
             for (speed in WorldSpeed.entries) {
-                val clock = WorldClock(104729)
+                val clock = WorldClock(104729, terrain)
                 val waits = Channel<Wait>()
                 clock.setSpeed(speed)
                 val driver = launch { clock.run({ true }) { waits.pace(it) } }
@@ -46,6 +55,10 @@ class WorldClockTest {
                     if (tick % speed.multiplier == 0L) {
                         assertEquals(tick, clock.render.value.tick)
                         assertEquals(clock.state.bunnyCell.x, clock.render.value.x)
+                        if (terrain != null) {
+                            val pose = clock.render.value
+                            assertEquals(terrain.cellAt(pose.x, pose.z)?.elevationTwice, pose.elevationTwice)
+                        }
                     }
                     inputs[tick]?.forEach(clock::steer)
                     if (tick < 900) wait.release.complete(Unit)

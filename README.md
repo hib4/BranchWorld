@@ -1,6 +1,6 @@
 # BranchWorld
 
-BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The current prototype opens a 3D island diorama with a shared Compose HUD.
+BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The current Android and Desktop builds open procedurally generated 3D islands.
 
 ## Build and run
 
@@ -27,7 +27,7 @@ Run the Desktop app in a graphical session.
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
 
-Select **Open world**. The island starts paused at tick 0. Select **Send bunny left** or **Send bunny right** to queue a destination for the next tick, then select **Play**. Switch between **1×**, **2×**, and **4×** while playing, or select **Pause** to hold the tick and pose. **Focus island** resets the camera. **Show diagnostics** displays the seed `104729`, bunny cell, platform, and lifecycle state.
+Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. A new island starts paused at tick 0. Select **Send bunny left** or **Send bunny right** to queue a reachable destination, then select **Play**. Switch between **1×**, **2×**, and **4×** while playing, or select **Pause** to hold the tick and pose. **Focus island** resets the camera so you can compare coastlines. **Show diagnostics** displays the active seed, bunny cell, platform, and lifecycle state.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Select **Open world**. The island starts paused at tick 0. Select **Send bunny l
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or use Shift and the arrow keys |
 | Zoom | Pinch | Scroll |
 
-To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the world to return to the same in-memory session. Time spent away from the viewport does not add ticks.
+To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the same seed to retain the current tick. Opening a different seed replaces the in-memory session and starts at tick 0.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -44,7 +44,8 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
 - `renderer` owns the Kool prototype, authored scene and animation, camera controls, and platform surface adapters. Android hosts GLES under Compose. Desktop renders a Vulkan color attachment and delivers its pixels to Compose. The three runtime GLBs and the bunny's texture are bundled from one shared resource directory.
-- The shared simulation owns authoritative state, accepts tick-indexed commands, and supplies read-only render projections. The Compose clock controls when to advance. Replay uses the seed, rules version, and ordered inputs. Durable save files follow in Phase 06.
+- Shared Kotlin generates terrain, climate, props, and traversability from the seed and worldgen version. Kool builds chunk meshes and instances the bundled pines and rocks from a static terrain projection.
+- The shared simulation owns authoritative state and supplies read-only actor poses. Rules v2 records terrain identity in canonical state and routes tick-indexed movement over the generated map. Durable save files follow in Phase 06.
 
 ## Source asset inventory
 

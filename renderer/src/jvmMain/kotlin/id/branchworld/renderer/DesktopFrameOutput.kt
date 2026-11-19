@@ -70,6 +70,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
         current.readback = current.scene.coroutineScope.launch {
             try {
                 val pixels = current.texture.download()
+                if (target !== current) return@launch
                 val bytes = ByteArray(pixels.width * pixels.height * 4)
                 (pixels.data as Uint8Buffer).useRaw { it.duplicate().clear().get(bytes) }
                 val info = ImageInfo(pixels.width, pixels.height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
@@ -85,6 +86,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
+                if (target !== current) return@launch
                 current.failed = true
                 controller.status.value = "Could not display the rendered island"
                 error.printStackTrace()

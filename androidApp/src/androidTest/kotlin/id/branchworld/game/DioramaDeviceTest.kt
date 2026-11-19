@@ -113,6 +113,18 @@ class DioramaDeviceTest {
             tap(bounds("Pause"))
             tap(bounds("Back to home"))
             bounds("Open world")
+
+            for (seed in listOf("271828", "424242", "104729")) {
+                tap(bounds(seed))
+                tap(bounds("Open world"))
+                bounds("Island $seed")
+                bounds("Island ready")
+                bounds("Tick 0")
+                tap(bounds("Show diagnostics"))
+                bounds("Seed: $seed")
+                tap(bounds("Back to home"))
+            }
+            bounds("Open world")
         } finally {
             if (!activity.isDestroyed) instrumentation.runOnMainSync { activity.finish() }
         }

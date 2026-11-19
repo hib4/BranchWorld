@@ -48,8 +48,12 @@ internal fun WorldControls(clock: WorldClock) {
             WorldTick(clock)
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { clock.steer(left = true) }) { Text(stringResource(Res.string.steer_left)) }
-            OutlinedButton(onClick = { clock.steer(left = false) }) { Text(stringResource(Res.string.steer_right)) }
+            OutlinedButton(onClick = { clock.steer(left = true) }, enabled = clock.canSteerLeft) {
+                Text(stringResource(Res.string.steer_left))
+            }
+            OutlinedButton(onClick = { clock.steer(left = false) }, enabled = clock.canSteerRight) {
+                Text(stringResource(Res.string.steer_right))
+            }
         }
     }
 }

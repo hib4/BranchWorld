@@ -12,20 +12,19 @@ import de.fabmax.kool.KoolConfigAndroid
 import de.fabmax.kool.createKoolContext
 import de.fabmax.kool.platform.KoolContextAndroid
 import de.fabmax.kool.platform.KoolSurfaceView
-import id.branchworld.game.simulation.WorldRenderProjection
+import id.branchworld.game.simulation.WorldRenderSource
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
 import kotlin.math.hypot
-import kotlinx.coroutines.flow.StateFlow
 
 class AndroidDiorama(context: Context) {
     private val appContext = context.applicationContext
     private val controller = AndroidRenderer.controller
 
     @Composable
-    fun Viewport(modifier: Modifier, projection: StateFlow<WorldRenderProjection>?) {
+    fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
         AndroidView(
             modifier = modifier,
             factory = {

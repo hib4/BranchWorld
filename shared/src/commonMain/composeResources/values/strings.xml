@@ -2,7 +2,10 @@
     <string name="branchworld_title">BranchWorld</string>
     <string name="branchworld_tagline">Every decision creates another world.</string>
     <string name="open_world">Open world</string>
-    <string name="world_title">World preview</string>
+    <string name="world_title">Island %1$s</string>
+    <string name="island_seed">Island seed</string>
+    <string name="island_generating">Generating island…</string>
+    <string name="island_generation_failed">Could not generate the island. Go back to try again.</string>
     <string name="play_world">Play</string>
     <string name="pause_world">Pause</string>
     <string name="world_speed">%1$d×</string>

@@ -25,14 +25,13 @@ import androidx.compose.ui.unit.dp
 import de.fabmax.kool.KoolConfigJvm
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.swing.SwingWindowSubsystem
-import id.branchworld.game.simulation.WorldRenderProjection
+import id.branchworld.game.simulation.WorldRenderSource
 import java.awt.BorderLayout
 import java.awt.Canvas
 import java.awt.event.HierarchyEvent
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import kotlin.concurrent.thread
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 
 class DesktopDiorama {
@@ -42,7 +41,7 @@ class DesktopDiorama {
     private var afterClose: (() -> Unit)? = null
 
     @Composable
-    fun Viewport(modifier: Modifier, projection: StateFlow<WorldRenderProjection>?) {
+    fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
         SideEffect { controller.showWorld(projection) }
         val frame by output.frame.collectAsState()
         Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).onSizeChanged(output::resize)) {

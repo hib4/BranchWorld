@@ -11,24 +11,23 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import id.branchworld.game.simulation.WorldRenderProjection
+import id.branchworld.game.simulation.WorldRenderSource
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 internal class PreviewController {
-    private val world = MutableStateFlow<StateFlow<WorldRenderProjection>?>(null)
-    val projection: WorldRenderProjection? get() = world.value?.value
+    private val world = MutableStateFlow<WorldRenderSource?>(null)
+    val renderWorld: WorldRenderSource? get() = world.value
     val active: Boolean get() = world.value != null
     val camera = MutableStateFlow(PreviewCamera())
     val status = MutableStateFlow("Starting renderer…")
     val enteredAt = MutableStateFlow<TimeMark?>(null)
     val foreground = MutableStateFlow(true)
 
-    fun showWorld(projection: StateFlow<WorldRenderProjection>?) {
-        if (projection != null && !active) {
+    fun showWorld(projection: WorldRenderSource?) {
+        if (projection != null && projection !== world.value) {
             enteredAt.value = TimeSource.Monotonic.markNow()
             status.value = "Loading island…"
         }

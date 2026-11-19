@@ -16,6 +16,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
@@ -54,17 +57,17 @@ import branchworld.shared.generated.resources.diagnostics_seed
 import branchworld.shared.generated.resources.diagnostics_title
 import branchworld.shared.generated.resources.hide_diagnostics
 import branchworld.shared.generated.resources.open_world
+import branchworld.shared.generated.resources.island_seed
+import branchworld.shared.generated.resources.island_generating
+import branchworld.shared.generated.resources.island_generation_failed
 import branchworld.shared.generated.resources.show_diagnostics
 import branchworld.shared.generated.resources.world_title
 import id.branchworld.game.simulation.WorldClock
-import id.branchworld.game.simulation.WorldRenderProjection
-import kotlinx.coroutines.flow.StateFlow
+import id.branchworld.game.simulation.WorldRenderSource
 import org.jetbrains.compose.resources.stringResource
 
-private const val PreviewSeed = 104729L
-
 private class WorldSession : ViewModel() {
-    val clock = WorldClock(PreviewSeed)
+    val islands = IslandSession()
 }
 
 private val BranchWorldColors = lightColorScheme(
@@ -79,7 +82,7 @@ private val BranchWorldColors = lightColorScheme(
 
 @Composable
 fun App(
-    viewport: (@Composable (Modifier, StateFlow<WorldRenderProjection>?) -> Unit)? = null,
+    viewport: (@Composable (Modifier, WorldRenderSource?) -> Unit)? = null,
     viewportHud: (@Composable () -> Unit)? = null,
     registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     foreground: Boolean = true,
@@ -90,17 +93,25 @@ fun App(
     val goHome = { state = state.back() }
     registerBackHandler(isWorld, goHome)
     val owner = LocalViewModelStoreOwner.current
-    val clock = if (owner == null) {
-        remember { WorldClock(PreviewSeed) }
+    val islands = if (owner == null) {
+        remember { IslandSession() }
     } else {
-        viewModel(viewModelStoreOwner = owner) { WorldSession() }.clock
+        viewModel(viewModelStoreOwner = owner) { WorldSession() }.islands
+    }
+    val load by islands.state.collectAsStateWithLifecycle()
+    val selectedSeed = state.seed
+    val session = (load as? IslandLoad.Ready)?.takeIf { it.clock.seed == selectedSeed }
+    val clock = session?.clock
+    LaunchedEffect(islands, isWorld, selectedSeed) {
+        if (isWorld) islands.open(selectedSeed)
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(clock, lifecycle, isWorld, foreground) {
-        if (isWorld && foreground) {
+        if (clock != null && isWorld && foreground) {
             lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 clock.run(isActive = {
-                    state.route == ShellRoute.World && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                    state.route == ShellRoute.World && state.seed == clock.seed &&
+                        lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
                 })
             }
         }
@@ -113,6 +124,9 @@ fun App(
                 if (isWorld || (hasOpenedWorld && viewport != null)) {
                     WorldScreen(
                         clock = clock,
+                        world = session?.world,
+                        seed = selectedSeed,
+                        generationFailed = (load as? IslandLoad.Failed)?.seed == selectedSeed,
                         viewportHeight = viewportHeight,
                         active = isWorld,
                         viewport = viewport,
@@ -126,10 +140,14 @@ fun App(
                 if (!isWorld) {
                     Surface(modifier = Modifier.fillMaxSize()) {
                         Box(contentAlignment = Alignment.Center) {
-                            HomeScreen(onOpenWorld = {
-                                hasOpenedWorld = true
-                                state = state.openWorld()
-                            })
+                            HomeScreen(
+                                seed = selectedSeed,
+                                onSelectSeed = { state = state.selectSeed(it) },
+                                onOpenWorld = {
+                                    hasOpenedWorld = true
+                                    state = state.openWorld()
+                                },
+                            )
                         }
                     }
                 }
@@ -139,7 +157,12 @@ fun App(
 }
 
 @Composable
-private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
+private fun HomeScreen(
+    seed: Long,
+    onSelectSeed: (Long) -> Unit,
+    onOpenWorld: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .widthIn(max = 640.dp)
@@ -160,6 +183,17 @@ private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodyLarge,
             textAlign = TextAlign.Center,
         )
+        Text(stringResource(Res.string.island_seed), style = MaterialTheme.typography.labelLarge)
+        SingleChoiceSegmentedButtonRow {
+            IslandSeeds.forEachIndexed { index, candidate ->
+                SegmentedButton(
+                    selected = seed == candidate,
+                    onClick = { onSelectSeed(candidate) },
+                    shape = SegmentedButtonDefaults.itemShape(index, IslandSeeds.size),
+                    icon = {},
+                ) { Text(candidate.toString()) }
+            }
+        }
         Button(onClick = onOpenWorld) {
             Text(stringResource(Res.string.open_world))
         }
@@ -168,10 +202,13 @@ private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun WorldScreen(
-    clock: WorldClock,
+    clock: WorldClock?,
+    world: WorldRenderSource?,
+    seed: Long,
+    generationFailed: Boolean,
     viewportHeight: Dp,
     active: Boolean,
-    viewport: (@Composable (Modifier, StateFlow<WorldRenderProjection>?) -> Unit)?,
+    viewport: (@Composable (Modifier, WorldRenderSource?) -> Unit)?,
     viewportHud: (@Composable () -> Unit)?,
     diagnosticsVisible: Boolean,
     onToggleDiagnostics: () -> Unit,
@@ -188,11 +225,11 @@ private fun WorldScreen(
     ) {
         if (active) {
             Text(
-                text = stringResource(Res.string.world_title),
+                text = stringResource(Res.string.world_title, seed.toString()),
                 modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineMedium,
             )
-            WorldControls(clock)
+            if (clock != null) WorldControls(clock)
         }
         Box(
             modifier = Modifier
@@ -200,15 +237,19 @@ private fun WorldScreen(
                 .heightIn(min = viewportHeight)
                 .clip(MaterialTheme.shapes.large),
         ) {
-            if (viewport == null) {
+            if (viewport == null && world != null) {
                 WorldViewport(Modifier.matchParentSize())
             } else {
-                viewport(Modifier.matchParentSize(), clock.render.takeIf { active })
+                viewport?.invoke(Modifier.matchParentSize(), world.takeIf { active })
             }
-            if (active && viewportHud != null) {
+            if (active && world == null) {
+                val message = if (generationFailed) Res.string.island_generation_failed else Res.string.island_generating
+                Text(stringResource(message), modifier = Modifier.align(Alignment.Center).padding(16.dp))
+            }
+            if (active && world != null && viewportHud != null) {
                 Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { viewportHud() }
             }
-            if (active && diagnosticsVisible) {
+            if (active && clock != null && diagnosticsVisible) {
                 Diagnostics(
                     clock = clock,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
@@ -222,7 +263,7 @@ private fun WorldScreen(
             OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
                 Text(stringResource(Res.string.back_to_home), textAlign = TextAlign.Center)
             }
-            Button(onClick = onToggleDiagnostics, modifier = Modifier.weight(1f)) {
+            Button(onClick = onToggleDiagnostics, modifier = Modifier.weight(1f), enabled = clock != null) {
                 val label = if (diagnosticsVisible) Res.string.hide_diagnostics else Res.string.show_diagnostics
                 Text(stringResource(label), textAlign = TextAlign.Center)
             }

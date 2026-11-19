@@ -6,7 +6,7 @@ import kotlin.math.sin
 internal data class PreviewCamera(
     val yaw: Float = 0.7f,
     val pitch: Float = 0.57f,
-    val distance: Float = 10f,
+    val distance: Float = 12f,
     val targetX: Float = 0f,
     val targetZ: Float = 0f,
 ) {
