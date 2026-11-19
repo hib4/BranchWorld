@@ -25,12 +25,14 @@ import androidx.compose.ui.unit.dp
 import de.fabmax.kool.KoolConfigJvm
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.swing.SwingWindowSubsystem
+import id.branchworld.game.simulation.WorldRenderProjection
 import java.awt.BorderLayout
 import java.awt.Canvas
 import java.awt.event.HierarchyEvent
 import javax.swing.JPanel
 import javax.swing.SwingUtilities
 import kotlin.concurrent.thread
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 
 class DesktopDiorama {
@@ -40,8 +42,8 @@ class DesktopDiorama {
     private var afterClose: (() -> Unit)? = null
 
     @Composable
-    fun Viewport(modifier: Modifier, active: Boolean) {
-        SideEffect { controller.setActive(active) }
+    fun Viewport(modifier: Modifier, projection: StateFlow<WorldRenderProjection>?) {
+        SideEffect { controller.showWorld(projection) }
         val frame by output.frame.collectAsState()
         Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).onSizeChanged(output::resize)) {
             // Kool's Vulkan backend needs an AWT peer. The visible viewport is the
@@ -50,7 +52,7 @@ class DesktopDiorama {
                 modifier = Modifier.align(Alignment.BottomEnd).size(2.dp),
                 factory = ::createPanel,
             )
-            if (active) {
+            if (projection != null) {
                 frame?.let {
                     Image(
                         bitmap = it,
@@ -69,7 +71,7 @@ class DesktopDiorama {
     fun foreground(visible: Boolean) { controller.foreground.value = visible }
 
     fun cameraKey(event: KeyEvent): Boolean {
-        if (!controller.active.value || event.type != KeyEventType.KeyDown) return false
+        if (!controller.active || event.type != KeyEventType.KeyDown) return false
         val direction = when (event.key) {
             Key.DirectionLeft -> Offset(-0.08f, 0f)
             Key.DirectionRight -> Offset(0.08f, 0f)
@@ -83,7 +85,7 @@ class DesktopDiorama {
     }
 
     fun close(onClosed: () -> Unit) {
-        controller.setActive(false)
+        controller.showWorld(null)
         val window = subsystem
         if (window == null) {
             onClosed()

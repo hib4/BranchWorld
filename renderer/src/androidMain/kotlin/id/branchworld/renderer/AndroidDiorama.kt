@@ -6,26 +6,26 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import de.fabmax.kool.KoolConfigAndroid
 import de.fabmax.kool.createKoolContext
 import de.fabmax.kool.platform.KoolContextAndroid
 import de.fabmax.kool.platform.KoolSurfaceView
+import id.branchworld.game.simulation.WorldRenderProjection
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
 import kotlin.math.hypot
+import kotlinx.coroutines.flow.StateFlow
 
 class AndroidDiorama(context: Context) {
     private val appContext = context.applicationContext
     private val controller = AndroidRenderer.controller
 
     @Composable
-    fun Viewport(modifier: Modifier, active: Boolean) {
-        SideEffect { controller.setActive(active) }
+    fun Viewport(modifier: Modifier, projection: StateFlow<WorldRenderProjection>?) {
         AndroidView(
             modifier = modifier,
             factory = {
@@ -38,8 +38,11 @@ class AndroidDiorama(context: Context) {
                 }
             },
             update = { view ->
-                if (active && view is GLSurfaceView && view.renderMode != GLSurfaceView.RENDERMODE_CONTINUOUSLY) {
-                    view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                if (view is GLSurfaceView) {
+                    controller.showWorld(projection)
+                    if (projection != null && view.renderMode != GLSurfaceView.RENDERMODE_CONTINUOUSLY) {
+                        view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
+                    }
                 }
             },
         )
@@ -58,7 +61,7 @@ class AndroidDiorama(context: Context) {
         AndroidRenderer.kool?.onResume()
     }
 
-    fun close() { controller.setActive(false) }
+    fun close() { controller.showWorld(null) }
 }
 
 // Kool 0.19 creates a single Android backend for the process. The surface holds only
@@ -79,7 +82,13 @@ private object AndroidRenderer {
         val context = createKoolContext(KoolConfigAndroid(appContext, surfaceView = surface))
         kool = context
         DioramaSession(context, controller, onIdle = {
-            surface.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+            val lastEntry = controller.enteredAt.value
+            surface.post {
+                // Serialize idle and wake-up on the UI thread. A fast reopen may overtake this callback.
+                if (!controller.active && controller.enteredAt.value == lastEntry) {
+                    surface.renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                }
+            }
         })
         surface.setOnTouchListener(CameraTouch(controller))
         surface.setOnKeyListener(null)
@@ -121,7 +130,7 @@ private class CameraTouch(private val controller: PreviewController) : View.OnTo
     private var span = 0f
 
     override fun onTouch(view: View, event: MotionEvent): Boolean {
-        if (!controller.active.value) return false
+        if (!controller.active) return false
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             view.parent?.requestDisallowInterceptTouchEvent(true)
         }

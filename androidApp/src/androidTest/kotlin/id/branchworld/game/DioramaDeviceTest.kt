@@ -4,11 +4,13 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
 import android.graphics.Rect
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.test.platform.app.InstrumentationRegistry
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import kotlin.math.abs
@@ -18,7 +20,7 @@ class DioramaDeviceTest {
     private val input = instrumentation.uiAutomation
 
     @Test
-    fun dioramaRespondsToTouchAndSurvivesActivityRecreation() {
+    fun dioramaRunsWorldClockAndSurvivesActivityRecreation() {
         input.serviceInfo = input.serviceInfo.apply {
             flags = flags or AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS
         }
@@ -28,13 +30,13 @@ class DioramaDeviceTest {
         )
         try {
             tap(bounds("Open world"))
-            val hud = bounds("Island ready")
+            bounds("Island ready")
+            val focus = bounds("Focus island")
             val bottom = bounds("Back to home").top
-            tap(bounds("Pause animation"))
-            bounds("Resume animation")
+            bounds("Tick 0")
 
             val screen = requireNotNull(input.takeScreenshot())
-            val viewport = Rect(screen.width / 8, hud.bottom + 100, screen.width * 7 / 8, bottom - 30)
+            val viewport = Rect(screen.width / 8, focus.bottom + 35, screen.width * 7 / 8, bottom - 30)
             screen.recycle()
             val start = point(viewport.centerX(), viewport.centerY())
             val span = viewport.width() / 7
@@ -56,18 +58,59 @@ class DioramaDeviceTest {
                 gesture(start, start.copy(x = start.x - span / 2), second, second.copy(x = second.x + span / 2))
             } > 0.01)
             resetCamera()
-            tap(bounds("Resume animation"))
-            bounds("Pause animation")
-            assertTrue("Bunny did not animate", difference(viewport, action = {}) > 0.001)
+            tap(bounds("Send bunny left"))
+            tap(bounds("Send bunny right"))
+            bounds("Tick 0")
+            tap(bounds("Play"))
+            bounds("Pause")
+            waitUntil("world clock to advance") { currentTick() >= 3 }
+            assertTrue("Bunny pixels did not move", difference(viewport, action = {}) > 0.001)
+            tap(bounds("Pause"))
+            bounds("Play")
+            val parked = currentTick()
+            assertTrue(parked > 0)
+            waitUntil("paused viewport pixels to settle again") { difference(viewport, action = {}) < 0.002 }
+            assertEquals(parked, currentTick())
+
+            tap(bounds("Show diagnostics"))
+            bounds("Seed: 104729")
+            tap(bounds("Send bunny right"))
+            tap(bounds("2×"))
+            tap(bounds("4×"))
+            tap(bounds("Play"))
+            waitUntil("running clock at 4×") { currentTick() >= parked + 8 }
+            tap(bounds("Pause"))
+            bounds("Play")
+            val retained = currentTick()
 
             instrumentation.runOnMainSync { activity.recreate() }
             waitUntil("previous Activity destroyed") { activity.isDestroyed }
             bounds("Island ready")
+            bounds("Seed: 104729")
+            bounds("Tick $retained")
+            tap(bounds("Hide diagnostics"))
             repeat(3) {
                 tap(bounds("Back to home"))
                 tap(bounds("Open world"))
                 bounds("Island ready")
+                bounds("Tick $retained")
             }
+
+            tap(bounds("1×"))
+            tap(bounds("Play"))
+            waitUntil("world to resume at 1×") { currentTick() >= retained + 3 }
+            val beforeHome = currentTick()
+            assertTrue(input.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME))
+            waitUntil("launcher to become visible") {
+                input.rootInActiveWindow?.packageName?.toString()?.let { it != instrumentation.targetContext.packageName } == true
+            }
+            SystemClock.sleep(2_000)
+            ParcelFileDescriptor.AutoCloseInputStream(
+                input.executeShellCommand("am start -W -n id.branchworld.game/.MainActivity"),
+            ).use { it.readBytes() }
+            waitUntil("world to resume after foregrounding") { currentTick() > beforeHome }
+            assertTrue("World caught up on time spent in the background", currentTick() - beforeHome < 30)
+            tap(bounds("Pause"))
             tap(bounds("Back to home"))
             bounds("Open world")
         } finally {
@@ -158,20 +201,25 @@ class DioramaDeviceTest {
     private fun bounds(label: String): Rect {
         var result: Rect? = null
         waitUntil(label) {
-            if (Build.VERSION.SDK_INT >= 33) input.clearCache()
-            result = input.rootInActiveWindow?.findLabel(label)
+            result = findVisible { it.text?.toString()?.trim() == label || it.contentDescription?.toString()?.trim() == label }
                 ?.let { node -> Rect().also(node::getBoundsInScreen) }
             result != null
         }
         return requireNotNull(result)
     }
 
-    private fun AccessibilityNodeInfo.findLabel(label: String): AccessibilityNodeInfo? {
-        if (isVisibleToUser && (text?.toString()?.trim() == label || contentDescription?.toString()?.trim() == label)) {
-            return this
-        }
+    private fun currentTick(): Long =
+        findVisible { it.text?.startsWith("Tick ") == true }?.text?.toString()?.removePrefix("Tick ")?.toLongOrNull() ?: -1
+
+    private fun findVisible(matches: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+        if (Build.VERSION.SDK_INT >= 33) input.clearCache()
+        return input.rootInActiveWindow?.findMatching(matches)
+    }
+
+    private fun AccessibilityNodeInfo.findMatching(matches: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+        if (isVisibleToUser && matches(this)) return this
         for (index in 0 until childCount) {
-            getChild(index)?.findLabel(label)?.let { return it }
+            getChild(index)?.findMatching(matches)?.let { return it }
         }
         return null
     }

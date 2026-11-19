@@ -27,7 +27,7 @@ Run the Desktop app in a graphical session.
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
 
-Select **Open world**. The island loads with pines, rocks, and an animated bunny. **Focus island** resets the camera, and **Pause animation** holds the bunny pose while you move the camera. **Show diagnostics** reports the display seed `104729`, platform, and lifecycle state.
+Select **Open world**. The island starts paused at tick 0. Select **Send bunny left** or **Send bunny right** to queue a destination for the next tick, then select **Play**. Switch between **1×**, **2×**, and **4×** while playing, or select **Pause** to hold the tick and pose. **Focus island** resets the camera. **Show diagnostics** displays the seed `104729`, bunny cell, platform, and lifecycle state.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
@@ -35,16 +35,16 @@ Select **Open world**. The island loads with pines, rocks, and an animated bunny
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or use Shift and the arrow keys |
 | Zoom | Pinch | Scroll |
 
-To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. On either target, use **Back to home** and reopen the world three times. Each return should show a usable scene and HUD.
+To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the world to return to the same in-memory session. Time spent away from the viewport does not add ticks.
 
-Run the Android on-device gesture and Activity recreation test with `./gradlew :androidApp:connectedDebugAndroidTest` while an emulator or device is connected.
+Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
 ## Architecture
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
 - `renderer` owns the Kool prototype, authored scene and animation, camera controls, and platform surface adapters. Android hosts GLES under Compose. Desktop renders a Vulkan color attachment and delivers its pixels to Compose. The three runtime GLBs and the bunny's texture are bundled from one shared resource directory.
-- The shared simulation will own authoritative state and accept tick-indexed commands. It will expose read-only render projections to platform rendering adapters. Platform storage adapters will handle file I/O for portable, versioned save data. Compose, renderer, and platform objects stay outside authoritative state and save models.
+- The shared simulation owns authoritative state, accepts tick-indexed commands, and supplies read-only render projections. The Compose clock controls when to advance. Replay uses the seed, rules version, and ordered inputs. Durable save files follow in Phase 06.
 
 ## Source asset inventory
 

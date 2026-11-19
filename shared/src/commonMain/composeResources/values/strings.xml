@@ -3,11 +3,18 @@
     <string name="branchworld_tagline">Every decision creates another world.</string>
     <string name="open_world">Open world</string>
     <string name="world_title">World preview</string>
+    <string name="play_world">Play</string>
+    <string name="pause_world">Pause</string>
+    <string name="world_speed">%1$d×</string>
+    <string name="world_tick">Tick %1$s</string>
+    <string name="steer_left">Send bunny left</string>
+    <string name="steer_right">Send bunny right</string>
     <string name="back_to_home">Back to home</string>
     <string name="show_diagnostics">Show diagnostics</string>
     <string name="hide_diagnostics">Hide diagnostics</string>
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_platform">Platform: %1$s</string>
     <string name="diagnostics_seed">Seed: %1$s</string>
+    <string name="diagnostics_position">Bunny cell: %1$d, %2$d</string>
     <string name="diagnostics_lifecycle">Lifecycle: %1$s</string>
 </resources>

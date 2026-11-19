@@ -18,7 +18,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             App(
-                viewport = { modifier, active -> renderer.Viewport(modifier, active) },
+                viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
                 registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
             )

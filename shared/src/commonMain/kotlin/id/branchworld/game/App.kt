@@ -20,6 +20,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,23 +35,37 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
+import androidx.lifecycle.viewmodel.compose.viewModel
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.back_to_home
 import branchworld.shared.generated.resources.branchworld_tagline
 import branchworld.shared.generated.resources.branchworld_title
 import branchworld.shared.generated.resources.diagnostics_lifecycle
 import branchworld.shared.generated.resources.diagnostics_platform
+import branchworld.shared.generated.resources.diagnostics_position
 import branchworld.shared.generated.resources.diagnostics_seed
 import branchworld.shared.generated.resources.diagnostics_title
 import branchworld.shared.generated.resources.hide_diagnostics
 import branchworld.shared.generated.resources.open_world
 import branchworld.shared.generated.resources.show_diagnostics
 import branchworld.shared.generated.resources.world_title
+import id.branchworld.game.simulation.WorldClock
+import id.branchworld.game.simulation.WorldRenderProjection
+import kotlinx.coroutines.flow.StateFlow
 import org.jetbrains.compose.resources.stringResource
 
 private const val PreviewSeed = 104729L
+
+private class WorldSession : ViewModel() {
+    val clock = WorldClock(PreviewSeed)
+}
 
 private val BranchWorldColors = lightColorScheme(
     primary = Color(0xFF285648),
@@ -64,23 +79,40 @@ private val BranchWorldColors = lightColorScheme(
 
 @Composable
 fun App(
-    viewport: (@Composable (Modifier, Boolean) -> Unit)? = null,
+    viewport: (@Composable (Modifier, StateFlow<WorldRenderProjection>?) -> Unit)? = null,
     viewportHud: (@Composable () -> Unit)? = null,
     registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
+    foreground: Boolean = true,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
     val isWorld = state.route == ShellRoute.World
     var hasOpenedWorld by remember { mutableStateOf(isWorld) }
     val goHome = { state = state.back() }
     registerBackHandler(isWorld, goHome)
+    val owner = LocalViewModelStoreOwner.current
+    val clock = if (owner == null) {
+        remember { WorldClock(PreviewSeed) }
+    } else {
+        viewModel(viewModelStoreOwner = owner) { WorldSession() }.clock
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(clock, lifecycle, isWorld, foreground) {
+        if (isWorld && foreground) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                clock.run(isActive = {
+                    state.route == ShellRoute.World && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                })
+            }
+        }
+    }
 
     MaterialTheme(colorScheme = BranchWorldColors) {
         Surface(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize().safeContentPadding()) {
-                val viewportHeight = (maxHeight * 0.58f).coerceIn(176.dp, 480.dp)
+                val viewportHeight = (maxHeight * 0.52f).coerceIn(176.dp, 480.dp)
                 if (isWorld || (hasOpenedWorld && viewport != null)) {
                     WorldScreen(
-                        seed = PreviewSeed,
+                        clock = clock,
                         viewportHeight = viewportHeight,
                         active = isWorld,
                         viewport = viewport,
@@ -136,10 +168,10 @@ private fun HomeScreen(onOpenWorld: () -> Unit, modifier: Modifier = Modifier) {
 
 @Composable
 private fun WorldScreen(
-    seed: Long,
+    clock: WorldClock,
     viewportHeight: Dp,
     active: Boolean,
-    viewport: (@Composable (Modifier, Boolean) -> Unit)?,
+    viewport: (@Composable (Modifier, StateFlow<WorldRenderProjection>?) -> Unit)?,
     viewportHud: (@Composable () -> Unit)?,
     diagnosticsVisible: Boolean,
     onToggleDiagnostics: () -> Unit,
@@ -154,14 +186,13 @@ private fun WorldScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Box {
-            if (active) {
-                Text(
-                    text = stringResource(Res.string.world_title),
-                    modifier = Modifier.semantics { heading() },
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-            }
+        if (active) {
+            Text(
+                text = stringResource(Res.string.world_title),
+                modifier = Modifier.semantics { heading() },
+                style = MaterialTheme.typography.headlineMedium,
+            )
+            WorldControls(clock)
         }
         Box(
             modifier = Modifier
@@ -172,14 +203,14 @@ private fun WorldScreen(
             if (viewport == null) {
                 WorldViewport(Modifier.matchParentSize())
             } else {
-                viewport(Modifier.matchParentSize(), active)
+                viewport(Modifier.matchParentSize(), clock.render.takeIf { active })
             }
             if (active && viewportHud != null) {
                 Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { viewportHud() }
             }
             if (active && diagnosticsVisible) {
                 Diagnostics(
-                    seed = seed,
+                    clock = clock,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 )
             }
@@ -200,9 +231,10 @@ private fun WorldScreen(
 }
 
 @Composable
-private fun Diagnostics(seed: Long, modifier: Modifier = Modifier) {
+private fun Diagnostics(clock: WorldClock, modifier: Modifier = Modifier) {
     val platform = remember { getPlatform().name }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
+    val pose by clock.render.collectAsStateWithLifecycle()
     Surface(
         modifier = modifier.widthIn(max = 264.dp).fillMaxWidth(),
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -218,7 +250,8 @@ private fun Diagnostics(seed: Long, modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.titleSmall,
             )
             Text(stringResource(Res.string.diagnostics_platform, platform))
-            Text(stringResource(Res.string.diagnostics_seed, seed.toString()))
+            Text(stringResource(Res.string.diagnostics_seed, clock.seed.toString()))
+            Text(stringResource(Res.string.diagnostics_position, pose.x, pose.z))
             Text(stringResource(Res.string.diagnostics_lifecycle, lifecycle.name))
         }
     }

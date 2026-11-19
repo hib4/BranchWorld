@@ -20,8 +20,9 @@ fun main() {
             title = "BranchWorld",
         ) {
             App(
-                viewport = { modifier, active -> renderer.Viewport(modifier, active) },
+                viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
+                foreground = foreground,
             )
         }
     }

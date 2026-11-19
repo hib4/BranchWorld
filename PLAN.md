@@ -139,8 +139,8 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | Phase | Engineering status | Human gate | Evidence / last verified revision |
 |---|---|---|---|
 | 01 | COMPLETE | ACCEPTED | Verified on Android API 36 and macOS ARM64, with both shared test runners passing. Foundation committed at `28a1c26`. |
-| 02 | COMPLETE | PENDING | Kool prototype GO on Android API 36 (GLES) and Apple M4 macOS (Vulkan with Compose frame delivery). Build, input, asset, lifecycle, and scene-release evidence in the Phase 02 handoff. |
-| 03 | NOT VERIFIED | PENDING | - |
+| 02 | COMPLETE | ACCEPTED | Kool prototype GO on Android API 36 (GLES) and Apple M4 macOS (Vulkan with Compose frame delivery). Verified at `73ca11e` and approved by the user. |
+| 03 | COMPLETE | PENDING | Verified on Desktop JVM, Android host and API 36 AVD, and iOS simulator. Matching rules v1 checkpoints at ticks 0, 300, 600, and 900. Playback and steering verified on Android and the packaged macOS app. |
 | 04 | NOT VERIFIED | PENDING | - |
 | 05 | NOT VERIFIED | PENDING | - |
 | 06 | NOT VERIFIED | PENDING | - |
@@ -161,37 +161,32 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | 2026-11-19 / 02 | Pin Kool 0.19.0 in an Android and JVM renderer module. Set its JVM consumers to bytecode level 17. | Both apps built and ran with the existing Azul Java 21 toolchain. The APK keeps minSdk 26. The Desktop bundle includes `jdk.unsupported` for LWJGL. Checked 11 packaged ARM64 native binaries against the Maven artifacts. Their executable sections match and the package signatures differ, which accounts for the hash warning. | No |
 | 2026-11-19 / 02 | Keep the Android EGL context for the app process and release each diorama when leaving the viewport. | A stock surface reproduced the retained-context error on Activity recreation. The retained EGL context passed repeat launches and rotation on the software-rendered AVD. A GPU reset or context loss on physical hardware remains unverified. | No |
 | 2026-11-19 / 02 | Use a Vulkan offscreen pass to supply Desktop frames to Compose. | The native Swing canvas stayed blank beneath the HUD. The copyable color attachment with one readback in flight displayed the scene with working controls. The readback costs memory and limits the view to 768 pixels on its longest side. | Yes, at the phase gate |
+| 2026-11-20 / 03 | Keep rules v1 in shared Kotlin. Apply validated destination commands in sequence order before seeded movement on an integer grid. | SplitMix64 state is explicit. A 52-byte canonical state and FNV-1a 64 digest matched across JVM, Android ART, and Kotlin/Native. Accepted inputs are retained separately for replay. | No |
+| 2026-11-20 / 03 | Retain the in-memory world in the shared UI's ViewModel. Pace integer ticks at nominal 20 Hz with 1×, 2×, and 4× rates. | Lifecycle suspension discards elapsed time. The renderer reads immutable poses, and tests matched state at the same tick across all rates, including after a rapid pause and resume. | No |
+| 2026-11-20 / 03 | Serialize Android surface idle and wake-up on the UI thread and refresh readiness for each viewport entry. | A rapid reopen after Activity recreation previously stalled on the loading screen. The device test passed twice after the fix, with three verified reopens in each run. | No |
 
 ### Latest phase handoff (agent-maintained)
 
 ```text
-PHASE: 02 - 3D Engine & Asset Integration
+PHASE: 03 - Deterministic Simulation Engine
 STATUS: COMPLETE
-PLAYER-VISIBLE OUTCOME: Open world shows a lit island, water, imported pines and rocks, and a textured bunny running its walk clip. Orbit, pan, zoom, focus, and pause work alongside the Compose HUD.
-CHANGED CODE: Android and JVM renderer module, native surface hosts, injected shared viewport and HUD, bundled GLBs and bunny texture, and device and renderer tests.
+PLAYER-VISIBLE OUTCOME: The island opens paused at tick 0. Play, pause, and change speed at 1×, 2×, or 4×. Either steering button sends the bunny toward a destination on the next tick. Diagnostics shows the seed and current cell.
+CHANGED CODE: Shared Kotlin world kernel, canonical encoding and replay inputs, Compose clock and controls, read-only Kool pose binding, Android surface lifecycle, and cross-target fixtures.
 TESTS / BUILDS:
-  PASS - ./gradlew --offline --console=plain :androidApp:assembleDebug :androidApp:lintDebug :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :desktopApp:createDistributable :shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64
-         Renderer JVM 5 tests and Android host 3 tests. Shared JVM and Android host 6 tests each. Android lint reported zero errors and four existing launcher warnings.
-  PASS - ./gradlew --offline --console=plain :androidApp:connectedDebugAndroidTest
-         Pixel_9 ARM64 AVD, API 36. Compared viewport pixels while paused and after orbit, pan, pinch, and resumed animation. Recreated MainActivity and reopened the diorama three times.
-  PASS - adb -s emulator-5554 install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-         adb -s emulator-5554 shell am start -W -n id.branchworld.game/.MainActivity
-         Opened the assets, exercised the HUD and system Back, backgrounded and returned, and verified rotation by Activity destruction and creation events and a rendered landscape screenshot.
+  PASS - ./gradlew --offline --console=plain :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :androidApp:assembleDebug :androidApp:lintDebug :desktopApp:createDistributable :shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64 :shared:iosSimulatorArm64Test :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest
+         Shared tests passed on Desktop JVM (13), Android host (13), API 36 Pixel 9 ARM64 AVD (12), and iOS 27.2 iPhone 18 Pro simulator (13). Both Apple architecture targets compiled. Renderer JVM (5) and Android host (3) passed. Android lint reported zero errors and four existing launcher warnings.
+         On Android, viewport pixels changed during gestures and playback and held while paused. The suite exercised speed controls, retained the exact paused tick through Activity recreation and three scene reopens, and checked for missed-time catch-up after two seconds in the background.
+  PASS - ./gradlew --offline --console=plain :androidApp:connectedDebugAndroidTest --rerun
+         Repeated the complete Android scenario after fixing the idle callback race.
   PASS - open -n desktopApp/build/compose/binaries/main/app/id.branchworld.game.app
-         macOS 27.2.1 ARM64, Apple M4, Vulkan via MoltenVK. Observed real pixels, HUD clicks, arrow-key orbit, Shift-arrow pan, wheel zoom, resize, minimize/restore, and three scene reopens. Normal close freed the Vulkan device.
-         Primary and secondary drag passed the JVM Compose input test. Manual OS-level drag delivery could not be confirmed with the available Desktop UI driver.
-  NOT RUN - Physical Android, Android API 26 runtime, iOS runtime, and non-macOS Desktop runtime.
-DETERMINISM / SAVE / BRANCH: The authored scene and camera are presentation state. Display seed 104729 labels the preview. The integer-tick world begins in Phase 03.
-PERFORMANCE / DEVICE:
-  Android GLES on the API 36 AVD with ANGLE and SwiftShader, 840x1256. Cold first complete asset frame 720 ms. Warm 388–490 ms.
-  Ten-second samples after a 2-second settle measured p50/p95 25.0/36.2 ms (381 frames) and 26.9/49.0 ms (294 frames). An earlier run measured 94.2/254.5 ms, so emulator frame pacing varied substantially.
-  Android PSS in KiB before the scene, active, and at the third return home was 87267, 111548, and 128267. Active GPU buffer and texture totals were the same across the sampled reopens.
-  Desktop Vulkan at 768x332. First complete frame delivered to Compose in 1009 ms cold and 233 ms warm.
-  Desktop 10-second samples at the original viewport measured 36.7/38.3 ms cold-open p50/p95 and 36.6/38.1 ms warm-open p50/p95 at the Compose delivery point. Samples followed a 2-second settle.
-  Desktop RSS in KiB before load, active, and after release in the final measured run was 195408, 507248, and 465520. A separate three-reopen run ended at 318480 KiB with four verified scene releases.
-DEMO: Open world, wait for Island ready, then pause and orbit, pan, zoom, and focus. Select Show diagnostics to see seed 104729. Reopen three times and rotate Android or resize and minimize Desktop.
-EVIDENCE: Local Gradle, Android, and Desktop logs and Android captures are under build/verification/phase02. Desktop captures were inspected during runtime checks.
-BLOCKERS / NEXT STEPS: GO for the two tested runtimes. Desktop readback cost and Android software-emulator variance are recorded for follow-up profiling. After approval, start Phase 03 with a shared integer-tick kernel, PRNG, ordered command queue, and repeatable canonical hash fixtures.
+         Apple M4, macOS 27.2.1 ARM64, Vulkan via MoltenVK. On the final bundle, the left command moved the bunny from (0, 10) at tick 0 to (-6, 10) at tick 6. The right command moved it from (-7, 10) at tick 7 to (-1, 10) at tick 13. Tested all rates, held at tick 56, and reopened at tick 56. A separate smoke run checked the running session across home navigation and minimize/restore.
+  NOT RUN - Physical Android, Android API 26, non-macOS Desktop, and an iOS app rendering session.
+DETERMINISM / SAVE / BRANCH: Rules v1 fixtures use commands (tick, sequence, x, z) (1, 0, -8, 12), (300, 0, -8, 12), (300, 1, 7, 12), and (601, 0, -4, 19). All use bunny ID 1. For seed 104729 the FNV-1a 64 hashes at ticks 0/300/600/900 were 6df797389697f555/9376a03f63a5d26f/7216d6696920a479/c1d725be55250b5c. Alternate seeds 271828 and 424242 matched their fixtures. Repeated runs matched bytes even when commands were submitted in reverse admission order. Fresh-kernel replay from seed and continuation from an in-memory checkpoint at tick 300 reproduced the bytes at tick 900.
+PERFORMANCE / DEVICE: Android GLES on the API 36 AVD at 840×1126 reported 1855 ms to the first complete asset frame and 410–511 ms on warm reopens. The sampled 278 renderer frames measured p50/p95 31.4/62.5 ms. The final M4 Desktop bundle at 768×298 delivered the first complete Compose frame in 1288 ms cold and 230 ms warm. Its 270 delivered frames measured p50/p95 37.1/39.5 ms. These are rendering observations. Kernel throughput was not benchmarked.
+DEMO: Open world and show diagnostics. At tick 0, select Send bunny left and verify the cell stays at (0, 10). Select Play, then pause and observe the frozen counter and pose. Send it right, switch speeds, and resume. Back to home and Open world retain the session.
+LIMITATIONS: Authoritative positions are whole cells within the authored 16×16 area, and ticks use nonnegative signed 64-bit integers. Each cell maps to 0.1 scene units. Floating-point transforms and animation are presentation-only. Playback rates describe nominal cadence. Device load can slow the clock. Command history lives in memory and durable saves are scheduled for Phase 06. macOS still emits the Phase 02 LWJGL packaging warning.
+EVIDENCE: build/verification/phase03/verified-gradle.log, android-reopen-repeat.log, and desktop-verified-runtime.log. The Android instrumentation report also contains the renderer log for scene reopens. Phase 02 evidence is recorded at 73ca11e and in build/verification/phase02.
+BLOCKERS / NEXT STEPS: No Phase 03 blockers. After approval, define the Phase 04 world generation version and shared terrain queries. Generate and compare terrain for seeds 104729, 271828, and 424242, then wire elevation, coastlines, biomes, and seeded placements into Kool. Check traversability, meshes, generation time, and real Android/Desktop runtime behavior. Retain the Phase 03 rules v1 replay fixture as a regression check.
 HUMAN APPROVAL: PENDING
 ```
 

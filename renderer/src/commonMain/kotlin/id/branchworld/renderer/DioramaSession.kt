@@ -3,6 +3,7 @@ package id.branchworld.renderer
 import de.fabmax.kool.Assets
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.Vec3f
+import de.fabmax.kool.math.deg
 import de.fabmax.kool.modules.gltf.GltfLoadConfig
 import de.fabmax.kool.modules.gltf.loadGltfFile
 import de.fabmax.kool.modules.ksl.KslBlinnPhongShader
@@ -11,9 +12,13 @@ import de.fabmax.kool.pipeline.backend.stats.BackendStats
 import de.fabmax.kool.scene.Model
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.addColorMesh
+import de.fabmax.kool.scene.animation.Animation
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
+import id.branchworld.game.simulation.BunnyHeading
+import id.branchworld.game.simulation.WorldRenderProjection
+import id.branchworld.game.simulation.WorldRenderProjection.Companion.SceneUnitsPerCell
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -30,7 +35,7 @@ internal class DioramaSession(
 ) {
     private var scene: Scene? = null
     private var load: Job? = null
-    private var bunny: Model? = null
+    private var bunny: BunnyVisual? = null
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
     private val timing = FrameTiming("renderer")
@@ -42,7 +47,8 @@ internal class DioramaSession(
 
     private fun update() {
         // Scene creation, mutation, and removal run on Kool's frontend render thread.
-        if (!controller.active.value) {
+        val projection = controller.projection
+        if (projection == null) {
             dispose(delay = true)
             if (idleAfterFrame?.let { Time.frameCount >= it } == true) {
                 idleAfterFrame = null
@@ -69,17 +75,17 @@ internal class DioramaSession(
             pose.targetZ + horizontal * cos(pose.yaw),
         )
         val animal = bunny
-        if (!controller.paused.value) animal?.applyAnimation(Time.deltaT.coerceAtMost(0.05f))
+        animal?.show(projection)
         output?.update()
-        if (animal != null && animal.textures.values.all { it.isLoaded }) {
+        if (animal != null && animal.model.textures.values.all { it.isLoaded }) {
             if (assetFrame < 0) assetFrame = Time.frameCount
             if (Time.frameCount == assetFrame + 1) {
                 val size = context.window.framebufferSize
                 val elapsed = controller.enteredAt.value?.elapsedNow()?.inWholeMilliseconds
                 println("BranchWorldRenderer firstAssetFrameMs=$elapsed backend=${context.backend.name} gpu=${context.backend.deviceName} nativeSurface=${size.x}x${size.y}")
                 println("BranchWorldRenderer activeBytes buffers=${BackendStats.totalBufferSize} textures=${BackendStats.totalTextureSize}")
-                controller.status.value = "Island ready"
             }
+            if (Time.frameCount > assetFrame) controller.status.value = "Island ready"
             timing.frame()
         }
     }
@@ -149,11 +155,12 @@ internal class DioramaSession(
             target.place(DioramaAsset.Pine, -1.85f, 0.2f, 0.86f, 0.05f)
             target.place(DioramaAsset.Rock, 1.45f, -0.44f, 1.45f, 0.05f)
             target.place(DioramaAsset.Rock, 1.74f, 0.24f, 0.87f, 0.05f)
-            bunny = target.place(DioramaAsset.Bunny, 0.35f, 0.65f, 0.76f, 0f).apply {
-                val walk = animations.indexOfFirst { it.name == BunnyAnimation }
-                check(walk >= 0) { "The bunny is missing its walk clip" }
-                enableAnimation(walk)
-                applyAnimation(0f)
+            val model = target.place(DioramaAsset.Bunny, 0f, 0f, 1f, 0f)
+            val walk = model.animations.indexOfFirst { it.name == BunnyAnimation && it.duration > 0f }
+            check(walk >= 0) { "The bunny is missing its walk clip" }
+            model.enableAnimation(walk)
+            bunny = BunnyVisual(model, model.animations[walk]).also { visual ->
+                controller.projection?.let(visual::show)
             }
         } catch (error: CancellationException) {
             throw error
@@ -169,6 +176,32 @@ internal class DioramaSession(
             model.transform.translate(x, groundOffset * scale, z).scale(scale)
             addNode(model)
         }
+    }
+}
+
+private class BunnyVisual(val model: Model, private val walk: Animation) {
+    private var displayed: WorldRenderProjection? = null
+
+    fun show(pose: WorldRenderProjection) {
+        if (displayed == pose) return
+        displayed = pose
+        val yaw = when (pose.heading) {
+            BunnyHeading.PositiveZ -> 0f
+            BunnyHeading.PositiveX -> 90f
+            BunnyHeading.NegativeZ -> 180f
+            BunnyHeading.NegativeX -> -90f
+        }
+        model.transform.setIdentity()
+            .translate(pose.x * SceneUnitsPerCell, 0f, pose.z * SceneUnitsPerCell)
+            .rotate(yaw.deg, Vec3f.Y_AXIS)
+            .scale(0.76f)
+        // Sample the walk clip from the simulation tick even when render frames are skipped.
+        walk.progress = (pose.tick * GaitSecondsPerTick % walk.duration).toFloat()
+        model.applyAnimation(0f)
+    }
+
+    private companion object {
+        const val GaitSecondsPerTick = 0.05
     }
 }
 
