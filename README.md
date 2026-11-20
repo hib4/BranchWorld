@@ -41,6 +41,8 @@ For an intervention demo, open seed `104729`, play until shortly after rain begi
 
 **Save world** captures the current tick and any queued interventions in one local slot. After closing and reopening BranchWorld, choose **Load saved world** from Home. The island opens paused at the saved tick. Press **Play** to resume and apply any queued interventions.
 
+Open **Timeline**, enter `600` in **Target tick**, and select **Play to tick**. Enter `300` and select **Go to tick** to rewind. Play back to `600` to replay the original branch, or select **Fork here** at tick 300 and name a new branch **Restored Forest**. Reforest B3 on that branch, advance it to tick 900, then switch to **Main** and advance it to the same tick. The inspector shows each branch's own ecology. Saving preserves both branches, the selected tick, and each branch's queued commands. An existing single-island save opens as **Main** starting at its saved tick.
+
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
 ## Architecture

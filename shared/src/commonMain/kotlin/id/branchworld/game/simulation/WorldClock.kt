@@ -20,7 +20,11 @@ internal enum class WorldSpeed(val multiplier: Int) {
     val tickInterval: Duration get() = 1.seconds / (WorldTicksPerSecond * multiplier)
 }
 
-internal class WorldPlayback(val playing: Boolean = false, val speed: WorldSpeed = WorldSpeed.Normal)
+internal class WorldPlayback(
+    val playing: Boolean = false,
+    val speed: WorldSpeed = WorldSpeed.Normal,
+    val stopAt: Long? = null,
+)
 
 internal interface ClockSimulation<S> {
     val state: S
@@ -46,15 +50,28 @@ internal class WorldClock<S>(private val simulation: ClockSimulation<S>) {
 
     fun togglePlaying() {
         val current = settings.value
-        settings.value = WorldPlayback(!current.playing, current.speed)
+        if (current.playing) pause()
+        else if (simulation.tick < Long.MAX_VALUE) settings.value = WorldPlayback(true, current.speed)
+    }
+
+    fun pause() {
+        if (settings.value.playing) settings.value = WorldPlayback(speed = settings.value.speed)
+    }
+
+    fun playTo(tick: Long) {
+        if (tick > simulation.tick) settings.value = WorldPlayback(true, settings.value.speed, tick)
     }
 
     fun setSpeed(speed: WorldSpeed) {
         val current = settings.value
-        if (current.speed != speed) settings.value = WorldPlayback(current.playing, speed)
+        if (current.speed != speed) settings.value = WorldPlayback(current.playing, speed, current.stopAt)
     }
 
     fun steer(left: Boolean) = simulation.steer(left)
+
+    fun publish() {
+        projection.value = simulation.project(projection.value)
+    }
 
     suspend fun run(isActive: () -> Boolean, wait: suspend (Duration) -> Unit = { delay(it) }) {
         playback.collectLatest { playback ->
@@ -65,7 +82,8 @@ internal class WorldClock<S>(private val simulation: ClockSimulation<S>) {
                 // A rapid pause and resume still invalidates the wait that was already in flight.
                 if (!isActive() || settings.value !== playback) break
                 simulation.advance()
-                projection.value = simulation.project(projection.value)
+                publish()
+                if (simulation.tick == playback.stopAt || simulation.tick == Long.MAX_VALUE) pause()
             }
         }
     }

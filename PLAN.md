@@ -143,8 +143,8 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | 03 | COMPLETE | ACCEPTED | Rules v1 checkpoints and runtime playback verified at `790e34e`. Approved by the user. |
 | 04 | COMPLETE | ACCEPTED | Terrain and rules v2 fixtures and both primary runtimes were verified at `bcc8069`. Approved by the user. |
 | 05 | COMPLETE | ACCEPTED | Rules v3 goldens, 10,000-tick ecology fixtures, Android APK, Desktop Compose controls, and native Vulkan frames were verified at `496ebef`. Approved by the user. |
-| 06 | COMPLETE | PENDING | Rules v4 goldens match across JVM, Android host and ART, and iOS simulator. Both B3 interventions measurably changed ecology and native frames. Android APK and macOS Compose process restarts restored matching state and resumed queued commands. |
-| 07 | NOT VERIFIED | PENDING | - |
+| 06 | COMPLETE | ACCEPTED | Rules v4, both interventions, and Android/macOS restart were verified at `2c0021a`. Approved by the user. |
+| 07 | COMPLETE | PENDING | Exact replay hashes match across four runners. Android and macOS restored both timelines and the viewed tick after restart, with schema-v1 saves preserved. |
 | 08 | NOT VERIFIED | PENDING | - |
 | 09 | NOT VERIFIED | PENDING | - |
 | 10 | NOT VERIFIED | PENDING | - |
@@ -173,34 +173,39 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | 2026-11-20 / 06 | Add rules v4 with a deterministic 1,200-tick day and a separate weather PRNG. Rain doubles integer forage regrowth within patch capacity. | A depleted patch reached 22 biomass in dry weather and 24 in rain with identical starting state at tick 299. Rules v1–v3 still pass. Both species persisted for 10,000 ticks on all three preset seeds. | No |
 | 2026-11-20 / 06 | Plant traversable browse in stable cell order and supplement the most depleted patches in the selected region. Select B3 by default when eligible. | With seed 104729 at tick 300, B2 planting did not produce a deer bite by tick 900. B3 planted six saplings at tick 301 and deer 5 ate planted browse at (7, -8) by tick 604. Separate intervention runs added 180 browse and 120 supplemental forage to the unchanged control. | No |
 | 2026-11-20 / 06 | Save one versioned JSON checkpoint with pending commands, a checksum, and explicit replacement confirmation. | Interrupted-write tests recovered the committed slot. Restart tests compared canonical hashes and applied both queued commands on the first resumed tick. Loading opens paused at 1×. | No |
+| 2026-11-20 / 07 | Keep a distinct viewed tick and branch head, and record commands only when the live head advances. Retain eight periodic checkpoints per branch at 300-tick intervals, plus branch starts and heads. | Replaying tick 300 to 600 reproduced the original state. A test also recovered tick 250 after advancing to 3300 and evicting the oldest periodic checkpoints. | No |
+| 2026-11-20 / 07 | Fork from the displayed state with independent future commands and preserve both PRNG states. Key creature presentation by branch as well as tick. | Seed 104729 at tick 900 had 9893 forage and zero saplings on Main, and 11105 forage and six saplings on Restored Forest. Switching branches at that tick updated the Vulkan viewport and restored the previous branch's pixels when switching back. | No |
+| 2026-11-20 / 07 | Save branch history to schema v2 and retain the Phase 06 file as the fallback when the v2 slot is absent. | macOS restored cursor 700 and both branches at 900. Import preserved the v1 file byte for byte. Damaged v2 data kept the active session intact. | No |
 
 ### Latest phase handoff (agent-maintained)
 
 ```text
-PHASE: 06 - Environmental Systems, World Interaction & Saves
+PHASE: 07 - Time Travel & Timeline Branching
 STATUS: COMPLETE
-PLAYER-VISIBLE OUTCOME: The island cycles through day, night, dry weather, and rain. Rain accelerates forage growth. The inspector shows regional forage, saplings, and individual animal activity and needs. Players can reforest or supplement forage, save the current island, and restore it paused with pending interventions intact.
-CHANGED CODE: Shared rules v4, regional ecology, common command ordering, immutable climate and sapling projections, Compose inspector and save controls, schema-v1 codec, Android and Desktop storage adapters, and cross-target fixtures.
-TESTS / BUILDS:
-  PASS - ./gradlew --console=plain :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :androidApp:assembleDebug :androidApp:lintDebug :desktopApp:test :desktopApp:createDistributable :shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64 :shared:iosSimulatorArm64Test :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest
-         Shared tests passed on Desktop JVM (32), Android host (32), Pixel 9 API 36 AVD (31), and iOS ARM64 simulator (32). Renderer JVM (7), renderer Android host (4), Desktop storage (1), and Android app instrumentation (2) passed. Android lint reported zero errors, four launcher warnings, and three tool-version warnings.
-  PASS - adb -s emulator-5554 install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-         python3 build/verification/phase06/android-restart.py
-         Real APK on Pixel 9 API 36. Checked the empty slot, opened seed 104729, queued both B3 actions, and saved at tick 357. Force-stop and launch changed PID from 16939 to 17408. The file restored tick 357, hash b4dce70c0ab0d158, and two pending commands. At tick 358, six saplings appeared and forage increased by 120. Playback advanced to 371. Verified the creature inspector on the restarted app.
+PLAYER-VISIBLE OUTCOME: The Timeline panel supports exact seek and playback targets, named forks, and branch switching. A fork lets players intervene at an earlier tick. Saving retains the branches, their checkpoints and inputs, and the branch and tick currently on screen.
+IMPLEMENTATION: Shared timeline owner, ordered execution history and replay, lifecycle-bound Compose timeline controls, branch-aware render and inspector updates, and schema-v2 save adapters with a readable and intact schema-v1 fallback.
+VERIFICATION:
+  PASS - ./gradlew --offline --console=plain :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidApp:lintDebug :desktopApp:test :desktopApp:createDistributable :shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64 :shared:iosSimulatorArm64Test :shared:packageAndroidDeviceTest
+         Shared JVM, Android host, and iOS ARM64 simulator each ran 37 tests. Renderer Desktop JVM (8), renderer Android host (4), and Desktop storage (1) passed. Android lint reported zero errors and seven warnings.
+  PASS - Install the APK and both test APKs with adb install -r. Run adb -s emulator-5554 shell am instrument -w -r with id.branchworld.game.shared.test/androidx.test.runner.AndroidJUnitRunner and id.branchworld.game.test/androidx.test.runner.AndroidJUnitRunner.
+         Shared Android ART (36) and Android app instrumentation (2) passed on the Pixel 9 API 36 emulator.
+  PASS - python3 build/verification/phase07/android-final-restore.py
+         The final APK reopened both saved branches at child tick 700 with hash b558845d62318515. Both save files remained unchanged.
+  PASS - python3 build/verification/phase07/android-timeline.py
+         Loaded the existing v1 save at tick 357 and kept its original 8355 bytes. Replayed the main timeline from 600 to 300 to 600, forked at 300, and advanced both branches to 900. The B3 inspector showed 2217 forage and zero saplings on Main, and 3496 forage and six saplings on Restored Forest. Restored the child at tick 700 after force-stop and relaunch, opened both tick-900 heads, and resumed to tick 901.
   PASS - open -n desktopApp/build/compose/binaries/main/app/id.branchworld.game.app
-         On Apple M4 macOS, DesktopRestartProbe ran the packaged Compose UI and production storage adapter in separate save and restore processes. Tick 304 and hash 8578f540976ca7b4 matched. Both queued actions executed at tick 305 and playback advanced to 312. The probe also covered explicit replacement cancellation and retaining an island when loading a disposable corrupt file.
-  PASS - DesktopEnvironmentRenderProbe against packaged renderer libraries on Apple M4 Vulkan.
-         Starting from the same camera and snapshot, planting changed 86 pixels and supplementing forage changed 12. Dry and night lighting changed 46603 and 46604 pixels respectively from the rain baseline. The probe released the scene cleanly.
-  BLOCKED - Manual mouse and keyboard interaction with the packaged macOS window while the host session was locked. Desktop restart and rendering were verified using the process and Vulkan probes.
-  NOT RUN - Physical Android, Android API 26, Windows or Linux Desktop, and iOS 3D rendering.
-DETERMINISM / SAVE / BRANCH: Rules v4 for the seed 104729 ordered-command fixture matched b5f4de1f7a287385 / fa5c5e4499205d37 / 8ccda88b601ba261 / 33e4fbb96e965e96 at ticks 0 / 300 / 600 / 900. The three seed fixtures passed reversed admission, checkpoint restore, long-run resource accounting, and population bounds. At tick 10000, rabbit/deer counts were 4/8, 4/3, and 4/8 for seeds 104729, 271828, and 424242. Forage totals were 10403, 9229, and 10225.
-  In the paired seed 104729 B3 scenario, the control had 10220 forage at tick 301. Reforestation added six saplings and 180 browse biomass. Supplementation raised forage to 10340 in its separate run. Deer 5 ate planted browse by tick 604. The codec rejected truncated, altered, oversized, and incompatible files, and a save restored with both PRNG states and all pending commands.
-PERFORMANCE / DEVICE: Apple M4 Vulkan delivered the first complete Compose-bound probe frame in 613 ms at 640×360. Save and restore throughput was not measured.
-DEMO: Open seed 104729 and pause shortly after rain starts at tick 300. Open Inspect world, choose B3, and queue Reforest region and Supplement forage. Save, quit, relaunch, and use Load saved world. Press Play and inspect B3 to see the new saplings and added forage. Open the creature picker to inspect a deer.
-LIMITATIONS: One local save slot. Playback resumes on request at 1×. The shared iOS simulation and codec pass on the simulator.
-EVIDENCE: build/verification/phase06/final-verification.log, android-restart.log, desktop-restart.log, desktop-vulkan.log, the matching probe sources, and device render captures.
-BLOCKERS / NEXT STEPS: Phase 06 implementation gates passed. After approval, begin Phase 07 by retaining ordered command histories, taking periodic checkpoints, and using replay to implement rewind and branch-local continuation. Prove tick 600 → 300 → 600 hash equality before adding fork and durable branch restoration. Include an explicit schema-v1 compatibility check.
-HUMAN APPROVAL: PENDING
+         The native bundle launches. DesktopTimelineProbe ran the packaged Compose UI and storage adapter in separate processes. It verified the exact replay, loaded the child at tick 700, reopened both heads at 900, and advanced to 901. The v1 import preserved its original bytes. A corrupt v2 file left the current island intact.
+  PASS - DesktopTimelineRenderProbe against the packaged renderer on Apple M4 Vulkan.
+         At the same tick and camera, the child changed 651 pixels. Creature-only changes accounted for 537 pixels in an isolated comparison. Reassigning a reused entity ID to a different species changed 136 pixels. Switching back restored identical parent pixels each time.
+  NOT RUN - Manual pointer and keyboard input in the packaged macOS window, physical Android, Android API 26, Windows and Linux Desktop, and iOS rendering.
+DETERMINISM / SAVE / BRANCH: The ordered-command fixture for seed 104729 reproduced b8900e6fd6de6c0d after replay from tick 300 to 600 on JVM, Android host, Android ART and iOS simulator. The same runner matrix matched all three seeds and both North Star branch heads. At tick 900, Main hash 689a2ab6f9063004 had 9893 total forage and zero saplings. Restored Forest hash 6af1190dbe1f4a7f had 11105 total forage and six saplings. Each had four rabbits and three deer. Android and macOS wrote byte-identical v2 files and restored the same child view hash b558845d62318515 at tick 700. Tests covered nested forks, checkpoint eviction, pending inputs, malformed ancestry, duplicate commands, damaged saves, and v1 import.
+PERFORMANCE: The 75147-byte, two-branch file restored in 613 ms on the Pixel 9 API 36 emulator and 441 ms on Apple M4 macOS. Exact seeks to checkpoint 300 took 67–249 ms on that emulator and 7–13 ms on the Mac in the end-to-end runs.
+DEMO: Open seed 104729. Play to 600, go to 300, then play to 600. Go to 300 again and fork Restored Forest. In Inspect world, choose B3 and reforest, then play to 900. Switch to Main and play to 900. Inspect both heads, switch to Restored Forest, go to 700, save, quit, and load. The child opens at 700 and both branch heads remain at 900.
+LIMITATIONS: Imported Phase 06 saves start their recorded history at the saved tick. Inner checkpoints retain the eight most recent 300-tick intervals per branch. Older seeks rebuild from the branch start and may take longer.
+DECISIONS: One visible save slot uses island-v2.json with a read-only fallback to island-v1.json. Parent and child share immutable fork state and have independent future inputs. The world admits at most 16 branches and 16384 ordered commands across the session.
+EVIDENCE: build/verification/phase07/verified.log, cross-target-fixtures.txt, cross-platform-save.txt, android-timeline.log, android-final-instrumentation.log, android-final-restore.log, desktop-timeline-final.log, desktop-vulkan-final.log, driver sources, and device captures.
+NEXT STEPS: After approval, build the Phase 08 timeline tree, scrubber, and intervention indicators from the persisted branch graph and command history. Use timeline replay to show both branches at the same tick and compare real vegetation, forage, wildlife, and event data. Re-run the seed 104729 demo through restart.
+APPROVAL NEEDED: yes
 ```
 
 ## How to invoke the coding agent

@@ -27,16 +27,18 @@ internal class CreatureModels(private val scene: Scene, private val assets: Map<
     private val unused = mutableMapOf<Species, MutableList<Body>>()
     private val textures = mutableSetOf<Texture2d>()
     private var displayedTick: Long? = null
+    private var displayedBranch: Int? = null
     val ready get() = textures.all { it.isLoaded }
 
     fun show(world: WorldRenderProjection) {
-        if (displayedTick == world.tick) return
+        if (displayedTick == world.tick && displayedBranch == world.branchId) return
         displayedTick = world.tick
-        val ids = world.creatures.mapTo(mutableSetOf()) { it.id }
+        displayedBranch = world.branchId
+        val speciesById = world.creatures.associate { it.id to it.species }
         val iterator = active.iterator()
         while (iterator.hasNext()) {
             val (id, body) = iterator.next()
-            if (id in ids) continue
+            if (speciesById[id] == body.species) continue
             body.model.isVisible = false
             unused.getOrPut(body.species, ::mutableListOf).add(body)
             iterator.remove()

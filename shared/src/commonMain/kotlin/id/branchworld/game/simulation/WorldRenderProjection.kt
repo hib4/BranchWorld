@@ -21,6 +21,7 @@ data class WorldRenderProjection(
     val springs: List<GroundPoint> = emptyList(),
     val ecology: EcologyReadout? = null,
     val climate: ClimatePose? = null,
+    val branchId: Int? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }

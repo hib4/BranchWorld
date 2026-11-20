@@ -16,10 +16,11 @@ internal class EcologyEngine(
     checkpoint: EcologyState? = null,
     replayInputs: List<WorldCommand> = emptyList(),
     rulesVersion: Int = checkpoint?.rulesVersion ?: EcologyRulesVersion,
+    recordHistory: Boolean = true,
 ) {
     private val island = IslandEcology(terrain)
     private val regional by lazy { RegionalEcology(island) }
-    private val inputs = WorldCommands<WorldCommand>()
+    private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         if (rulesVersion == EnvironmentalRulesVersion) it.copy(environment = Environment.start(terrain.key.seed)) else it
@@ -27,6 +28,8 @@ internal class EcologyEngine(
         private set
 
     var interventionResults = emptyList<InterventionResult>()
+        private set
+    var appliedCommands = emptyList<WorldCommand>()
         private set
 
     init {
@@ -115,9 +118,13 @@ internal class EcologyEngine(
     fun steeringTarget(left: Boolean): GridCell? = if (left) island.navigation.west else island.navigation.east
 
     fun steer(left: Boolean) {
-        val rabbit = state.creatures.firstOrNull { it.species == Species.Rabbit } ?: return
-        val target = steeringTarget(left) ?: return
-        inputs.submitNext(state.tick) { tick, sequence -> SetDestination(tick, sequence, rabbit.id, target) }
+        queueSteering(left)
+    }
+
+    fun queueSteering(left: Boolean): Boolean {
+        val rabbit = state.creatures.firstOrNull { it.species == Species.Rabbit } ?: return false
+        val target = steeringTarget(left) ?: return false
+        return inputs.submitNext(state.tick) { tick, sequence -> SetDestination(tick, sequence, rabbit.id, target) }
     }
 
     fun advance(): EcologyState {
@@ -128,9 +135,10 @@ internal class EcologyEngine(
         val waypoints = mutableMapOf<Long, GridCell>()
         val random = SplitMix64(previous.randomState)
         val patches = previous.patches.toMutableList()
+        appliedCommands = inputs.at(tick)
         var introduced = 0
         val results = buildList {
-            for (command in inputs.at(tick)) {
+            for (command in appliedCommands) {
                 when (command) {
                     is SetDestination -> waypoints[command.entityId] = command.cell
                     is ReforestRegion -> {

@@ -21,6 +21,9 @@ class DesktopWorldSaveStoreTest {
                 val first = DesktopWorldSaveStore(directory)
                 val second = DesktopWorldSaveStore(directory)
                 assertNull(first.read(16))
+                val legacy = directory.resolve("island-v1.json")
+                Files.write(legacy, byteArrayOf(8))
+                assertContentEquals(byteArrayOf(8), second.read(16))
                 val a = async { first.write(byteArrayOf(1), replace = false) }
                 val b = async { second.write(byteArrayOf(2), replace = false) }
                 val outcomes = listOf(a.await(), b.await())
@@ -30,6 +33,7 @@ class DesktopWorldSaveStoreTest {
                 Files.write(directory.resolve(".island-interrupted.tmp"), byteArrayOf(9))
                 assertTrue(first.write(byteArrayOf(3, 4), replace = true))
                 assertContentEquals(byteArrayOf(3, 4), DesktopWorldSaveStore(directory).read(16))
+                assertContentEquals(byteArrayOf(8), Files.readAllBytes(legacy))
                 assertFailsWith<SaveFileTooLarge> { second.read(1) }
             }
         } finally {

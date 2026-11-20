@@ -36,11 +36,11 @@ import id.branchworld.game.ecology.Weather
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun WorldControls(clock: WorldClock<*>) {
+internal fun WorldControls(clock: WorldClock<*>, playbackEnabled: Boolean, editsEnabled: Boolean) {
     val playback by clock.playback.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
-            Button(onClick = clock::togglePlaying) {
+            Button(onClick = clock::togglePlaying, enabled = playbackEnabled) {
                 Text(stringResource(if (playback.playing) Res.string.pause_world else Res.string.play_world))
             }
             SingleChoiceSegmentedButtonRow {
@@ -48,6 +48,7 @@ internal fun WorldControls(clock: WorldClock<*>) {
                     SegmentedButton(
                         selected = playback.speed == speed,
                         onClick = { clock.setSpeed(speed) },
+                        enabled = playbackEnabled,
                         shape = SegmentedButtonDefaults.itemShape(index, WorldSpeed.entries.size),
                         icon = {},
                         label = { Text(stringResource(Res.string.world_speed, speed.multiplier)) },
@@ -56,7 +57,7 @@ internal fun WorldControls(clock: WorldClock<*>) {
             }
             WorldTick(clock)
         }
-        WildlifeControls(clock)
+        WildlifeControls(clock, editsEnabled)
     }
 }
 
@@ -73,9 +74,9 @@ private fun WorldTick(clock: WorldClock<*>) {
 }
 
 @Composable
-private fun WildlifeControls(clock: WorldClock<*>) {
+private fun WildlifeControls(clock: WorldClock<*>, editsEnabled: Boolean) {
     val world by clock.render.collectAsStateWithLifecycle()
-    val canSteer = world.leadRabbit != null
+    val canSteer = editsEnabled && world.leadRabbit != null
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { clock.steer(left = true) }, enabled = canSteer && clock.canSteerLeft) {
             Text(stringResource(Res.string.steer_left))

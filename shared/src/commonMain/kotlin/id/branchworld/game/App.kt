@@ -261,7 +261,10 @@ private fun WorldScreen(
                 modifier = Modifier.semantics { heading() },
                 style = MaterialTheme.typography.headlineMedium,
             )
-            if (clock != null) WorldControls(clock)
+            if (session != null) {
+                val timeline by session.timelineView.collectAsStateWithLifecycle()
+                WorldControls(session.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
+            }
         }
         Box(
             modifier = Modifier
@@ -302,6 +305,7 @@ private fun WorldScreen(
         }
         if (active && session != null) {
             saveControls?.invoke()
+            TimelineControls(session)
             WorldInspector(session)
         }
     }

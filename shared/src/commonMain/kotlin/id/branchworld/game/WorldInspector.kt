@@ -17,6 +17,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -72,8 +73,8 @@ internal fun WorldInspector(island: IslandLoad.Ready) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 RegionalControls(island)
                 val pose by island.clock.render.collectAsStateWithLifecycle()
-                val creatures = remember(island, pose.tick) { island.clock.state.creatures }
-                CreatureInspector(creatures)
+                val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
+                key(pose.branchId) { CreatureInspector(creatures) }
             }
         }
     }
@@ -83,7 +84,8 @@ internal fun WorldInspector(island: IslandLoad.Ready) {
 private fun RegionalControls(island: IslandLoad.Ready) {
     val pose by island.clock.render.collectAsStateWithLifecycle()
     val feedback by island.interventions.collectAsStateWithLifecycle()
-    val regions = remember(island, pose.tick) { island.inspectRegions() }
+    val timeline by island.timelineView.collectAsStateWithLifecycle()
+    val regions = remember(island, pose.branchId, pose.tick) { island.inspectRegions() }
     if (regions.isEmpty()) return
     var selected by remember(island) {
         mutableStateOf(listOf(6, 5, 9, 10).firstOrNull { regions[it].canPlant } ?: 6)
@@ -109,11 +111,11 @@ private fun RegionalControls(island: IslandLoad.Ready) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
             onClick = { island.intervene(Intervention.Reforest, selected) },
-            enabled = region.canPlant,
+            enabled = region.canPlant && timeline.editsAllowed,
         ) { Text(stringResource(Res.string.reforest_region)) }
         OutlinedButton(
             onClick = { island.intervene(Intervention.Supplement, selected) },
-            enabled = region.canSupplement,
+            enabled = region.canSupplement && timeline.editsAllowed,
         ) { Text(stringResource(Res.string.supplement_forage)) }
     }
     if (!region.canPlant) Text(stringResource(Res.string.no_planting_sites))

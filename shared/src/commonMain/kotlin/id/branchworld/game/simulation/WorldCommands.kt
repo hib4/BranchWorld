@@ -3,7 +3,7 @@ package id.branchworld.game.simulation
 internal val commandOrder = compareBy(WorldCommand::tick, WorldCommand::sequence)
 
 /** Orders validated commands and retains their original keys for replay. */
-internal class WorldCommands<C : WorldCommand> {
+internal class WorldCommands<C : WorldCommand>(private val recordHistory: Boolean = true) {
     private val pending = mutableMapOf<Long, MutableMap<Long, C>>()
     private val history = mutableListOf<C>()
 
@@ -12,7 +12,7 @@ internal class WorldCommands<C : WorldCommand> {
         val atTick = pending.getOrPut(command.tick, ::mutableMapOf)
         if (command.sequence in atTick) return false
         atTick[command.sequence] = command
-        history.add(command)
+        if (recordHistory) history.add(command)
         return true
     }
 

@@ -11,20 +11,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal class AndroidWorldSaveStore(directory: File) : WorldSaveStore {
-    private val slot = File(directory, "island-v1.json")
-    private val atomic = AtomicFile(slot)
+    private val slot = AtomicFile(File(directory, "island-v2.json"))
+    private val legacy = AtomicFile(File(directory, "island-v1.json"))
 
     override suspend fun read(maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
         access.withLock {
-            try {
-                atomic.openRead().use { input ->
-                    if (input.channel.size() > maxBytes) throw SaveFileTooLarge()
-                    input.readBytes()
-                }
-            } catch (error: FileNotFoundException) {
-                if (exists()) throw error
-                null
-            }
+            read(slot, maxBytes) ?: read(legacy, maxBytes)
         }
     }
 
@@ -33,22 +25,33 @@ internal class AndroidWorldSaveStore(directory: File) : WorldSaveStore {
     }
 
     private fun commit(bytes: ByteArray, replace: Boolean): Boolean {
-        if (!replace && exists()) return false
-        val stream = atomic.startWrite()
+        if (!replace && slot.existsOnDisk()) return false
+        val stream = slot.startWrite()
         try {
             stream.write(bytes)
             stream.fd.sync()
-            atomic.finishWrite(stream)
+            slot.finishWrite(stream)
         } catch (error: Exception) {
-            atomic.failWrite(stream)
+            slot.failWrite(stream)
             throw error
         }
         // AtomicFile logs rename failures. Verify the resulting commit before reporting success.
-        check(atomic.openRead().use { it.channel.size() == bytes.size.toLong() && it.readBytes().contentEquals(bytes) })
+        check(slot.openRead().use { it.channel.size() == bytes.size.toLong() && it.readBytes().contentEquals(bytes) })
         return true
     }
 
-    private fun exists() = slot.exists() || File(slot.parentFile, "${slot.name}.bak").exists()
+    private fun read(file: AtomicFile, maxBytes: Int): ByteArray? = try {
+        file.openRead().use { input ->
+            if (input.channel.size() > maxBytes) throw SaveFileTooLarge()
+            input.readBytes()
+        }
+    } catch (error: FileNotFoundException) {
+        if (file.existsOnDisk()) throw error
+        null
+    }
+
+    private fun AtomicFile.existsOnDisk() =
+        baseFile.exists() || File(baseFile.parentFile, "${baseFile.name}.bak").exists()
 
     companion object {
         private val access = Mutex()
