@@ -3,22 +3,29 @@ package id.branchworld.game.ecology
 import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.TerrainIdentity
+import kotlinx.serialization.Serializable
 
+@Serializable
 enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2) }
+@Serializable
 enum class ForageKind(internal val canonicalId: Int) { Meadow(1), Browse(2) }
+@Serializable
 enum class CreatureAction(internal val canonicalId: Int) {
     Idle(0), Walking(1), Eating(2), Drinking(3), Resting(4),
 }
 
+@Serializable
 internal enum class Need(internal val canonicalId: Int) {
     Food(1), Water(2), Rest(3), Waypoint(4), Roam(5),
 }
 
 internal const val EcologyRulesVersion = 3
+internal const val EnvironmentalRulesVersion = 4
 internal const val MaxReserve = 1000
 internal const val MaxPerSpecies = 8
 internal const val MaturityTicks = 240L
 
+@Serializable
 internal data class ForagePatch(
     val id: Int,
     val cell: GridCell,
@@ -26,10 +33,13 @@ internal data class ForagePatch(
     val capacity: Int,
     val regrowth: Int,
     val biomass: Int = capacity,
+    val planted: Boolean = false,
 )
 
+@Serializable
 internal data class Goal(val need: Need, val cell: GridCell)
 
+@Serializable
 internal data class Creature(
     val id: Long,
     val species: Species,
@@ -46,13 +56,16 @@ internal data class Creature(
     val waypoint: GridCell? = null,
 )
 
+@Serializable
 internal data class EcologyLedger(
     val consumed: Long = 0,
     val regrown: Long = 0,
     val births: Long = 0,
     val deaths: Long = 0,
+    val introduced: Long = 0,
 )
 
+@Serializable
 internal data class EcologyState(
     val terrain: TerrainIdentity,
     val tick: Long,
@@ -62,4 +75,7 @@ internal data class EcologyState(
     val creatures: List<Creature>,
     val nextEntityId: Long,
     val ledger: EcologyLedger = EcologyLedger(),
-)
+    val environment: Environment? = null,
+) {
+    val rulesVersion: Int get() = if (environment == null) EcologyRulesVersion else EnvironmentalRulesVersion
+}

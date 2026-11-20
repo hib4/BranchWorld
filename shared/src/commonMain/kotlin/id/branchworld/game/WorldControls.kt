@@ -19,6 +19,11 @@ import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.ecology_animals
 import branchworld.shared.generated.resources.ecology_forage
 import branchworld.shared.generated.resources.ecology_turnover
+import branchworld.shared.generated.resources.daylight
+import branchworld.shared.generated.resources.dry_weather
+import branchworld.shared.generated.resources.night
+import branchworld.shared.generated.resources.rainy_weather
+import branchworld.shared.generated.resources.world_climate
 import branchworld.shared.generated.resources.pause_world
 import branchworld.shared.generated.resources.play_world
 import branchworld.shared.generated.resources.steer_left
@@ -27,6 +32,7 @@ import branchworld.shared.generated.resources.world_speed
 import branchworld.shared.generated.resources.world_tick
 import id.branchworld.game.simulation.WorldClock
 import id.branchworld.game.simulation.WorldSpeed
+import id.branchworld.game.ecology.Weather
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
@@ -58,6 +64,12 @@ internal fun WorldControls(clock: WorldClock<*>) {
 private fun WorldTick(clock: WorldClock<*>) {
     val pose by clock.render.collectAsStateWithLifecycle()
     Text(stringResource(Res.string.world_tick, pose.tick.toString()), style = MaterialTheme.typography.labelLarge)
+    pose.climate?.let { climate ->
+        val time = stringResource(if (climate.isDaylight) Res.string.daylight else Res.string.night)
+        val weather = stringResource(if (climate.weather == Weather.Rain) Res.string.rainy_weather else Res.string.dry_weather)
+        Text(stringResource(Res.string.world_climate, climate.day.toString(), time, weather),
+            style = MaterialTheme.typography.labelLarge)
+    }
 }
 
 @Composable

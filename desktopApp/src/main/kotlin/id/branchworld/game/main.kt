@@ -10,6 +10,7 @@ import id.branchworld.renderer.DesktopDiorama
 fun main() {
     application {
         val renderer = remember { DesktopDiorama() }
+        val saveStore = remember { DesktopWorldSaveStore() }
         val state = rememberWindowState()
         val foreground = !state.isMinimized
         SideEffect { renderer.foreground(foreground) }
@@ -23,6 +24,7 @@ fun main() {
                 viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
                 foreground = foreground,
+                saveStore = saveStore,
             )
         }
     }

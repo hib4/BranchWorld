@@ -11,6 +11,7 @@ import id.branchworld.renderer.AndroidDiorama
 
 class MainActivity : ComponentActivity() {
     private val renderer by lazy { AndroidDiorama(applicationContext) }
+    private val saveStore by lazy { AndroidWorldSaveStore(filesDir) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -21,6 +22,7 @@ class MainActivity : ComponentActivity() {
                 viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
                 registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
+                saveStore = saveStore,
             )
         }
     }

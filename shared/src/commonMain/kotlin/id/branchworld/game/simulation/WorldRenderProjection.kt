@@ -1,12 +1,15 @@
 package id.branchworld.game.simulation
 
 import id.branchworld.game.ecology.CreatureAction
+import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.Weather
 import id.branchworld.game.ecology.terrainCell
 import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.Serializable
 
 class WorldRenderSource(val terrain: TerrainMap, val poses: StateFlow<WorldRenderProjection>)
 
@@ -17,6 +20,7 @@ data class WorldRenderProjection(
     val forage: List<ForagePose> = emptyList(),
     val springs: List<GroundPoint> = emptyList(),
     val ecology: EcologyReadout? = null,
+    val climate: ClimatePose? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
@@ -31,7 +35,15 @@ data class CreaturePose(
     val action: CreatureAction,
 )
 
-data class ForagePose(val id: Int, val kind: ForageKind, val ground: GroundPoint, val biomassTier: Int)
+data class ForagePose(
+    val id: Int,
+    val kind: ForageKind,
+    val ground: GroundPoint,
+    val biomassTier: Int,
+    val planted: Boolean = false,
+)
+
+data class ClimatePose(val day: Long, val isDaylight: Boolean, val weather: Weather, val daylight: Float)
 
 data class EcologyReadout(
     val rabbits: Int,
@@ -41,6 +53,7 @@ data class EcologyReadout(
     val deaths: Long,
 )
 
+@Serializable
 enum class CreatureHeading(internal val canonicalId: Int) {
     PositiveX(1), NegativeX(2), PositiveZ(3), NegativeZ(4),
 }
@@ -67,7 +80,9 @@ internal fun WorldState.renderProjection(
 internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderProjection(
     tick = tick,
     creatures = creatures.map { CreaturePose(it.id, it.species, it.cell.project(terrain), it.heading, it.action) },
-    forage = patches.map { ForagePose(it.id, it.kind, it.cell.project(terrain), (it.biomass * 4 + it.capacity - 1) / it.capacity) },
+    forage = patches.map {
+        ForagePose(it.id, it.kind, it.cell.project(terrain), (it.biomass * 4 + it.capacity - 1) / it.capacity, it.planted)
+    },
     springs = springs.map { it.project(terrain) },
     ecology = EcologyReadout(
         creatures.count { it.species == Species.Rabbit },
@@ -76,6 +91,12 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         ledger.births,
         ledger.deaths,
     ),
+    climate = environment?.let {
+        val phase = tick % DayLength
+        val daylight = minOf((phase + 60f) / 120f, (660f - phase) / 120f).coerceIn(0f, 1f)
+        val dawn = ((phase - 1140f) / 120f).coerceIn(0f, 0.5f)
+        ClimatePose(tick / DayLength + 1, phase < DayLength / 2, it.weather, maxOf(daylight, dawn))
+    },
 )
 
 private fun GridCell.project(terrain: TerrainMap?) =

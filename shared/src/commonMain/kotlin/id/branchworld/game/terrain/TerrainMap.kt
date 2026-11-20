@@ -1,8 +1,10 @@
 package id.branchworld.game.terrain
 
 import id.branchworld.game.simulation.Fnv64
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
+@Serializable
 data class TerrainKey(val seed: Long, val worldgenVersion: Int = 1)
 
 enum class Biome(internal val id: Int) {

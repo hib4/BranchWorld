@@ -33,7 +33,7 @@ internal data class ShellState(
                 if (route == null || diagnosticsVisible == null) {
                     null
                 } else {
-                    val seed = (values.getOrNull(2) as? Long)?.takeIf(IslandSeeds::contains) ?: IslandSeeds.first()
+                    val seed = values.getOrNull(2) as? Long ?: IslandSeeds.first()
                     ShellState(route, diagnosticsVisible && route == ShellRoute.World, seed)
                 }
             },

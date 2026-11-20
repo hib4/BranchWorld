@@ -15,6 +15,8 @@ import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
+import id.branchworld.game.ecology.Weather
+import id.branchworld.game.simulation.ClimatePose
 import id.branchworld.game.simulation.WorldRenderSource
 import id.branchworld.game.terrain.PropKind
 import id.branchworld.game.terrain.TerrainMap
@@ -39,6 +41,7 @@ internal class DioramaSession(
     private var load: Job? = null
     private var creatures: CreatureModels? = null
     private var forage: ForageMeshes? = null
+    private var previousClimate: ClimatePose? = null
     private var propModels = emptyList<Model>()
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
@@ -83,6 +86,10 @@ internal class DioramaSession(
         )
         val wildlife = creatures
         val snapshot = world.poses.value
+        if (snapshot.climate != previousClimate) {
+            snapshot.climate?.let { current.showClimate(it) }
+            previousClimate = snapshot.climate
+        }
         wildlife?.show(snapshot)
         forage?.show(snapshot.forage)
         output?.update()
@@ -109,6 +116,7 @@ internal class DioramaSession(
         load = null
         creatures = null
         forage = null
+        previousClimate = null
         propModels = emptyList()
         assetFrame = -1
         timing.reset()
@@ -132,6 +140,14 @@ internal class DioramaSession(
         }
         addIsland(terrain)
         onRelease { println("BranchWorldRenderer sceneReleased") }
+    }
+
+    private fun Scene.showClimate(climate: ClimatePose) {
+        val rain = climate.weather == Weather.Rain
+        val key = if (rain) Color(0.75f, 0.85f, 1f) else Color(1f, 0.98f, 0.90f)
+        val ambient = Color(0.60f, 0.78f, 1f)
+        lighting.lights[0].setColor(key, 0.06f + climate.daylight * if (rain) 0.70f else 1.18f)
+        lighting.lights[1].setColor(ambient, 0.26f + climate.daylight * if (rain) 0.32f else 0.22f)
     }
 
     private suspend fun loadModels(target: Scene, world: WorldRenderSource) {

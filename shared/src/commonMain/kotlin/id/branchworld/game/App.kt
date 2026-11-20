@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import branchworld.shared.generated.resources.Res
@@ -64,6 +66,8 @@ import branchworld.shared.generated.resources.show_diagnostics
 import branchworld.shared.generated.resources.world_title
 import id.branchworld.game.simulation.WorldClock
 import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.save.WorldSaveStore
+import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 private class WorldSession : ViewModel() {
@@ -86,17 +90,27 @@ fun App(
     viewportHud: (@Composable () -> Unit)? = null,
     registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     foreground: Boolean = true,
+    saveStore: WorldSaveStore? = null,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
     val isWorld = state.route == ShellRoute.World
     var hasOpenedWorld by remember { mutableStateOf(isWorld) }
-    val goHome = { state = state.back() }
-    registerBackHandler(isWorld, goHome)
     val owner = LocalViewModelStoreOwner.current
-    val islands = if (owner == null) {
-        remember { IslandSession() }
-    } else {
-        viewModel(viewModelStoreOwner = owner) { WorldSession() }.islands
+    val retained = if (owner == null) null else viewModel(viewModelStoreOwner = owner) { WorldSession() }
+    val fallbackScope = rememberCoroutineScope()
+    val islands = retained?.islands ?: remember { IslandSession() }
+    val operations = retained?.viewModelScope ?: fallbackScope
+    val storage by islands.saveStatus.collectAsStateWithLifecycle()
+    val goHome = {
+        islands.dismissSaveStatus()
+        state = state.back()
+    }
+    registerBackHandler(isWorld, goHome)
+    LaunchedEffect(storage) {
+        val restored = storage as? SaveStatus.Restored ?: return@LaunchedEffect
+        hasOpenedWorld = true
+        state = state.copy(seed = restored.seed).openWorld()
+        islands.acknowledgeRestore(restored.tick)
     }
     val load by islands.state.collectAsStateWithLifecycle()
     val selectedSeed = state.seed
@@ -123,7 +137,7 @@ fun App(
                 val viewportHeight = (maxHeight * 0.47f).coerceIn(176.dp, 480.dp)
                 if (isWorld || (hasOpenedWorld && viewport != null)) {
                     WorldScreen(
-                        clock = clock,
+                        session = session,
                         world = session?.world,
                         seed = selectedSeed,
                         generationFailed = (load as? IslandLoad.Failed)?.seed == selectedSeed,
@@ -134,6 +148,15 @@ fun App(
                         diagnosticsVisible = state.diagnosticsVisible,
                         onToggleDiagnostics = { state = state.toggleDiagnostics() },
                         onBack = goHome,
+                        saveControls = saveStore?.let {
+                            {
+                                SaveControls(
+                                    status = storage,
+                                    onSave = { replace -> operations.launch { islands.save(it, replace) } },
+                                    onDismiss = islands::dismissSaveStatus,
+                                )
+                            }
+                        },
                         modifier = Modifier.align(Alignment.TopCenter),
                     )
                 }
@@ -144,9 +167,12 @@ fun App(
                                 seed = selectedSeed,
                                 onSelectSeed = { state = state.selectSeed(it) },
                                 onOpenWorld = {
+                                    islands.dismissSaveStatus()
                                     hasOpenedWorld = true
                                     state = state.openWorld()
                                 },
+                                onLoad = saveStore?.let { { operations.launch { islands.restore(it) } } },
+                                saveStatus = storage,
                             )
                         }
                     }
@@ -161,6 +187,8 @@ private fun HomeScreen(
     seed: Long,
     onSelectSeed: (Long) -> Unit,
     onOpenWorld: () -> Unit,
+    onLoad: (() -> Unit)?,
+    saveStatus: SaveStatus?,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -189,20 +217,22 @@ private fun HomeScreen(
                 SegmentedButton(
                     selected = seed == candidate,
                     onClick = { onSelectSeed(candidate) },
+                    enabled = saveStatus != SaveStatus.Busy,
                     shape = SegmentedButtonDefaults.itemShape(index, IslandSeeds.size),
                     icon = {},
                 ) { Text(candidate.toString()) }
             }
         }
-        Button(onClick = onOpenWorld) {
+        Button(onClick = onOpenWorld, enabled = saveStatus != SaveStatus.Busy) {
             Text(stringResource(Res.string.open_world))
         }
+        if (onLoad != null) LoadControls(saveStatus, onLoad)
     }
 }
 
 @Composable
 private fun WorldScreen(
-    clock: WorldClock<*>?,
+    session: IslandLoad.Ready?,
     world: WorldRenderSource?,
     seed: Long,
     generationFailed: Boolean,
@@ -213,8 +243,10 @@ private fun WorldScreen(
     diagnosticsVisible: Boolean,
     onToggleDiagnostics: () -> Unit,
     onBack: () -> Unit,
+    saveControls: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    val clock = session?.clock
     Column(
         modifier = modifier
             .widthIn(max = 1000.dp)
@@ -267,6 +299,10 @@ private fun WorldScreen(
                 val label = if (diagnosticsVisible) Res.string.hide_diagnostics else Res.string.show_diagnostics
                 Text(stringResource(label), textAlign = TextAlign.Center)
             }
+        }
+        if (active && session != null) {
+            saveControls?.invoke()
+            WorldInspector(session)
         }
     }
 }

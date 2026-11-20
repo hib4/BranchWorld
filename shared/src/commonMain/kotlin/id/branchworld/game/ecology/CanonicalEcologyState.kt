@@ -4,9 +4,9 @@ import id.branchworld.game.simulation.CanonicalWriter
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.canonicalHash
 
-/** Rules v3. All IDs, arrays, and optional keys have explicit little-endian encodings. */
+/** All IDs, arrays, and optional keys have explicit little-endian encodings. */
 internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
-    writeInt(EcologyRulesVersion)
+    writeInt(rulesVersion)
     writeLong(terrain.key.seed)
     writeInt(terrain.key.worldgenVersion)
     writeULong(terrain.digest)
@@ -45,6 +45,13 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         writeInt(goal?.need?.canonicalId ?: 0)
         if (goal != null) writeCell(goal.cell)
         writeOptionalCell(animal.waypoint)
+    }
+    environment?.let {
+        writeInt(if (it.weather == Weather.Dry) 0 else 1)
+        writeLong(it.nextChange)
+        writeULong(it.randomState)
+        writeLong(ledger.introduced)
+        patches.forEach { patch -> writeInt(if (patch.planted) 1 else 0) }
     }
     bytes()
 }

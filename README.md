@@ -37,15 +37,19 @@ Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. 
 
 To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the same seed to retain the current tick. Opening a different seed replaces the in-memory session and starts at tick 0.
 
+For an intervention demo, open seed `104729`, play until shortly after rain begins at tick 300, and pause. Open **Inspect world**, choose region **B3**, and queue **Reforest region** and **Supplement forage**. Start playback to see saplings appear and the region's forage rise. Use the creature picker to check an animal's needs and current action.
+
+**Save world** captures the current tick and any queued interventions in one local slot. After closing and reopening BranchWorld, choose **Load saved world** from Home. The island opens paused at the saved tick. Press **Play** to resume and apply any queued interventions.
+
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
 ## Architecture
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
-- `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
+- `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
 - `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny and deer GLBs use the bundled Kenney texture.
 - Shared Kotlin generates terrain, climate, props, and traversability from the seed and worldgen version. Kool builds chunk meshes and instances the bundled pines and rocks from a static terrain projection.
-- Rules v3 advances integer forage growth, creature needs, movement, and population turnover in shared Kotlin at fixed ticks. The renderer consumes read-only poses and forage levels. Rules v1 and v2 have replay fixtures. Durable save files follow in Phase 06.
+- Rules v4 advances weather, interventions, forage, creature needs, movement, and population turnover in shared Kotlin at fixed ticks. The renderer consumes read-only climate, sapling, forage, and creature projections. Rules v1–v3 retain their replay fixtures.
 
 ## Source asset inventory
 

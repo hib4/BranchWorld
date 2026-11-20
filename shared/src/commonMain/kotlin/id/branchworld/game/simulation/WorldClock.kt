@@ -85,7 +85,11 @@ internal fun legacyClock(seed: Long, terrain: TerrainMap? = null): WorldClock<Wo
     })
 }
 
-internal fun ecologyClock(terrain: TerrainMap, engine: EcologyEngine): WorldClock<EcologyState> {
+internal fun ecologyClock(
+    terrain: TerrainMap,
+    engine: EcologyEngine,
+    onTick: () -> Unit = {},
+): WorldClock<EcologyState> {
     require(engine.state.terrain.key == terrain.key && engine.state.terrain.digest == terrain.digest)
     return WorldClock(object : ClockSimulation<EcologyState> {
         override val state get() = engine.state
@@ -93,7 +97,10 @@ internal fun ecologyClock(terrain: TerrainMap, engine: EcologyEngine): WorldCloc
         override val seed get() = terrain.key.seed
         override fun canSteer(left: Boolean) = engine.steeringTarget(left) != null
         override fun steer(left: Boolean) = engine.steer(left)
-        override fun advance() { engine.advance() }
+        override fun advance() {
+            engine.advance()
+            onTick()
+        }
         override fun project(previous: WorldRenderProjection?) = state.renderProjection(terrain)
     })
 }

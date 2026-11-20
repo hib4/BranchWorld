@@ -1,25 +1,36 @@
 package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.CreatureHeading
-import id.branchworld.game.simulation.DestinationCommands
 import id.branchworld.game.simulation.GridCell
+import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SetDestination
 import id.branchworld.game.simulation.SplitMix64
+import id.branchworld.game.simulation.SupplementForage
+import id.branchworld.game.simulation.WorldCommand
+import id.branchworld.game.simulation.WorldCommands
 import id.branchworld.game.terrain.TerrainMap
 
-/** Single writer of rules v3 state. Distances are derived from terrain and are never serialized. */
+/** Single writer of ecology state. Distances are rebuilt from terrain. */
 internal class EcologyEngine(
     terrain: TerrainMap,
     checkpoint: EcologyState? = null,
-    replayInputs: List<SetDestination> = emptyList(),
+    replayInputs: List<WorldCommand> = emptyList(),
+    rulesVersion: Int = checkpoint?.rulesVersion ?: EcologyRulesVersion,
 ) {
     private val island = IslandEcology(terrain)
-    private val inputs = DestinationCommands()
+    private val regional by lazy { RegionalEcology(island) }
+    private val inputs = WorldCommands<WorldCommand>()
 
-    var state: EcologyState = checkpoint ?: island.initialState()
+    var state: EcologyState = checkpoint ?: island.initialState().let {
+        if (rulesVersion == EnvironmentalRulesVersion) it.copy(environment = Environment.start(terrain.key.seed)) else it
+    }
+        private set
+
+    var interventionResults = emptyList<InterventionResult>()
         private set
 
     init {
+        require(state.rulesVersion == rulesVersion)
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
         require(state.patches.zipWithNext().all { (first, next) -> first.id < next.id })
@@ -35,37 +46,113 @@ internal class EcologyEngine(
                 (it.waypoint == null || island.navigation.contains(it.waypoint))
         })
         require(Species.entries.all { species -> state.creatures.count { it.species == species } <= MaxPerSpecies })
+        require(state.environment?.let { it.nextChange > state.tick || state.tick == Long.MAX_VALUE } != false)
         for (command in replayInputs) {
-            require(command.entityId > 0 && island.navigation.contains(command.cell) && inputs.submit(state.tick, command))
+            require(validTarget(command) && inputs.submit(state.tick, command))
         }
     }
 
-    fun submit(command: SetDestination): Boolean =
-        state.creatures.any { it.id == command.entityId && it.species == Species.Rabbit } &&
-            island.navigation.contains(command.cell) && inputs.submit(state.tick, command)
+    fun submit(command: WorldCommand): Boolean =
+        validTarget(command) &&
+            (command !is SetDestination || state.creatures.any { it.id == command.entityId && it.species == Species.Rabbit }) &&
+            inputs.submit(state.tick, command)
 
-    fun acceptedCommands(): List<SetDestination> = inputs.accepted()
+    private fun validTarget(command: WorldCommand) = when (command) {
+        is SetDestination -> command.entityId > 0 && island.navigation.contains(command.cell)
+        is ReforestRegion -> state.environment != null && command.region in 0 until RegionCount
+        is SupplementForage -> state.environment != null && command.region in 0 until RegionCount
+    }
+
+    fun acceptedCommands(): List<WorldCommand> = inputs.accepted()
+    fun pendingCommands(): List<WorldCommand> = inputs.pending()
+    fun inspectRegions(): List<RegionReadout> = if (state.environment == null) emptyList() else regional.inspect(state)
+
+    /** Persistence checks invariants that are stronger than synthetic simulation fixtures require. */
+    fun validateSavedState() {
+        val baseline = island.initialState()
+        val ledger = state.ledger
+        require(state.springs == baseline.springs)
+        require(state.nextEntityId >= baseline.nextEntityId)
+        require(ledger.births == state.nextEntityId - baseline.nextEntityId)
+        require(ledger.deaths == state.nextEntityId - 1 - state.creatures.size && ledger.deaths >= 0)
+        require(ledger.consumed >= 0 && ledger.regrown >= 0 && ledger.introduced >= 0)
+        require(state.creatures.all { it.matureAt >= 0 && it.breedAfter >= 0 && it.depletedTicks in 0 until SurvivalTicks })
+        val natural = state.patches.filterNot { it.planted }
+        require(natural.map { it.copy(biomass = it.capacity) } == baseline.patches)
+        val planted = state.patches.filter { it.planted }
+        require(planted.all { regional.validSapling(it, state.springs) })
+        require(ledger.introduced >= planted.size * RegionalEcology.SaplingBiomass)
+        val supply = ledger.introduced.toULong() + ledger.regrown.toULong()
+        val required = ledger.consumed.toULong() + state.patches.sumOf { it.biomass }.toULong()
+        val initial = baseline.patches.sumOf { it.biomass }.toULong()
+        require(required >= initial && required - initial == supply)
+        val environment = requireNotNull(state.environment)
+        if (state.tick < 300) require(environment == Environment.start(state.terrain.key.seed))
+        else require(environment.nextChange - state.tick in 0..360)
+    }
+
+    fun intervene(kind: Intervention, region: Int): Boolean {
+        val availability = inspectRegions().getOrNull(region) ?: return false
+        if (kind == Intervention.Reforest && !availability.canPlant ||
+            kind == Intervention.Supplement && !availability.canSupplement
+        ) return false
+        val nextTick = state.tick + 1
+        if (inputs.pending().any { command ->
+            command.tick == nextTick && when (command) {
+                is ReforestRegion -> kind == Intervention.Reforest && command.region == region
+                is SupplementForage -> kind == Intervention.Supplement && command.region == region
+                is SetDestination -> false
+            }
+        }) return false
+        return inputs.submitNext(state.tick) { tick, sequence ->
+            when (kind) {
+                Intervention.Reforest -> ReforestRegion(tick, sequence, region)
+                Intervention.Supplement -> SupplementForage(tick, sequence, region)
+            }
+        }
+    }
 
     fun steeringTarget(left: Boolean): GridCell? = if (left) island.navigation.west else island.navigation.east
 
     fun steer(left: Boolean) {
         val rabbit = state.creatures.firstOrNull { it.species == Species.Rabbit } ?: return
         val target = steeringTarget(left) ?: return
-        inputs.submitNext(state.tick, rabbit.id, target)
+        inputs.submitNext(state.tick) { tick, sequence -> SetDestination(tick, sequence, rabbit.id, target) }
     }
 
     fun advance(): EcologyState {
         val previous = state
         check(previous.tick < Long.MAX_VALUE) { "World tick limit reached" }
         val tick = previous.tick + 1
-        val waypoints = inputs.at(tick).associate { it.entityId to it.cell }
+        val environment = previous.environment?.at(tick)
+        val waypoints = mutableMapOf<Long, GridCell>()
         val random = SplitMix64(previous.randomState)
         val patches = previous.patches.toMutableList()
+        var introduced = 0
+        val results = buildList {
+            for (command in inputs.at(tick)) {
+                when (command) {
+                    is SetDestination -> waypoints[command.entityId] = command.cell
+                    is ReforestRegion -> {
+                        val count = regional.plant(command.region, patches, previous.springs)
+                        introduced += count * RegionalEcology.SaplingBiomass
+                        add(InterventionResult(Intervention.Reforest, command.region, tick, count))
+                    }
+                    is SupplementForage -> {
+                        val amount = regional.supplement(command.region, patches)
+                        introduced += amount
+                        add(InterventionResult(Intervention.Supplement, command.region, tick, amount))
+                    }
+                }
+            }
+        }
+        interventionResults = results
         val before = patches.sumOf { it.biomass }
         if (tick % 10L == 0L) {
+            val multiplier = if (environment?.weather == Weather.Rain) 2 else 1
             for ((index, patch) in patches.withIndex()) {
                 if (patch.biomass < patch.capacity) {
-                    patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + patch.regrowth))
+                    patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + patch.regrowth * multiplier))
                 }
             }
         }
@@ -95,11 +182,13 @@ internal class EcologyEngine(
             patches = patches,
             creatures = animals,
             nextEntityId = nextId,
+            environment = environment,
             ledger = EcologyLedger(
                 consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass },
                 regrown = ledger.regrown + afterGrowth - before,
                 births = ledger.births + (nextId - previous.nextEntityId),
                 deaths = ledger.deaths + deaths,
+                introduced = ledger.introduced + introduced,
             ),
         ).also { state = it }
     }

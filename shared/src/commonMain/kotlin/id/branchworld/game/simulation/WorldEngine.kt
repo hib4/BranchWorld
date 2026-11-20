@@ -3,6 +3,8 @@ package id.branchworld.game.simulation
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.TerrainNavigation
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 
 internal const val RulesVersion = 1
 internal const val TerrainRulesVersion = 2
@@ -13,6 +15,7 @@ internal const val MaxIslandX = 7
 private const val MinZ = 5
 private const val SideLength = 16
 
+@Serializable
 internal data class GridCell(val x: Int, val z: Int) {
     fun isOnIsland() = x in MinIslandX..MaxIslandX && z in MinZ until MinZ + SideLength
 }
@@ -36,18 +39,43 @@ internal data class WorldState(
     }
 }
 
+@Serializable
 internal data class TerrainIdentity(val key: TerrainKey, val digest: ULong)
 
+@Serializable
+internal sealed interface WorldCommand {
+    val tick: Long
+    val sequence: Long
+}
+
+@Serializable
+@SerialName("destination")
 internal data class SetDestination(
-    val tick: Long,
-    val sequence: Long,
+    override val tick: Long,
+    override val sequence: Long,
     val entityId: Long,
     val cell: GridCell,
-)
+) : WorldCommand
+
+@Serializable
+@SerialName("reforest")
+internal data class ReforestRegion(
+    override val tick: Long,
+    override val sequence: Long,
+    val region: Int,
+) : WorldCommand
+
+@Serializable
+@SerialName("supplement")
+internal data class SupplementForage(
+    override val tick: Long,
+    override val sequence: Long,
+    val region: Int,
+) : WorldCommand
 
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {
-    private val inputs = DestinationCommands()
+    private val inputs = WorldCommands<SetDestination>()
     private var routedDestination: GridCell? = null
     private var distances = IntArray(0)
 
@@ -67,7 +95,9 @@ internal class WorldEngine(initial: WorldState, private val navigation: TerrainN
         command.entityId == state.bunnyId && isReachable(command.cell) && inputs.submit(state.tick, command)
 
     fun submitNext(cell: GridCell): Boolean =
-        isReachable(cell) && inputs.submitNext(state.tick, state.bunnyId, cell)
+        isReachable(cell) && inputs.submitNext(state.tick) { tick, sequence ->
+            SetDestination(tick, sequence, state.bunnyId, cell)
+        }
 
     fun acceptedCommands(): List<SetDestination> =
         inputs.accepted()

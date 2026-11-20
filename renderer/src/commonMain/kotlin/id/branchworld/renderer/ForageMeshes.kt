@@ -4,6 +4,7 @@ import de.fabmax.kool.math.MutableMat4f
 import de.fabmax.kool.math.Vec3f
 import de.fabmax.kool.modules.ksl.KslBlinnPhongShader
 import de.fabmax.kool.scene.InstanceLayouts
+import de.fabmax.kool.scene.Mesh
 import de.fabmax.kool.scene.MeshInstanceList
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.addColorMesh
@@ -40,6 +41,37 @@ internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
             }
         }
     }
+    private val saplings = scene.addColorMesh("Planted saplings", instances = MeshInstanceList(InstanceLayouts.ModelMat)) {
+        generate {
+            color = Color(0.45f, 0.28f, 0.13f)
+            cylinder {
+                radius = 0.023f
+                height = 0.20f
+                origin.y = 0.10f
+                steps = 5
+            }
+            color = Color(0.25f, 0.62f, 0.30f)
+            cylinder {
+                bottomRadius = 0.110f
+                topRadius = 0.009f
+                height = 0.23f
+                origin.y = 0.24f
+                steps = 5
+            }
+            color = Color(0.36f, 0.73f, 0.36f)
+            cylinder {
+                bottomRadius = 0.076f
+                height = 0.20f
+                topRadius = 0.004f
+                origin.y = 0.33f
+                steps = 5
+            }
+        }
+        shader = KslBlinnPhongShader {
+            vertices { instancedModelMatrix() }
+            color { vertexColor() }
+        }
+    }
     private var previous: List<ForagePose>? = null
 
     init {
@@ -64,18 +96,22 @@ internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
         if (patches == previous) return
         previous = patches
         for ((kind, mesh) in meshes) {
-            val visible = patches.filter { it.kind == kind && it.biomassTier > 0 }
-            mesh.isVisible = visible.isNotEmpty()
-            if (visible.isEmpty()) continue
-            val transform = MutableMat4f()
-            mesh.addInstances<InstanceLayouts.ModelMat>(visible.size, clear = true) { buffer ->
-                for (patch in visible) {
-                    val location = patch.ground
-                    val point = cellPosition(location.x, location.z, location.elevationTwice)
-                    transform.setIdentity().translate(point)
-                        .scale(Vec3f(1f, patch.biomassTier / 4f, 1f))
-                    buffer.put { set(it.modelMat, transform) }
-                }
+            mesh.show(patches.filter { it.kind == kind && !it.planted && it.biomassTier > 0 })
+        }
+        saplings.show(patches.filter { it.planted })
+    }
+
+    private fun Mesh<*>.show(visible: List<ForagePose>) {
+        isVisible = visible.isNotEmpty()
+        if (visible.isEmpty()) return
+        val transform = MutableMat4f()
+        addInstances<InstanceLayouts.ModelMat>(visible.size, clear = true) { buffer ->
+            for (patch in visible) {
+                val location = patch.ground
+                val point = cellPosition(location.x, location.z, location.elevationTwice)
+                val height = if (patch.planted) 0.6f + patch.biomassTier * 0.13f else patch.biomassTier / 4f
+                transform.setIdentity().translate(point).scale(Vec3f(1f, height, 1f))
+                buffer.put { set(it.modelMat, transform) }
             }
         }
     }
