@@ -144,8 +144,8 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | 04 | COMPLETE | ACCEPTED | Terrain and rules v2 fixtures and both primary runtimes were verified at `bcc8069`. Approved by the user. |
 | 05 | COMPLETE | ACCEPTED | Rules v3 goldens, 10,000-tick ecology fixtures, Android APK, Desktop Compose controls, and native Vulkan frames were verified at `496ebef`. Approved by the user. |
 | 06 | COMPLETE | ACCEPTED | Rules v4, both interventions, and Android/macOS restart were verified at `2c0021a`. Approved by the user. |
-| 07 | COMPLETE | PENDING | Exact replay hashes match across four runners. Android and macOS restored both timelines and the viewed tick after restart, with schema-v1 saves preserved. |
-| 08 | NOT VERIFIED | PENDING | - |
+| 07 | COMPLETE | ACCEPTED | Exact replay and Android/macOS timeline restore were verified at `f29203b`. Approved by the user. |
+| 08 | COMPLETE | PENDING | The fresh seed 104729 walkthrough and restart reproduced the same tick-900 comparison on Android and macOS. Four shared runners matched the canonical branch hashes. |
 | 09 | NOT VERIFIED | PENDING | - |
 | 10 | NOT VERIFIED | PENDING | - |
 
@@ -176,35 +176,40 @@ A phase is ready for review only when it has a demonstrable player-visible outco
 | 2026-11-20 / 07 | Keep a distinct viewed tick and branch head, and record commands only when the live head advances. Retain eight periodic checkpoints per branch at 300-tick intervals, plus branch starts and heads. | Replaying tick 300 to 600 reproduced the original state. A test also recovered tick 250 after advancing to 3300 and evicting the oldest periodic checkpoints. | No |
 | 2026-11-20 / 07 | Fork from the displayed state with independent future commands and preserve both PRNG states. Key creature presentation by branch as well as tick. | Seed 104729 at tick 900 had 9893 forage and zero saplings on Main, and 11105 forage and six saplings on Restored Forest. Switching branches at that tick updated the Vulkan viewport and restored the previous branch's pixels when switching back. | No |
 | 2026-11-20 / 07 | Save branch history to schema v2 and retain the Phase 06 file as the fallback when the v2 slot is absent. | macOS restored cursor 700 and both branches at 900. Import preserved the v1 file byte for byte. Damaged v2 data kept the active session intact. | No |
+| 2026-11-20 / 08 | Compare read-only snapshots at a common tick and switch the existing viewport between them. | Comparison preserves both branch histories and pending queues. The Apple M4 Vulkan probe rendered 651 changed pixels for the child at tick 900 and restored the same parent pixels when switching back. | No |
+| 2026-11-20 / 08 | Derive timeline markers from recorded inputs and verify outcomes by replaying from before the execution tick. | The shared fixtures verified a no-op command, ordered commands at the same tick, and an audited event after checkpoint eviction. The North Star comparison confirmed six B3 saplings at tick 301. | No |
+| 2026-11-20 / 08 | Keep comparison selection in memory and reuse schema v2 for the histories and names. | Desktop rename and reload kept the branch name. Opening comparison after process restart reproduced both canonical hashes and all displayed observations. | No |
 
 ### Latest phase handoff (agent-maintained)
 
 ```text
-PHASE: 07 - Time Travel & Timeline Branching
+PHASE: 08 - Butterfly Effect & Timeline Explorer
 STATUS: COMPLETE
-PLAYER-VISIBLE OUTCOME: The Timeline panel supports exact seek and playback targets, named forks, and branch switching. A fork lets players intervene at an earlier tick. Saving retains the branches, their checkpoints and inputs, and the branch and tick currently on screen.
-IMPLEMENTATION: Shared timeline owner, ordered execution history and replay, lifecycle-bound Compose timeline controls, branch-aware render and inspector updates, and schema-v2 save adapters with a readable and intact schema-v1 fallback.
+PLAYER-VISIBLE OUTCOME: The timeline shows branch ancestry, names, fork ticks, exact tick entry, a scrubber, and intervention markers. A comparison presents both branches' actual ecology at one tick. Players can switch the island preview at the same camera position and inspect an intervention's outcome.
+IMPLEMENTATION: Shared read-only paired replay and event audit, branch metadata and ordered markers, Compose timeline tree and comparison controls, and stable render projections through the existing viewport. Schema v2 continues to store histories and branch names.
 VERIFICATION:
   PASS - ./gradlew --offline --console=plain :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidApp:lintDebug :desktopApp:test :desktopApp:createDistributable :shared:compileCommonMainKotlinMetadata :shared:compileKotlinIosArm64 :shared:compileKotlinIosSimulatorArm64 :shared:iosSimulatorArm64Test :shared:packageAndroidDeviceTest
-         Shared JVM, Android host, and iOS ARM64 simulator each ran 37 tests. Renderer Desktop JVM (8), renderer Android host (4), and Desktop storage (1) passed. Android lint reported zero errors and seven warnings.
-  PASS - Install the APK and both test APKs with adb install -r. Run adb -s emulator-5554 shell am instrument -w -r with id.branchworld.game.shared.test/androidx.test.runner.AndroidJUnitRunner and id.branchworld.game.test/androidx.test.runner.AndroidJUnitRunner.
-         Shared Android ART (36) and Android app instrumentation (2) passed on the Pixel 9 API 36 emulator.
-  PASS - python3 build/verification/phase07/android-final-restore.py
-         The final APK reopened both saved branches at child tick 700 with hash b558845d62318515. Both save files remained unchanged.
-  PASS - python3 build/verification/phase07/android-timeline.py
-         Loaded the existing v1 save at tick 357 and kept its original 8355 bytes. Replayed the main timeline from 600 to 300 to 600, forked at 300, and advanced both branches to 900. The B3 inspector showed 2217 forage and zero saplings on Main, and 3496 forage and six saplings on Restored Forest. Restored the child at tick 700 after force-stop and relaunch, opened both tick-900 heads, and resumed to tick 901.
+         Shared JVM, Android host and iOS ARM64 simulator each passed 41 tests. Desktop renderer and Compose tests (9), Android host renderer (4), and Desktop storage (1) passed. The Desktop Compose test used the slider's accessible progress action and switched branches at the same tick.
+  PASS - Install the shared Android test APK with adb -s emulator-5554 install -r shared/build/outputs/apk/androidTest/shared-androidTest.apk. Run adb -s emulator-5554 shell am instrument -w -r id.branchworld.game.shared.test/androidx.test.runner.AndroidJUnitRunner.
+         Android ART passed 40 tests. The install used only the shared test package.
+  PASS - Install the debug APK with adb -s emulator-5556 install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk, then run python3 build/verification/phase08/android-explorer.py.
+         Fresh disposable Pixel 9 API 36 emulator. Forked at tick 300, replanted B3 in the child, advanced both branches to tick 900, inspected the pair and event, saved, then force-stopped and relaunched from PID 4368 to 9613. Reopened the comparison and confirmed matching values and outcome. The save bytes remained unchanged. The original emulator's data image was untouched.
+  PASS - adb -s emulator-5556 shell am instrument -w -r id.branchworld.game.test/androidx.test.runner.AndroidJUnitRunner
+         The final APK passed both app tests, including renderer gestures and Activity recreation.
+  PASS - python3 build/verification/phase08/android-final-restore.py
+         The final APK reopened the comparison at 900. Touching the scrubber moved both previews to exactly tick 600 and left the save bytes unchanged.
   PASS - open -n desktopApp/build/compose/binaries/main/app/id.branchworld.game.app
-         The native bundle launches. DesktopTimelineProbe ran the packaged Compose UI and storage adapter in separate processes. It verified the exact replay, loaded the child at tick 700, reopened both heads at 900, and advanced to 901. The v1 import preserved its original bytes. A corrupt v2 file left the current island intact.
-  PASS - DesktopTimelineRenderProbe against the packaged renderer on Apple M4 Vulkan.
-         At the same tick and camera, the child changed 651 pixels. Creature-only changes accounted for 537 pixels in an isolated comparison. Reassigning a reused entity ID to a different species changed 136 pixels. Switching back restored identical parent pixels each time.
-  NOT RUN - Manual pointer and keyboard input in the packaged macOS window, physical Android, Android API 26, Windows and Linux Desktop, and iOS rendering.
-DETERMINISM / SAVE / BRANCH: The ordered-command fixture for seed 104729 reproduced b8900e6fd6de6c0d after replay from tick 300 to 600 on JVM, Android host, Android ART and iOS simulator. The same runner matrix matched all three seeds and both North Star branch heads. At tick 900, Main hash 689a2ab6f9063004 had 9893 total forage and zero saplings. Restored Forest hash 6af1190dbe1f4a7f had 11105 total forage and six saplings. Each had four rabbits and three deer. Android and macOS wrote byte-identical v2 files and restored the same child view hash b558845d62318515 at tick 700. Tests covered nested forks, checkpoint eviction, pending inputs, malformed ancestry, duplicate commands, damaged saves, and v1 import.
-PERFORMANCE: The 75147-byte, two-branch file restored in 613 ms on the Pixel 9 API 36 emulator and 441 ms on Apple M4 macOS. Exact seeks to checkpoint 300 took 67–249 ms on that emulator and 7–13 ms on the Mac in the end-to-end runs.
-DEMO: Open seed 104729. Play to 600, go to 300, then play to 600. Go to 300 again and fork Restored Forest. In Inspect world, choose B3 and reforest, then play to 900. Switch to Main and play to 900. Inspect both heads, switch to Restored Forest, go to 700, save, quit, and load. The child opens at 700 and both branch heads remain at 900.
-LIMITATIONS: Imported Phase 06 saves start their recorded history at the saved tick. Inner checkpoints retain the eight most recent 300-tick intervals per branch. Older seeks rebuild from the branch start and may take longer.
-DECISIONS: One visible save slot uses island-v2.json with a read-only fallback to island-v1.json. Parent and child share immutable fork state and have independent future inputs. The world admits at most 16 branches and 16384 ordered commands across the session.
-EVIDENCE: build/verification/phase07/verified.log, cross-target-fixtures.txt, cross-platform-save.txt, android-timeline.log, android-final-instrumentation.log, android-final-restore.log, desktop-timeline-final.log, desktop-vulkan-final.log, driver sources, and device captures.
-NEXT STEPS: After approval, build the Phase 08 timeline tree, scrubber, and intervention indicators from the persisted branch graph and command history. Use timeline replay to show both branches at the same tick and compare real vegetation, forage, wildlife, and event data. Re-run the seed 104729 demo through restart.
+         DesktopExplorerProbe exercised the packaged Compose UI and storage in separate macOS processes. It renamed the child before saving and found the name, both comparison columns, and the B3 outcome after restart.
+  PASS - DesktopExplorerRenderProbe against the packaged Vulkan renderer on Apple M4.
+         Both previews used the same tick and camera. Child rendering changed 651 pixels and switching back reproduced the parent frame. The probe also isolated 537 creature-change pixels.
+  NOT RUN - Manual input in the packaged native macOS window, physical Android, Android API 26, Windows and Linux Desktop, and iOS rendering.
+DETERMINISM / SAVE / BRANCH: At tick 900, Main has hash 689a2ab6f9063004, 9893 total forage, 5032 browse biomass, and zero saplings. Restored Forest has hash 6af1190dbe1f4a7f, 11105 total forage, 6201 browse biomass, and six saplings. Each branch has four rabbits and three deer. Both runners report six B3 saplings planted at tick 301. Android and macOS wrote byte-identical 75147-byte schema-v2 saves. JVM, Android host, Android ART, and iOS simulator matched the canonical pair. Unit tests proved comparison isolation, pending versus executed markers, no-op outcomes, an event at an evicted checkpoint, rename round-trip, disjoint ranges, and rejection of stale comparison results.
+PERFORMANCE: The restored tick-900 comparison took 151 ms on the Pixel 9 API 36 emulator and 4 ms on Apple M4 macOS. Both were observed tests using the 75147-byte North Star save.
+DEMO: Open seed 104729 and use Timeline to play to 300. Fork Restored Forest. Select B3 in Inspect world and reforest. Play Restored Forest and Main to 900. Compare branches, switch between left and right, and inspect Reforest B3 at tick 301. Close comparison, save, quit, reload, and compare again.
+LIMITATIONS: Comparison uses synchronized switching in one viewport. A pair opens at the latest common recorded tick. Pair selection is session state, while branch histories and names persist.
+DECISIONS: Pair outputs are published together, while archived interventions and their measured outcomes come from recorded input and replay.
+EVIDENCE: build/verification/phase08/final-verification.log, cross-target-fixture.txt, cross-platform-save.txt, android-explorer.log, android-runtime-fixture.log, android-app-tests.log, android-final-restore.log, desktop-explorer.log, desktop-vulkan.log, and the Android and macOS captures. The walkthrough is in README.md.
+NEXT STEPS: After approval, use the verified timeline and comparison seams for Phase 09 settlement histories. Record any request to defer Phase 09 before proceeding to release work.
 APPROVAL NEEDED: yes
 ```
 

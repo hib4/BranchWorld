@@ -175,6 +175,6 @@ private fun Creature.label(): String {
     return stringResource(Res.string.animal_label, name, id.toString())
 }
 
-private fun regionName(region: Int) = "${'A' + region / RegionWidth}${region % RegionWidth + 1}"
+internal fun regionName(region: Int) = "${'A' + region / RegionWidth}${region % RegionWidth + 1}"
 
 private fun reserve(value: Int) = "${value / 10}%"

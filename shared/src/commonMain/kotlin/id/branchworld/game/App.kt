@@ -101,11 +101,6 @@ fun App(
     val islands = retained?.islands ?: remember { IslandSession() }
     val operations = retained?.viewModelScope ?: fallbackScope
     val storage by islands.saveStatus.collectAsStateWithLifecycle()
-    val goHome = {
-        islands.dismissSaveStatus()
-        state = state.back()
-    }
-    registerBackHandler(isWorld, goHome)
     LaunchedEffect(storage) {
         val restored = storage as? SaveStatus.Restored ?: return@LaunchedEffect
         hasOpenedWorld = true
@@ -116,6 +111,15 @@ fun App(
     val selectedSeed = state.seed
     val session = (load as? IslandLoad.Ready)?.takeIf { it.clock.seed == selectedSeed }
     val clock = session?.clock
+    val goHome = {
+        if (session?.comparison?.value != null) {
+            session.closeComparison()
+        } else {
+            islands.dismissSaveStatus()
+            state = state.back()
+        }
+    }
+    registerBackHandler(isWorld, goHome)
     LaunchedEffect(islands, isWorld, selectedSeed) {
         if (isWorld) islands.open(selectedSeed)
     }
@@ -247,6 +251,7 @@ private fun WorldScreen(
     modifier: Modifier = Modifier,
 ) {
     val clock = session?.clock
+    val comparison = session?.comparison?.collectAsStateWithLifecycle()?.value
     Column(
         modifier = modifier
             .widthIn(max = 1000.dp)
@@ -263,7 +268,11 @@ private fun WorldScreen(
             )
             if (session != null) {
                 val timeline by session.timelineView.collectAsStateWithLifecycle()
-                WorldControls(session.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
+                if (comparison == null) {
+                    WorldControls(session.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
+                } else {
+                    ComparisonHeader(session, comparison, timeline.branches)
+                }
             }
         }
         Box(
@@ -284,14 +293,17 @@ private fun WorldScreen(
             if (active && world != null && viewportHud != null) {
                 Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { viewportHud() }
             }
-            if (active && clock != null && diagnosticsVisible) {
+            if (active && clock != null && diagnosticsVisible && comparison == null) {
                 Diagnostics(
                     clock = clock,
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                 )
             }
+            if (active && comparison != null) {
+                ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp))
+            }
         }
-        if (active) Row(
+        if (active && comparison == null) Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -304,9 +316,9 @@ private fun WorldScreen(
             }
         }
         if (active && session != null) {
-            saveControls?.invoke()
-            TimelineControls(session)
-            WorldInspector(session)
+            if (comparison == null) saveControls?.invoke()
+            TimelineControls(session, visible = comparison == null)
+            if (comparison == null) WorldInspector(session) else ComparisonDetails(session, comparison)
         }
     }
 }

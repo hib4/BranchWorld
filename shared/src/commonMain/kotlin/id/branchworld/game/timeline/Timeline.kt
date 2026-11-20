@@ -6,6 +6,8 @@ import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.simulation.SetDestination
+import id.branchworld.game.simulation.ReforestRegion
+import id.branchworld.game.simulation.SupplementForage
 import id.branchworld.game.simulation.WorldCommand
 import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.currentCoroutineContext
@@ -37,7 +39,9 @@ internal data class TimelineCheckpoint(
     val branches: List<BranchCheckpoint>,
 )
 
-internal data class BranchSummary(val id: Int, val name: String, val parentId: Int?, val start: Long, val head: Long)
+internal data class BranchSummary(
+    val id: Int, val name: String, val parentId: Int?, val start: Long, val head: Long, val interventionCount: Int,
+)
 
 /** Owned by the world clock. A background seek receives an immutable replay request. */
 internal class Timeline private constructor(
@@ -59,7 +63,60 @@ internal class Timeline private constructor(
     val interventionResults: List<InterventionResult> get() = engine.interventionResults
     val queuedInterventions: Int get() = if (state.tick == active.head.tick) interventionCount else 0
 
-    fun summaries() = branches.values.map { BranchSummary(it.id, it.name, it.parentId, it.start.tick, it.head.tick) }
+    fun summaries() = branches.values.map {
+        BranchSummary(it.id, it.name, it.parentId, it.start.tick, it.head.tick, it.interventions)
+    }
+
+    fun renameActive(name: String): Boolean {
+        val trimmed = name.trim()
+        if (trimmed.length !in 1..MaxBranchNameLength) return false
+        active.name = trimmed
+        return true
+    }
+
+    fun interventionMarkers(branchId: Int, through: Long = Long.MAX_VALUE, includePending: Boolean = false): List<InterventionMarker> {
+        val branch = branches[branchId] ?: return emptyList()
+        return buildList {
+            for (index in 0 until branch.commands.firstAfter(through)) {
+                branch.commands[index].marker(queued = false)?.let(::add)
+            }
+            if (includePending) {
+                val queue = if (branchId == this@Timeline.branchId && state.tick == branch.head.tick) {
+                    engine.pendingCommands()
+                } else branch.pending
+                queue.mapNotNullTo(this) { it.marker(queued = true) }
+            }
+        }
+    }
+
+    fun eventReplay(branchId: Int, tick: Long): ReplayRequest? {
+        val branch = branches[branchId] ?: return null
+        if (tick <= branch.start.tick || tick > branch.head.tick) return null
+        val first = branch.commands.firstAfter(tick - 1)
+        val last = branch.commands.firstAfter(tick)
+        if ((first until last).none { branch.commands[it].marker(queued = false) != null }) return null
+        return seek(branchId, tick - 1)
+    }
+
+    fun compare(leftId: Int, rightId: Int, tick: Long): ComparisonReplay? {
+        if (leftId == rightId) return null
+        val left = seek(leftId, tick) ?: return null
+        val right = seek(rightId, tick) ?: return null
+        return ComparisonReplay(
+            left.throughTarget(), right.throughTarget(),
+            recentInterventions(leftId, tick), recentInterventions(rightId, tick),
+        )
+    }
+
+    private fun recentInterventions(branchId: Int, tick: Long): List<InterventionMarker> {
+        val commands = branches.getValue(branchId).commands
+        return buildList {
+            for (index in commands.firstAfter(tick) - 1 downTo 0) {
+                commands[index].marker(queued = false)?.let(::add)
+                if (size == RecentInterventions) break
+            }
+        }
+    }
 
     fun inspectRegions() = engine.inspectRegions()
 
@@ -80,10 +137,12 @@ internal class Timeline private constructor(
         val branch = active
         val extending = state.tick == branch.head.tick
         val next = engine.advance()
-        interventionCount -= engine.appliedCommands.count { it !is SetDestination }
+        val appliedInterventions = engine.appliedCommands.count { it !is SetDestination }
+        interventionCount -= appliedInterventions
         if (extending) {
             branch.head = next
             branch.commands.addAll(engine.appliedCommands)
+            branch.interventions += appliedInterventions
             if (next.tick % SnapshotInterval == 0L) {
                 branch.snapshots.addLast(next)
                 if (branch.snapshots.size > RetainedSnapshots) branch.snapshots.removeFirst()
@@ -139,12 +198,13 @@ internal class Timeline private constructor(
 
     private class Branch(checkpoint: BranchCheckpoint) {
         val id = checkpoint.id
-        val name = checkpoint.name
+        var name = checkpoint.name
         val parentId = checkpoint.parentId
         val start = checkpoint.start
         var head = checkpoint.head
         val snapshots = ArrayDeque(checkpoint.snapshots)
         val commands = checkpoint.commands.toMutableList()
+        var interventions = commands.count { it !is SetDestination }
         var pending = checkpoint.pending
 
         fun checkpoint() = BranchCheckpoint(id, name, parentId, start, head, snapshots.toList(), commands.toList(), pending)

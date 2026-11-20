@@ -17,7 +17,11 @@ import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.timeline.BranchSummary
+import id.branchworld.game.timeline.InterventionMarker
 import id.branchworld.game.timeline.Timeline
+import id.branchworld.game.timeline.TimelinePair
+import id.branchworld.game.timeline.commonTicks
+import id.branchworld.game.timeline.inTreeOrder
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -132,43 +136,59 @@ internal sealed interface IslandLoad {
         val interventions = feedback.asStateFlow()
         private val timelineState = MutableStateFlow(timelineStatus())
         val timelineView = timelineState.asStateFlow()
+        private val comparisonState = MutableStateFlow<ComparisonView?>(null)
+        val comparison = comparisonState.asStateFlow()
+        private val navigationAvailable get() = !timelineState.value.seeking && comparisonState.value == null
+        private val display = MutableStateFlow(timeline.state.renderProjection(terrain).copy(branchId = timeline.branchId))
         val clock = WorldClock(object : ClockSimulation<EcologyState> {
             override val state get() = timeline.state
             override val tick get() = state.tick
             override val seed get() = terrain.key.seed
-            override fun canSteer(left: Boolean) = !timelineState.value.seeking && timeline.canSteer(left)
+            override fun canSteer(left: Boolean) = navigationAvailable && timeline.canSteer(left)
             override fun steer(left: Boolean) {
-                if (!timelineState.value.seeking) timeline.steer(left)
+                if (navigationAvailable) timeline.steer(left)
                 updateTimeline()
             }
             override fun advance() = advanceTimeline()
             override fun project(previous: WorldRenderProjection?) =
-                state.renderProjection(terrain).copy(branchId = timeline.branchId)
+                state.renderProjection(terrain).copy(branchId = timeline.branchId).also {
+                    if (comparisonState.value == null) display.value = it
+                }
         })
-        val world = WorldRenderSource(terrain, clock.render)
+        val world = WorldRenderSource(terrain, display.asStateFlow())
 
         fun inspectRegions() = timeline.inspectRegions()
         fun checkpoint() = timeline.checkpoint()
 
         fun intervene(kind: Intervention, region: Int) {
-            if (!timelineState.value.seeking && timeline.intervene(kind, region)) {
+            if (navigationAvailable && timeline.intervene(kind, region)) {
                 feedback.value = feedback.value.copy(queued = timeline.queuedInterventions)
                 updateTimeline()
             }
         }
 
         fun playTo(tick: Long) {
-            if (!timelineState.value.seeking) clock.playTo(tick)
+            if (navigationAvailable) clock.playTo(tick)
         }
 
         suspend fun seek(tick: Long) = navigate(timeline.branchId, tick)
+
+        fun markers(branch: Int) = timeline.interventionMarkers(branch, includePending = true)
+
+        suspend fun seekEvent(tick: Long) = navigate(timeline.branchId, tick, inspectEvent = true)
+
+        fun renameActive(name: String): Boolean {
+            if (!navigationAvailable || !timeline.renameActive(name)) return false
+            updateTimeline()
+            return true
+        }
 
         suspend fun switchBranch(id: Int) {
             timelineState.value.branches.firstOrNull { it.id == id }?.let { navigate(id, it.head) }
         }
 
         fun fork(name: String): Boolean {
-            if (timelineState.value.seeking) return false
+            if (!navigationAvailable) return false
             clock.pause()
             if (!timeline.fork(name)) return false
             publishNavigation()
@@ -190,15 +210,21 @@ internal sealed interface IslandLoad {
             updateTimeline()
         }
 
-        private suspend fun navigate(branch: Int, tick: Long) {
-            if (timelineState.value.seeking) return
-            val request = timeline.seek(branch, tick) ?: return
+        private suspend fun navigate(branch: Int, tick: Long, inspectEvent: Boolean = false) {
+            if (!navigationAvailable) return
+            val request = (if (inspectEvent) timeline.eventReplay(branch, tick) else timeline.seek(branch, tick)) ?: return
             clock.pause()
             timelineState.value = timelineStatus(seeking = true)
             val started = TimeSource.Monotonic.markNow()
             try {
-                timeline.show(withContext(Dispatchers.Default) { request.replay() })
+                val replayed = withContext(Dispatchers.Default) {
+                    request.replay().also { if (inspectEvent) it.engine.advance() }
+                }
+                timeline.show(replayed)
                 publishNavigation()
+                if (inspectEvent) {
+                    feedback.value = feedback.value.copy(applied = replayed.engine.interventionResults)
+                }
                 println("BranchWorldTimeline seek branch=$branch tick=$tick hash=${timeline.state.canonicalHash()} seekMs=${started.elapsedNow().inWholeMilliseconds}")
             } catch (error: CancellationException) {
                 timelineState.value = timelineStatus()
@@ -223,6 +249,92 @@ internal sealed interface IslandLoad {
             timeline.branchId, timeline.state.tick, timeline.summaries(), timeline.editsAllowed && !seeking,
             timeline.canFork, timeline.commandLimitReached, seeking, failed,
         )
+
+        fun openComparison() {
+            val view = timelineState.value
+            if (view.seeking || comparisonState.value != null) return
+            val active = view.active
+            val alternative = view.branches.inTreeOrder().firstOrNull { it.branch.id != active.id }?.branch ?: return
+            clock.pause()
+            if (active.parentId != null) selectComparison(active.parentId, active.id)
+            else selectComparison(active.id, alternative.id)
+        }
+
+        fun closeComparison() {
+            comparisonState.value = null
+            display.value = clock.render.value
+        }
+
+        fun selectComparison(leftId: Int, rightId: Int) {
+            if (leftId == rightId) return
+            val branches = timelineState.value.branches
+            val left = branches.firstOrNull { it.id == leftId } ?: return
+            val right = branches.firstOrNull { it.id == rightId } ?: return
+            val range = commonTicks(left, right)
+            comparisonState.value = ComparisonView(left, right, range, range.last.takeUnless { range.isEmpty() })
+        }
+
+        fun compareAt(tick: Long) {
+            val prior = comparisonState.value ?: return
+            if (tick !in prior.range || tick == prior.tick) return
+            comparisonState.value = prior.copy(tick = tick, pair = null, failed = false, event = null, outcomes = null)
+        }
+
+        fun showComparisonSide(right: Boolean) {
+            val prior = comparisonState.value ?: return
+            comparisonState.value = prior.copy(showRight = right)
+            prior.pair?.let { display.value = if (right) it.right.projection else it.left.projection }
+        }
+
+        suspend fun loadComparison(target: ComparisonTarget) {
+            val prior = comparisonState.value
+            if (prior?.target != target || prior.pair != null) return
+            val request = timeline.compare(target.leftId, target.rightId, target.tick) ?: return
+            try {
+                val started = TimeSource.Monotonic.markNow()
+                val pair = withContext(Dispatchers.Default) { request.replay() }
+                val current = comparisonState.value?.takeIf { it.target == target } ?: return
+                display.value = if (current.showRight) pair.right.projection else pair.left.projection
+                comparisonState.value = current.copy(pair = pair)
+                println("BranchWorldComparison tick=${pair.tick} left=${pair.left.hash} right=${pair.right.hash} compareMs=${started.elapsedNow().inWholeMilliseconds}")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                println("BranchWorldComparison failed: ${error::class.simpleName}")
+                comparisonState.value?.takeIf { it.target == target }?.let { comparisonState.value = it.copy(failed = true) }
+            }
+        }
+
+        fun inspectComparisonEvent(branchId: Int, marker: InterventionMarker) {
+            val current = comparisonState.value ?: return
+            val event = ComparisonEvent(branchId, marker.tick)
+            if (current.event != event) {
+                comparisonState.value = current.copy(event = event, outcomes = null, outcomeFailed = false)
+            }
+        }
+
+        suspend fun loadComparisonEvent(event: ComparisonEvent) {
+            val prior = comparisonState.value
+            if (prior?.event != event || prior.outcomes != null) return
+            val request = timeline.eventReplay(event.branchId, event.tick) ?: return
+            try {
+                val outcomes = withContext(Dispatchers.Default) {
+                    request.replay().engine.run {
+                        advance()
+                        interventionResults
+                    }
+                }
+                val current = comparisonState.value?.takeIf { it.event == event } ?: return
+                comparisonState.value = current.copy(outcomes = outcomes)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                println("BranchWorldComparison event failed: ${error::class.simpleName}")
+                comparisonState.value?.takeIf { it.event == event }?.let {
+                    comparisonState.value = it.copy(outcomeFailed = true)
+                }
+            }
+        }
     }
     data class Failed(val seed: Long) : IslandLoad
 }
@@ -241,6 +353,24 @@ internal data class TimelineView(
 }
 
 internal data class InterventionFeedback(val queued: Int, val applied: List<InterventionResult> = emptyList())
+
+internal data class ComparisonTarget(val leftId: Int, val rightId: Int, val tick: Long)
+internal data class ComparisonEvent(val branchId: Int, val tick: Long)
+
+internal data class ComparisonView(
+    val left: BranchSummary,
+    val right: BranchSummary,
+    val range: LongRange,
+    val tick: Long?,
+    val showRight: Boolean = false,
+    val pair: TimelinePair? = null,
+    val failed: Boolean = false,
+    val event: ComparisonEvent? = null,
+    val outcomes: List<InterventionResult>? = null,
+    val outcomeFailed: Boolean = false,
+) {
+    val target get() = tick?.let { ComparisonTarget(left.id, right.id, it) }
+}
 
 internal sealed interface SaveStatus {
     data object Busy : SaveStatus
