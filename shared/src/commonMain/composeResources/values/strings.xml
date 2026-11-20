@@ -12,6 +12,9 @@
     <string name="world_tick">Tick %1$s</string>
     <string name="steer_left">Send bunny left</string>
     <string name="steer_right">Send bunny right</string>
+    <string name="ecology_animals">Rabbits %1$d · Deer %2$d</string>
+    <string name="ecology_forage">Forage %1$d</string>
+    <string name="ecology_turnover">Births %1$s · Deaths %2$s</string>
     <string name="back_to_home">Back to home</string>
     <string name="show_diagnostics">Show diagnostics</string>
     <string name="hide_diagnostics">Hide diagnostics</string>

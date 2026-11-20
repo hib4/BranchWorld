@@ -47,8 +47,7 @@ internal data class SetDestination(
 
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {
-    private val pending = mutableMapOf<Long, MutableMap<Long, SetDestination>>()
-    private val history = mutableListOf<SetDestination>()
+    private val inputs = DestinationCommands()
     private var routedDestination: GridCell? = null
     private var distances = IntArray(0)
 
@@ -64,41 +63,25 @@ internal class WorldEngine(initial: WorldState, private val navigation: TerrainN
         require(isReachable(initial.bunnyCell) && isReachable(initial.destination))
     }
 
-    fun submit(command: SetDestination): Boolean {
-        if (command.tick <= state.tick || command.sequence < 0 ||
-            command.entityId != state.bunnyId || !isReachable(command.cell)
-        ) return false
+    fun submit(command: SetDestination): Boolean =
+        command.entityId == state.bunnyId && isReachable(command.cell) && inputs.submit(state.tick, command)
 
-        val atTick = pending.getOrPut(command.tick, ::mutableMapOf)
-        if (command.sequence in atTick) return false
-        atTick[command.sequence] = command
-        history.add(command)
-        return true
-    }
-
-    fun submitNext(cell: GridCell): Boolean {
-        if (state.tick == Long.MAX_VALUE) return false
-        val tick = state.tick + 1
-        val lastSequence = pending[tick]?.keys?.maxOrNull() ?: -1L
-        if (lastSequence == Long.MAX_VALUE) return false
-        return submit(SetDestination(tick, lastSequence + 1, state.bunnyId, cell))
-    }
+    fun submitNext(cell: GridCell): Boolean =
+        isReachable(cell) && inputs.submitNext(state.tick, state.bunnyId, cell)
 
     fun acceptedCommands(): List<SetDestination> =
-        history.sortedWith(compareBy(SetDestination::tick, SetDestination::sequence))
+        inputs.accepted()
 
     fun advance(): WorldState {
         val previous = state
         check(previous.tick < Long.MAX_VALUE) { "World tick limit reached" }
         val tick = previous.tick + 1
-        val commands = pending.remove(tick)
+        val commands = inputs.at(tick)
         var destination = previous.destination
         var randomState = previous.randomState
 
-        if (commands != null) {
-            for (sequence in commands.keys.sorted()) {
-                destination = commands.getValue(sequence).cell
-            }
+        if (commands.isNotEmpty()) {
+            destination = commands.last().cell
         } else if (previous.bunnyCell == destination) {
             val random = SplitMix64(randomState)
             destination = navigation?.pickDestination(random, previous.bunnyCell) ?: legacyDestination(random, previous.bunnyCell)

@@ -120,7 +120,7 @@ fun App(
     MaterialTheme(colorScheme = BranchWorldColors) {
         Surface(modifier = Modifier.fillMaxSize()) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize().safeContentPadding()) {
-                val viewportHeight = (maxHeight * 0.52f).coerceIn(176.dp, 480.dp)
+                val viewportHeight = (maxHeight * 0.47f).coerceIn(176.dp, 480.dp)
                 if (isWorld || (hasOpenedWorld && viewport != null)) {
                     WorldScreen(
                         clock = clock,
@@ -202,7 +202,7 @@ private fun HomeScreen(
 
 @Composable
 private fun WorldScreen(
-    clock: WorldClock?,
+    clock: WorldClock<*>?,
     world: WorldRenderSource?,
     seed: Long,
     generationFailed: Boolean,
@@ -272,7 +272,7 @@ private fun WorldScreen(
 }
 
 @Composable
-private fun Diagnostics(clock: WorldClock, modifier: Modifier = Modifier) {
+private fun Diagnostics(clock: WorldClock<*>, modifier: Modifier = Modifier) {
     val platform = remember { getPlatform().name }
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateAsState()
     val pose by clock.render.collectAsStateWithLifecycle()
@@ -292,7 +292,9 @@ private fun Diagnostics(clock: WorldClock, modifier: Modifier = Modifier) {
             )
             Text(stringResource(Res.string.diagnostics_platform, platform))
             Text(stringResource(Res.string.diagnostics_seed, clock.seed.toString()))
-            Text(stringResource(Res.string.diagnostics_position, pose.x, pose.z))
+            pose.leadRabbit?.ground?.let {
+                Text(stringResource(Res.string.diagnostics_position, it.x, it.z))
+            }
             Text(stringResource(Res.string.diagnostics_lifecycle, lifecycle.name))
         }
     }

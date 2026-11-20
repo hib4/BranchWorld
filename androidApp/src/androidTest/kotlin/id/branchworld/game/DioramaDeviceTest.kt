@@ -34,6 +34,10 @@ class DioramaDeviceTest {
             val focus = bounds("Focus island")
             val bottom = bounds("Back to home").top
             bounds("Tick 0")
+            bounds("Rabbits 4 · Deer 3")
+            bounds("Births 0 · Deaths 0")
+            val initialForage = currentForage()
+            assertTrue(initialForage > 0)
 
             val screen = requireNotNull(input.takeScreenshot())
             val viewport = Rect(screen.width / 8, focus.bottom + 35, screen.width * 7 / 8, bottom - 30)
@@ -64,13 +68,16 @@ class DioramaDeviceTest {
             tap(bounds("Play"))
             bounds("Pause")
             waitUntil("world clock to advance") { currentTick() >= 3 }
-            assertTrue("Bunny pixels did not move", difference(viewport, action = {}) > 0.001)
+            assertTrue("Wildlife pixels did not move", difference(viewport, action = {}) > 0.001)
+            waitUntil("forage to decrease") { currentForage() in 0 until initialForage }
             tap(bounds("Pause"))
             bounds("Play")
             val parked = currentTick()
+            val parkedForage = currentForage()
             assertTrue(parked > 0)
             waitUntil("paused viewport pixels to settle again") { difference(viewport, action = {}) < 0.002 }
             assertEquals(parked, currentTick())
+            assertEquals(parkedForage, currentForage())
 
             tap(bounds("Show diagnostics"))
             bounds("Seed: 104729")
@@ -222,6 +229,9 @@ class DioramaDeviceTest {
 
     private fun currentTick(): Long =
         findVisible { it.text?.startsWith("Tick ") == true }?.text?.toString()?.removePrefix("Tick ")?.toLongOrNull() ?: -1
+
+    private fun currentForage(): Int =
+        findVisible { it.text?.startsWith("Forage ") == true }?.text?.toString()?.removePrefix("Forage ")?.toIntOrNull() ?: -1
 
     private fun findVisible(matches: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
         if (Build.VERSION.SDK_INT >= 33) input.clearCache()

@@ -4,9 +4,10 @@ internal enum class DioramaAsset(val file: String) {
     Pine("tree_pineRoundA.glb"),
     Rock("rock_smallH.glb"),
     Bunny("animal-bunny.glb"),
+    Deer("animal-deer.glb"),
     ;
 
     val path: String get() = "diorama/$file"
 }
 
-internal const val BunnyAnimation = "walk"
+internal val CreatureClips = listOf("idle", "walk", "eat")

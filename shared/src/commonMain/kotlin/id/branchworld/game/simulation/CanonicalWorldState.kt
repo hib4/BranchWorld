@@ -1,38 +1,45 @@
 package id.branchworld.game.simulation
 
 /** Rules v2 appends terrain identity to the v1 layout. All integers are little-endian. */
-internal fun WorldState.canonicalBytes(): ByteArray {
-    val bytes = ByteArray(if (terrain == null) 52 else 64)
-    var offset = 0
-
-    fun write(value: ULong, width: Int) {
-        repeat(width) { byte ->
-            bytes[offset++] = (value shr (8 * byte)).toByte()
-        }
+internal fun WorldState.canonicalBytes(): ByteArray = CanonicalWriter().run {
+    writeInt(rulesVersion)
+    writeLong(seed)
+    writeLong(tick)
+    writeULong(randomState)
+    writeLong(bunnyId)
+    writeCell(bunnyCell)
+    writeCell(destination)
+    terrain?.let {
+        writeInt(it.key.worldgenVersion)
+        writeULong(it.digest)
     }
+    bytes()
+}
 
-    fun writeInt(value: Int) = write(value.toUInt().toULong(), 4)
+internal fun WorldState.canonicalHash(): String = canonicalBytes().canonicalHash()
+
+internal fun ByteArray.canonicalHash(): String =
+    Fnv64().apply { this@canonicalHash.forEach(::addByte) }.value.toString(16).padStart(16, '0')
+
+internal class CanonicalWriter {
+    private var buffer = ByteArray(64)
+    private var offset = 0
+
+    fun writeInt(value: Int) = writeBits(value.toUInt().toULong(), 4)
+    fun writeLong(value: Long) = writeULong(value.toULong())
+    fun writeULong(value: ULong) = writeBits(value, 8)
     fun writeCell(cell: GridCell) {
         writeInt(cell.x)
         writeInt(cell.z)
     }
 
-    writeInt(rulesVersion)
-    write(seed.toULong(), 8)
-    write(tick.toULong(), 8)
-    write(randomState, 8)
-    write(bunnyId.toULong(), 8)
-    writeCell(bunnyCell)
-    writeCell(destination)
-    terrain?.let {
-        writeInt(it.key.worldgenVersion)
-        write(it.digest, 8)
-    }
-    return bytes
-}
+    fun bytes(): ByteArray = buffer.copyOf(offset)
 
-internal fun WorldState.canonicalHash(): String =
-    Fnv64().apply { canonicalBytes().forEach(::addByte) }.value.toString(16).padStart(16, '0')
+    private fun writeBits(value: ULong, width: Int) {
+        if (offset + width > buffer.size) buffer = buffer.copyOf(buffer.size * 2)
+        repeat(width) { byte -> buffer[offset++] = (value shr (8 * byte)).toByte() }
+    }
+}
 
 internal class Fnv64 {
     var value = 0xcbf29ce484222325uL

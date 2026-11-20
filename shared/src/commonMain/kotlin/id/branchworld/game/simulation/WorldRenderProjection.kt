@@ -1,36 +1,82 @@
 package id.branchworld.game.simulation
 
+import id.branchworld.game.ecology.CreatureAction
+import id.branchworld.game.ecology.EcologyState
+import id.branchworld.game.ecology.ForageKind
+import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.terrainCell
 import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.flow.StateFlow
 
 class WorldRenderSource(val terrain: TerrainMap, val poses: StateFlow<WorldRenderProjection>)
 
-/** The renderer receives only a snapshot of the current tick and actor pose. */
+/** Presentation data for a completed tick. Terrain remains a separate static projection. */
 data class WorldRenderProjection(
     val tick: Long,
-    val bunnyId: Long,
-    val x: Int,
-    val z: Int,
-    val heading: BunnyHeading,
-    val elevationTwice: Int = 0,
-    val moving: Boolean = false,
+    val creatures: List<CreaturePose>,
+    val forage: List<ForagePose> = emptyList(),
+    val springs: List<GroundPoint> = emptyList(),
+    val ecology: EcologyReadout? = null,
+) {
+    val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
+}
+
+data class GroundPoint(val x: Int, val z: Int, val elevationTwice: Int)
+
+data class CreaturePose(
+    val id: Long,
+    val species: Species,
+    val ground: GroundPoint,
+    val heading: CreatureHeading,
+    val action: CreatureAction,
 )
 
-enum class BunnyHeading { PositiveX, NegativeX, PositiveZ, NegativeZ }
+data class ForagePose(val id: Int, val kind: ForageKind, val ground: GroundPoint, val biomassTier: Int)
+
+data class EcologyReadout(
+    val rabbits: Int,
+    val deer: Int,
+    val forage: Int,
+    val births: Long,
+    val deaths: Long,
+)
+
+enum class CreatureHeading(internal val canonicalId: Int) {
+    PositiveX(1), NegativeX(2), PositiveZ(3), NegativeZ(4),
+}
 
 internal fun WorldState.renderProjection(
     previous: WorldRenderProjection? = null,
     terrain: TerrainMap? = null,
 ): WorldRenderProjection {
+    val rabbit = previous?.leadRabbit
     val heading = when {
-        previous == null -> BunnyHeading.PositiveZ
-        bunnyCell.x > previous.x -> BunnyHeading.PositiveX
-        bunnyCell.x < previous.x -> BunnyHeading.NegativeX
-        bunnyCell.z > previous.z -> BunnyHeading.PositiveZ
-        bunnyCell.z < previous.z -> BunnyHeading.NegativeZ
-        else -> previous.heading
+        rabbit == null -> CreatureHeading.PositiveZ
+        bunnyCell.x > rabbit.ground.x -> CreatureHeading.PositiveX
+        bunnyCell.x < rabbit.ground.x -> CreatureHeading.NegativeX
+        bunnyCell.z > rabbit.ground.z -> CreatureHeading.PositiveZ
+        bunnyCell.z < rabbit.ground.z -> CreatureHeading.NegativeZ
+        else -> rabbit.heading
     }
-    val elevation = terrain?.let { checkNotNull(it.cellAt(bunnyCell.x, bunnyCell.z)).elevationTwice } ?: 0
-    val moving = previous != null && (previous.x != bunnyCell.x || previous.z != bunnyCell.z)
-    return WorldRenderProjection(tick, bunnyId, bunnyCell.x, bunnyCell.z, heading, elevation, moving)
+    val ground = bunnyCell.project(terrain)
+    val moving = rabbit != null && rabbit.ground != ground
+    val action = if (moving) CreatureAction.Walking else CreatureAction.Idle
+    return WorldRenderProjection(tick, listOf(CreaturePose(bunnyId, Species.Rabbit, ground, heading, action)))
 }
+
+internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderProjection(
+    tick = tick,
+    creatures = creatures.map { CreaturePose(it.id, it.species, it.cell.project(terrain), it.heading, it.action) },
+    forage = patches.map { ForagePose(it.id, it.kind, it.cell.project(terrain), (it.biomass * 4 + it.capacity - 1) / it.capacity) },
+    springs = springs.map { it.project(terrain) },
+    ecology = EcologyReadout(
+        creatures.count { it.species == Species.Rabbit },
+        creatures.count { it.species == Species.Deer },
+        patches.sumOf { it.biomass },
+        ledger.births,
+        ledger.deaths,
+    ),
+)
+
+private fun GridCell.project(terrain: TerrainMap?) =
+    GroundPoint(x, z, terrain?.terrainCell(this)?.elevationTwice ?: 0)

@@ -12,12 +12,9 @@ import de.fabmax.kool.pipeline.backend.stats.BackendStats
 import de.fabmax.kool.scene.Model
 import de.fabmax.kool.scene.InstanceLayouts
 import de.fabmax.kool.scene.Scene
-import de.fabmax.kool.scene.animation.Animation
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
-import id.branchworld.game.simulation.BunnyHeading
-import id.branchworld.game.simulation.WorldRenderProjection
 import id.branchworld.game.simulation.WorldRenderSource
 import id.branchworld.game.terrain.PropKind
 import id.branchworld.game.terrain.TerrainMap
@@ -40,7 +37,8 @@ internal class DioramaSession(
     private var scene: Scene? = null
     private var renderedWorld: WorldRenderSource? = null
     private var load: Job? = null
-    private var bunny: BunnyVisual? = null
+    private var creatures: CreatureModels? = null
+    private var forage: ForageMeshes? = null
     private var propModels = emptyList<Model>()
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
@@ -67,6 +65,7 @@ internal class DioramaSession(
         val current = scene ?: buildScene(world.terrain).also {
             scene = it
             renderedWorld = world
+            forage = ForageMeshes(it, world.poses.value.springs)
             controller.status.value = "Loading island…"
             output?.attach(it)
             context.addScene(it)
@@ -82,10 +81,12 @@ internal class DioramaSession(
             0.30f + pose.distance * sin(pose.pitch),
             pose.targetZ + horizontal * cos(pose.yaw),
         )
-        val animal = bunny
-        animal?.show(world.poses.value)
+        val wildlife = creatures
+        val snapshot = world.poses.value
+        wildlife?.show(snapshot)
+        forage?.show(snapshot.forage)
         output?.update()
-        if (animal != null && animal.model.textures.values.all { it.isLoaded } &&
+        if (wildlife != null && wildlife.ready &&
             propModels.all { model -> model.textures.values.all { it.isLoaded } }
         ) {
             if (assetFrame < 0) assetFrame = Time.frameCount
@@ -106,7 +107,8 @@ internal class DioramaSession(
         renderedWorld = null
         load?.cancel()
         load = null
-        bunny = null
+        creatures = null
+        forage = null
         propModels = emptyList()
         assetFrame = -1
         timing.reset()
@@ -138,15 +140,11 @@ internal class DioramaSession(
                 target.placeInstances(world.terrain, PropKind.Pine, DioramaAsset.Pine, 0.52f),
                 target.placeInstances(world.terrain, PropKind.Rock, DioramaAsset.Rock, 0.55f),
             )
-            val imported = Assets.loadGltfFile(DioramaAsset.Bunny.path).getOrThrow()
-            val model = imported.makeModel(GltfLoadConfig(assetLoader = Assets.defaultLoader))
-            target.attachWhileCurrent(model)
-            val walk = model.animations.indexOfFirst { it.name == BunnyAnimation && it.duration > 0f }
-            check(walk >= 0) { "The bunny is missing its walk clip" }
-            model.enableAnimation(walk)
-            bunny = BunnyVisual(model, model.animations[walk]).also { visual ->
-                visual.show(world.poses.value)
+            val assets = loadCreatureAssets()
+            if (scene !== target || !currentCoroutineContext().isActive) {
+                throw CancellationException("The island scene was replaced while loading wildlife")
             }
+            creatures = CreatureModels(target, assets).also { it.show(world.poses.value) }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -199,32 +197,6 @@ internal class DioramaSession(
             throw CancellationException("The island scene was replaced while loading its models")
         }
         addNode(model)
-    }
-}
-
-private class BunnyVisual(val model: Model, private val walk: Animation) {
-    private var displayed: WorldRenderProjection? = null
-
-    fun show(pose: WorldRenderProjection) {
-        if (displayed == pose) return
-        displayed = pose
-        val yaw = when (pose.heading) {
-            BunnyHeading.PositiveZ -> 0f
-            BunnyHeading.PositiveX -> 90f
-            BunnyHeading.NegativeZ -> 180f
-            BunnyHeading.NegativeX -> -90f
-        }
-        model.transform.setIdentity()
-            .translate(cellPosition(pose.x, pose.z, pose.elevationTwice))
-            .rotate(yaw.deg, Vec3f.Y_AXIS)
-            .scale(0.23f)
-        // Sample the walk clip from the simulation tick even when render frames are skipped.
-        if (pose.moving) walk.progress = (pose.tick * GaitSecondsPerTick % walk.duration).toFloat()
-        model.applyAnimation(0f)
-    }
-
-    private companion object {
-        const val GaitSecondsPerTick = 0.05
     }
 }
 

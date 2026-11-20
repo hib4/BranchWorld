@@ -1,6 +1,6 @@
 # BranchWorld
 
-BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The current Android and Desktop builds open procedurally generated 3D islands.
+BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The Android and Desktop builds open generated 3D islands with living populations of rabbits and deer.
 
 ## Build and run
 
@@ -27,7 +27,7 @@ Run the Desktop app in a graphical session.
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
 
-Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. A new island starts paused at tick 0. Select **Send bunny left** or **Send bunny right** to queue a reachable destination, then select **Play**. Switch between **1×**, **2×**, and **4×** while playing, or select **Pause** to hold the tick and pose. **Focus island** resets the camera so you can compare coastlines. **Show diagnostics** displays the active seed, bunny cell, platform, and lifecycle state.
+Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. A new island starts paused at tick 0 with four rabbits and three deer. Select **Play** and watch the forage total as they eat and the patches regrow. The blue markers show freshwater springs. **Send bunny left** and **Send bunny right** queue a waypoint for the lead rabbit, which tends to urgent needs first. Use **1×**, **2×**, or **4×** to change playback speed and **Pause** to hold the tick. **Focus island** resets the camera.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
@@ -43,9 +43,9 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. The shell uses Compose saved instance state for Android recreation. World save files will use a separate, versioned format.
-- `renderer` owns the Kool prototype, authored scene and animation, camera controls, and platform surface adapters. Android hosts GLES under Compose. Desktop renders a Vulkan color attachment and delivers its pixels to Compose. The three runtime GLBs and the bunny's texture are bundled from one shared resource directory.
+- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny and deer GLBs use the bundled Kenney texture.
 - Shared Kotlin generates terrain, climate, props, and traversability from the seed and worldgen version. Kool builds chunk meshes and instances the bundled pines and rocks from a static terrain projection.
-- The shared simulation owns authoritative state and supplies read-only actor poses. Rules v2 records terrain identity in canonical state and routes tick-indexed movement over the generated map. Durable save files follow in Phase 06.
+- Rules v3 advances integer forage growth, creature needs, movement, and population turnover in shared Kotlin at fixed ticks. The renderer consumes read-only poses and forage levels. Rules v1 and v2 have replay fixtures. Durable save files follow in Phase 06.
 
 ## Source asset inventory
 

@@ -16,6 +16,12 @@ internal class TerrainNavigation(val terrain: TerrainMap) {
     val west = steeringTarget(left = true)
     val east = steeringTarget(left = false)
 
+    fun reachableCells(): List<GridCell> = component.map(::cell)
+
+    fun adjacent(cell: GridCell): List<GridCell> = buildList {
+        neighbors(cellIndex(cell.x, cell.z)) { add(this@TerrainNavigation.cell(it)) }
+    }
+
     fun contains(cell: GridCell): Boolean =
         TerrainMap.containsCell(cell.x, cell.z) && componentOrder[cellIndex(cell.x, cell.z)] >= 0
 

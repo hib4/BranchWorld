@@ -1,5 +1,8 @@
 package id.branchworld.game.simulation
 
+import id.branchworld.game.IslandSeeds
+import id.branchworld.game.ecology.EcologyEngine
+import id.branchworld.game.ecology.canonicalBytes
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
@@ -26,6 +29,50 @@ class WorldClockTest {
     @Test
     fun equalTerrainTicksAcrossRatesAndRenderSampling() = verifyPlayback(IslandGenerator.generate(TerrainKey(104729)))
 
+    @Test
+    fun ecologyPlaybackRatesProduceIdenticalCheckpoints() = IslandSeeds.forEach(::verifyEcologyPlayback)
+
+    private fun verifyEcologyPlayback(seed: Long) = runBlocking {
+        withTimeout(15.seconds) {
+            val terrain = IslandGenerator.generate(TerrainKey(seed))
+            val inputs = mapOf(0L to listOf(true), 299L to listOf(true, false), 600L to listOf(true))
+            val checkpoints = listOf(0L, 300L, 600L, 900L)
+            val engine = EcologyEngine(terrain)
+            val expected = checkpoints.associateWith { target ->
+                while (engine.state.tick < target) {
+                    inputs[engine.state.tick]?.forEach(engine::steer)
+                    engine.advance()
+                }
+                engine.state.canonicalBytes()
+            }
+            for (speed in WorldSpeed.entries) {
+                val clock = ecologyClock(terrain, EcologyEngine(terrain))
+                val waits = Channel<Wait>()
+                clock.setSpeed(speed)
+                val driver = launch { clock.run({ true }) { waits.pace(it) } }
+                clock.togglePlaying()
+                for (tick in 0L..900L) {
+                    val wait = waits.receive()
+                    assertEquals(tick, clock.state.tick)
+                    assertEquals(50.milliseconds / speed.multiplier, wait.interval)
+                    expected[tick]?.let { assertContentEquals(it, clock.state.canonicalBytes()) }
+                    if (tick % speed.multiplier == 0L) {
+                        val projection = clock.render.value
+                        assertEquals(tick, projection.tick)
+                        assertEquals(clock.state.creatures.map { it.id }, projection.creatures.map { it.id })
+                        for (pose in projection.creatures) {
+                            val ground = pose.ground
+                            assertEquals(terrain.cellAt(ground.x, ground.z)?.elevationTwice, ground.elevationTwice)
+                        }
+                    }
+                    inputs[tick]?.forEach(clock::steer)
+                    if (tick < 900) wait.release.complete(Unit)
+                }
+                driver.cancelAndJoin()
+            }
+        }
+    }
+
     private fun verifyPlayback(terrain: TerrainMap?) = runBlocking {
         withTimeout(10.seconds) {
             val checkpoints = listOf(300L, 600L, 900L)
@@ -42,7 +89,7 @@ class WorldClockTest {
             }
 
             for (speed in WorldSpeed.entries) {
-                val clock = WorldClock(104729, terrain)
+                val clock = legacyClock(104729, terrain)
                 val waits = Channel<Wait>()
                 clock.setSpeed(speed)
                 val driver = launch { clock.run({ true }) { waits.pace(it) } }
@@ -54,9 +101,9 @@ class WorldClockTest {
                     expected[tick]?.let { assertContentEquals(it, clock.state.canonicalBytes()) }
                     if (tick % speed.multiplier == 0L) {
                         assertEquals(tick, clock.render.value.tick)
-                        assertEquals(clock.state.bunnyCell.x, clock.render.value.x)
+                        assertEquals(clock.state.bunnyCell.x, clock.render.value.leadRabbit?.ground?.x)
                         if (terrain != null) {
-                            val pose = clock.render.value
+                            val pose = assertNotNull(clock.render.value.leadRabbit).ground
                             assertEquals(terrain.cellAt(pose.x, pose.z)?.elevationTwice, pose.elevationTwice)
                         }
                     }
@@ -71,7 +118,7 @@ class WorldClockTest {
     @Test
     fun pauseAndInactiveDriverDropPendingPulseAndKeepNextTickCommands() = runBlocking {
         withTimeout(10.seconds) {
-            val clock = WorldClock(104729)
+            val clock = legacyClock(104729)
             val waits = Channel<Wait>()
             var active = true
             val driver = launch { clock.run({ active }) { waits.pace(it) } }
@@ -85,8 +132,8 @@ class WorldClockTest {
             first.release.complete(Unit)
             val second = waits.receive()
             assertEquals(1L, clock.render.value.tick)
-            assertEquals(1, clock.render.value.x)
-            assertEquals(BunnyHeading.PositiveX, clock.render.value.heading)
+            assertEquals(1, clock.render.value.leadRabbit?.ground?.x)
+            assertEquals(CreatureHeading.PositiveX, clock.render.value.leadRabbit?.heading)
 
             clock.togglePlaying()
             clock.togglePlaying()
@@ -113,8 +160,8 @@ class WorldClockTest {
             waits.receive().release.complete(Unit)
             waits.receive()
             assertEquals(2L, clock.render.value.tick)
-            assertEquals(0, clock.render.value.x)
-            assertEquals(BunnyHeading.NegativeX, clock.render.value.heading)
+            assertEquals(0, clock.render.value.leadRabbit?.ground?.x)
+            assertEquals(CreatureHeading.NegativeX, clock.render.value.leadRabbit?.heading)
             val uninterrupted = WorldEngine(WorldState.start(104729))
             assertTrue(uninterrupted.submitNext(GridCell(7, 12)))
             uninterrupted.advance()

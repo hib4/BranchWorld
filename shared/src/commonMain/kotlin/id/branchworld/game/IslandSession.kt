@@ -2,6 +2,9 @@ package id.branchworld.game
 
 import id.branchworld.game.simulation.WorldClock
 import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.simulation.ecologyClock
+import id.branchworld.game.ecology.EcologyEngine
+import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import kotlinx.coroutines.CancellationException
@@ -23,7 +26,7 @@ internal class IslandSession {
             load.value = withContext(Dispatchers.Default) {
                 val started = TimeSource.Monotonic.markNow()
                 val terrain = IslandGenerator.generate(TerrainKey(seed))
-                val clock = WorldClock(seed, terrain)
+                val clock = ecologyClock(terrain, EcologyEngine(terrain))
                 val world = WorldRenderSource(terrain, clock.render)
                 println("BranchWorldTerrain seed=$seed version=${terrain.key.worldgenVersion} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=${started.elapsedNow().inWholeMicroseconds}")
                 IslandLoad.Ready(clock, world)
@@ -40,6 +43,6 @@ internal class IslandSession {
 internal sealed interface IslandLoad {
     data object Empty : IslandLoad
     data object Loading : IslandLoad
-    data class Ready(val clock: WorldClock, val world: WorldRenderSource) : IslandLoad
+    data class Ready(val clock: WorldClock<EcologyState>, val world: WorldRenderSource) : IslandLoad
     data class Failed(val seed: Long) : IslandLoad
 }

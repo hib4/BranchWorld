@@ -16,6 +16,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.ecology_animals
+import branchworld.shared.generated.resources.ecology_forage
+import branchworld.shared.generated.resources.ecology_turnover
 import branchworld.shared.generated.resources.pause_world
 import branchworld.shared.generated.resources.play_world
 import branchworld.shared.generated.resources.steer_left
@@ -27,7 +30,7 @@ import id.branchworld.game.simulation.WorldSpeed
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun WorldControls(clock: WorldClock) {
+internal fun WorldControls(clock: WorldClock<*>) {
     val playback by clock.playback.collectAsStateWithLifecycle()
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), itemVerticalAlignment = Alignment.CenterVertically) {
@@ -47,19 +50,34 @@ internal fun WorldControls(clock: WorldClock) {
             }
             WorldTick(clock)
         }
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = { clock.steer(left = true) }, enabled = clock.canSteerLeft) {
-                Text(stringResource(Res.string.steer_left))
-            }
-            OutlinedButton(onClick = { clock.steer(left = false) }, enabled = clock.canSteerRight) {
-                Text(stringResource(Res.string.steer_right))
-            }
-        }
+        WildlifeControls(clock)
     }
 }
 
 @Composable
-private fun WorldTick(clock: WorldClock) {
+private fun WorldTick(clock: WorldClock<*>) {
     val pose by clock.render.collectAsStateWithLifecycle()
     Text(stringResource(Res.string.world_tick, pose.tick.toString()), style = MaterialTheme.typography.labelLarge)
+}
+
+@Composable
+private fun WildlifeControls(clock: WorldClock<*>) {
+    val world by clock.render.collectAsStateWithLifecycle()
+    val canSteer = world.leadRabbit != null
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { clock.steer(left = true) }, enabled = canSteer && clock.canSteerLeft) {
+            Text(stringResource(Res.string.steer_left))
+        }
+        OutlinedButton(onClick = { clock.steer(left = false) }, enabled = canSteer && clock.canSteerRight) {
+            Text(stringResource(Res.string.steer_right))
+        }
+    }
+    world.ecology?.let { ecology ->
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            val style = MaterialTheme.typography.labelLarge
+            Text(stringResource(Res.string.ecology_animals, ecology.rabbits, ecology.deer), style = style)
+            Text(stringResource(Res.string.ecology_forage, ecology.forage), style = style)
+            Text(stringResource(Res.string.ecology_turnover, ecology.births.toString(), ecology.deaths.toString()), style = style)
+        }
+    }
 }

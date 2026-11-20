@@ -23,8 +23,10 @@ class DioramaAssetsTest {
                 val path = "${asset.path.substringBeforeLast('/')}/${reference.groupValues[1]}"
                 assertTrue(resource(path).isNotEmpty(), path)
             }
-            if (asset == DioramaAsset.Bunny) {
-                assertTrue(Regex(""""name"\s*:\s*"$BunnyAnimation"""").containsMatchIn(metadata))
+            if (asset == DioramaAsset.Bunny || asset == DioramaAsset.Deer) {
+                for (clip in CreatureClips) {
+                    assertTrue(Regex(""""name"\s*:\s*"$clip"""").containsMatchIn(metadata), "$asset $clip")
+                }
                 assertTrue(uri.findAll(metadata).any { it.groupValues[1] == "Textures/colormap.png" })
             }
         }
