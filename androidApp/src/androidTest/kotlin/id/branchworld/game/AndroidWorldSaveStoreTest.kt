@@ -25,7 +25,7 @@ class AndroidWorldSaveStoreTest {
                 assertArrayEquals(byteArrayOf(8), store.read(16))
                 assertTrue(store.write(original, replace = false))
                 assertFalse(store.write(byteArrayOf(5), replace = false))
-                File(directory, "island-v2.json.new").writeBytes(byteArrayOf(7))
+                File(directory, "island-v3.json.new").writeBytes(byteArrayOf(7))
                 val reopened = AndroidWorldSaveStore(directory)
                 assertArrayEquals(original, reopened.read(16))
                 assertTrue(reopened.write(byteArrayOf(5), replace = true))

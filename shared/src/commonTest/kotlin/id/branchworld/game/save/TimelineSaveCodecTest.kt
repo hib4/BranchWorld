@@ -3,12 +3,32 @@ package id.branchworld.game.save
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.timeline.Timeline
+import id.branchworld.game.ecology.CivilizationRulesVersion
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class TimelineSaveCodecTest {
+    @Test
+    fun versionTwoChecksumAndRulesCannotChangeOnRestore() = runBlocking<Unit> {
+        val terrain = IslandGenerator.generate(TerrainKey(104729))
+        val legacy = Timeline.start(terrain)
+        repeat(900) { legacy.advance() }
+        val checkpoint = legacy.checkpoint()
+        val v2 = TimelineSaveCodec.encode(checkpoint).decodeToString()
+            .replaceFirst("\"schemaVersion\":3", "\"schemaVersion\":2")
+        assertFalse(v2.contains("\"settlements\""))
+        val restored = TimelineSaveCodec.restore(v2.encodeToByteArray()).timeline
+        assertEquals(checkpoint, restored.checkpoint())
+        val modern = Timeline.start(terrain, CivilizationRulesVersion)
+        repeat(900) { modern.advance() }
+        val mixed = checkpoint.copy(branches = listOf(checkpoint.branches.single().copy(head = modern.state)))
+        assertFailsWith<IllegalArgumentException> { TimelineSaveCodec.restore(TimelineSaveCodec.encode(mixed)) }
+    }
+
     @Test
     fun rejectsMalformedOrCorruptTimelineBeforeRestore() = runBlocking<Unit> {
         val timeline = Timeline.start(IslandGenerator.generate(TerrainKey(104729)))
@@ -37,7 +57,7 @@ class TimelineSaveCodecTest {
         for (malformed in invalid) {
             assertFailsWith<IllegalArgumentException> { TimelineSaveCodec.restore(TimelineSaveCodec.encode(malformed)) }
         }
-        val future = bytes.decodeToString().replace("\"schemaVersion\":2", "\"schemaVersion\":99").encodeToByteArray()
+        val future = bytes.decodeToString().replace("\"schemaVersion\":3", "\"schemaVersion\":99").encodeToByteArray()
         assertFailsWith<IncompatibleSave> { TimelineSaveCodec.restore(future) }
     }
 }

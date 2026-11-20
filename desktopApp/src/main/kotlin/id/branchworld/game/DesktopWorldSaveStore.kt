@@ -16,11 +16,11 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal class DesktopWorldSaveStore(private val directory: Path = applicationDataDirectory()) : WorldSaveStore {
-    private val slot = directory.resolve("island-v2.json")
-    private val legacy = directory.resolve("island-v1.json")
+    private val slot = directory.resolve("island-v3.json")
+    private val legacy = listOf(2, 1).map { directory.resolve("island-v$it.json") }
 
     override suspend fun read(maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
-        read(slot, maxBytes) ?: read(legacy, maxBytes)
+        read(slot, maxBytes) ?: legacy.firstNotNullOfOrNull { read(it, maxBytes) }
     }
 
     private fun read(file: Path, maxBytes: Int): ByteArray? = try {

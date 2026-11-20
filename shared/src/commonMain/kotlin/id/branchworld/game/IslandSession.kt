@@ -1,6 +1,7 @@
 package id.branchworld.game
 
 import id.branchworld.game.ecology.EcologyState
+import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.canonicalHash
@@ -52,7 +53,7 @@ internal class IslandSession {
             load.value = withContext(Dispatchers.Default) {
                 val started = TimeSource.Monotonic.markNow()
                 val terrain = IslandGenerator.generate(TerrainKey(seed))
-                val timeline = Timeline.start(terrain)
+                val timeline = Timeline.start(terrain, rulesVersion = CivilizationRulesVersion)
                 println("BranchWorldTerrain seed=$seed version=${terrain.key.worldgenVersion} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=${started.elapsedNow().inWholeMicroseconds}")
                 IslandLoad.Ready(terrain, timeline)
             }
@@ -174,6 +175,7 @@ internal sealed interface IslandLoad {
         suspend fun seek(tick: Long) = navigate(timeline.branchId, tick)
 
         fun markers(branch: Int) = timeline.interventionMarkers(branch, includePending = true)
+        fun settlementEvents(branch: Int) = timeline.settlementEvents(branch)
 
         suspend fun seekEvent(tick: Long) = navigate(timeline.branchId, tick, inspectEvent = true)
 

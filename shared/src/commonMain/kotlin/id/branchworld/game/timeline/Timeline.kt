@@ -5,6 +5,7 @@ import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
+import id.branchworld.game.ecology.SettlementEvent
 import id.branchworld.game.simulation.SetDestination
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
@@ -41,6 +42,7 @@ internal data class TimelineCheckpoint(
 
 internal data class BranchSummary(
     val id: Int, val name: String, val parentId: Int?, val start: Long, val head: Long, val interventionCount: Int,
+    val milestoneCount: Int,
 )
 
 /** Owned by the world clock. A background seek receives an immutable replay request. */
@@ -64,7 +66,13 @@ internal class Timeline private constructor(
     val queuedInterventions: Int get() = if (state.tick == active.head.tick) interventionCount else 0
 
     fun summaries() = branches.values.map {
-        BranchSummary(it.id, it.name, it.parentId, it.start.tick, it.head.tick, it.interventions)
+        BranchSummary(it.id, it.name, it.parentId, it.start.tick, it.head.tick, it.interventions,
+            it.head.settlements?.events?.size ?: 0)
+    }
+
+    fun settlementEvents(branchId: Int): List<SettlementEvent> {
+        val branch = branches[branchId] ?: return emptyList()
+        return branch.head.settlements?.events.orEmpty().filter { it.tick > branch.start.tick }
     }
 
     fun renameActive(name: String): Boolean {
@@ -211,8 +219,8 @@ internal class Timeline private constructor(
     }
 
     companion object {
-        fun start(terrain: TerrainMap): Timeline {
-            val engine = EcologyEngine(terrain, rulesVersion = EnvironmentalRulesVersion, recordHistory = false)
+        fun start(terrain: TerrainMap, rulesVersion: Int = EnvironmentalRulesVersion): Timeline {
+            val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false)
             return Timeline(terrain, root(engine.state, emptyList()), engine)
         }
 

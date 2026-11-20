@@ -20,10 +20,15 @@ internal class EcologyEngine(
 ) {
     private val island = IslandEcology(terrain)
     private val regional by lazy { RegionalEcology(island) }
+    private val economy by lazy { SettlementEconomy(island) }
     private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
-        if (rulesVersion == EnvironmentalRulesVersion) it.copy(environment = Environment.start(terrain.key.seed)) else it
+        when (rulesVersion) {
+            CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
+            EnvironmentalRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed))
+            else -> it
+        }
     }
         private set
 
@@ -34,6 +39,7 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
+        require(state.settlements == null || state.environment != null)
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
         require(state.patches.zipWithNext().all { (first, next) -> first.id < next.id })
@@ -92,6 +98,10 @@ internal class EcologyEngine(
         val environment = requireNotNull(state.environment)
         if (state.tick < 300) require(environment == Environment.start(state.terrain.key.seed))
         else require(environment.nextChange - state.tick in 0..360)
+        state.settlements?.let {
+            economy.validate(it, state.tick, state.patches, state.springs)
+            require(it.gatheredFood.toULong() + it.gatheredWood.toULong() <= ledger.consumed.toULong())
+        }
     }
 
     fun intervene(kind: Intervention, region: Int): Boolean {
@@ -142,7 +152,9 @@ internal class EcologyEngine(
                 when (command) {
                     is SetDestination -> waypoints[command.entityId] = command.cell
                     is ReforestRegion -> {
-                        val count = regional.plant(command.region, patches, previous.springs)
+                        val count = regional.plant(
+                            command.region, patches, previous.springs, previous.settlements?.reservedCells().orEmpty(),
+                        )
                         introduced += count * RegionalEcology.SaplingBiomass
                         add(InterventionResult(Intervention.Reforest, command.region, tick, count))
                     }
@@ -184,6 +196,10 @@ internal class EcologyEngine(
             }
         }
         val ledger = previous.ledger
+        val settlements = previous.settlements?.let {
+            if (tick % SettlementTurn == 0L) economy.advance(it, tick, requireNotNull(environment).weather, patches, previous.springs)
+            else it
+        }
         return previous.copy(
             tick = tick,
             randomState = random.state,
@@ -191,6 +207,7 @@ internal class EcologyEngine(
             creatures = animals,
             nextEntityId = nextId,
             environment = environment,
+            settlements = settlements,
             ledger = EcologyLedger(
                 consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass },
                 regrown = ledger.regrown + afterGrowth - before,

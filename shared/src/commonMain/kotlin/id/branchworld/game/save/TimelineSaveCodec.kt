@@ -1,6 +1,7 @@
 package id.branchworld.game.save
 
 import id.branchworld.game.ecology.EcologyEngine
+import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.simulation.canonicalHash
 import id.branchworld.game.simulation.commandOrder
@@ -25,7 +26,8 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
-    private const val SchemaVersion = 2
+    private const val SchemaVersion = 3
+    private const val LegacyTimelineSchema = 2
     private const val WorldgenVersion = 1
     private val json = Json { encodeDefaults = true }
 
@@ -39,7 +41,9 @@ internal object TimelineSaveCodec {
     )
 
     fun encode(timeline: TimelineCheckpoint): ByteArray {
-        val envelope = Envelope(SchemaVersion, EnvironmentalRulesVersion, WorldgenVersion, integrity(timeline), timeline)
+        val rules = timeline.branches.first().start.rulesVersion
+        require(rules == EnvironmentalRulesVersion || rules == CivilizationRulesVersion)
+        val envelope = Envelope(SchemaVersion, rules, WorldgenVersion, integrity(timeline), timeline)
         return json.encodeToString(envelope).encodeToByteArray().also { require(it.size <= MaxBytes) }
     }
 
@@ -48,16 +52,18 @@ internal object TimelineSaveCodec {
         // Dispatch on the envelope before decoding its version-specific payload.
         val source = bytes.decodeToString(throwOnInvalidSequence = true)
         val header = json.parseToJsonElement(source).jsonObject
-        when (version(header["schemaVersion"]?.jsonPrimitive?.intOrNull)) {
+        val schema = version(header["schemaVersion"]?.jsonPrimitive?.intOrNull)
+        when (schema) {
             1 -> {
                 val (terrain, engine) = WorldSaveCodec.restore(bytes)
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            SchemaVersion -> Unit
+            LegacyTimelineSchema, SchemaVersion -> Unit
             else -> throw IncompatibleSave()
         }
-        if (version(header["rulesVersion"]?.jsonPrimitive?.intOrNull) != EnvironmentalRulesVersion ||
+        val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
+        if ((rules != EnvironmentalRulesVersion && (rules != CivilizationRulesVersion || schema != SchemaVersion)) ||
             version(header["worldgenVersion"]?.jsonPrimitive?.intOrNull) != WorldgenVersion
         ) throw IncompatibleSave()
         val envelope = json.decodeFromJsonElement(Envelope.serializer(), header)
@@ -66,7 +72,7 @@ internal object TimelineSaveCodec {
         val root = requireNotNull(checkpoint.branches.firstOrNull())
         require(root.start.terrain.key.worldgenVersion == WorldgenVersion)
         val terrain = IslandGenerator.generate(root.start.terrain.key)
-        validate(terrain, checkpoint)
+        validate(terrain, checkpoint, rules)
         return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
     }
 
@@ -75,7 +81,7 @@ internal object TimelineSaveCodec {
     private fun integrity(checkpoint: TimelineCheckpoint): String =
         json.encodeToString(checkpoint).encodeToByteArray().canonicalHash()
 
-    private suspend fun validate(terrain: TerrainMap, timeline: TimelineCheckpoint) {
+    private suspend fun validate(terrain: TerrainMap, timeline: TimelineCheckpoint, rules: Int) {
         val branches = timeline.branches
         require(branches.size in 1..MaxBranches)
         require(branches.sumOf { it.commands.size.toLong() + it.pending.size } <= MaxCommands)
@@ -110,7 +116,7 @@ internal object TimelineSaveCodec {
             require(inputs.zipWithNext().all { (a, b) -> commandOrder.compare(a, b) < 0 })
             for (state in (branch.snapshots + branch.start + branch.head).distinct()) {
                 context.ensureActive()
-                require(state.rulesVersion == EnvironmentalRulesVersion)
+                require(state.rulesVersion == rules)
                 val replayInputs = if (state == branch.start) inputs else emptyList()
                 EcologyEngine(terrain, state, replayInputs, recordHistory = false).validateSavedState()
             }

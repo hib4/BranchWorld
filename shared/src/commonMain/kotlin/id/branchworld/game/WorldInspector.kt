@@ -73,6 +73,7 @@ internal fun WorldInspector(island: IslandLoad.Ready) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 RegionalControls(island)
                 val pose by island.clock.render.collectAsStateWithLifecycle()
+                island.clock.state.settlements?.let { SettlementInspector(it) }
                 val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
                 key(pose.branchId) { CreatureInspector(creatures) }
             }

@@ -43,6 +43,7 @@ internal class DioramaSession(
     private var forage: ForageMeshes? = null
     private var previousClimate: ClimatePose? = null
     private var propModels = emptyList<Model>()
+    private var settlements: SettlementModels? = null
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
     private val timing = FrameTiming("renderer")
@@ -91,9 +92,10 @@ internal class DioramaSession(
             previousClimate = snapshot.climate
         }
         wildlife?.show(snapshot)
+        settlements?.show(snapshot.settlements.orEmpty())
         forage?.show(snapshot.forage)
         output?.update()
-        if (wildlife != null && wildlife.ready &&
+        if (wildlife != null && wildlife.ready && settlements?.ready != false &&
             propModels.all { model -> model.textures.values.all { it.isLoaded } }
         ) {
             if (assetFrame < 0) assetFrame = Time.frameCount
@@ -118,6 +120,7 @@ internal class DioramaSession(
         forage = null
         previousClimate = null
         propModels = emptyList()
+        settlements = null
         assetFrame = -1
         timing.reset()
         output?.detach()
@@ -157,9 +160,11 @@ internal class DioramaSession(
                 target.placeInstances(world.terrain, PropKind.Rock, DioramaAsset.Rock, 0.55f),
             )
             val assets = loadCreatureAssets()
+            val towns = if (world.poses.value.settlements != null) SettlementModels.load(target) else null
             if (scene !== target || !currentCoroutineContext().isActive) {
                 throw CancellationException("The island scene was replaced while loading wildlife")
             }
+            settlements = towns
             creatures = CreatureModels(target, assets).also { it.show(world.poses.value) }
         } catch (error: CancellationException) {
             throw error

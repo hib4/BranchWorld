@@ -53,6 +53,38 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         writeLong(ledger.introduced)
         patches.forEach { patch -> writeInt(if (patch.planted) 1 else 0) }
     }
+    settlements?.let { world ->
+        writeLong(world.gatheredFood)
+        writeLong(world.gatheredWood)
+        writeInt(world.sites.size)
+        for (site in world.sites) {
+            writeInt(site.id)
+            writeLong(site.foundedAt)
+            writeCell(site.center)
+            writeCell(site.field)
+            writeInt(site.lots.size)
+            site.lots.forEach(::writeCell)
+            writeInt(site.residents)
+            writeInt(site.homes)
+            writeInt(site.food)
+            writeInt(site.wood)
+            writeInt(site.stone)
+            writeInt(site.stoneRemaining)
+            writeInt(site.shortage)
+            writeInt(site.surplus)
+            writeInt(site.labor.farm)
+            writeInt(site.labor.wood)
+            writeInt(site.labor.stone)
+            writeInt(site.foodBalance)
+        }
+        writeInt(world.events.size)
+        for (event in world.events) {
+            writeLong(event.tick)
+            writeInt(event.siteId)
+            writeInt(event.kind.code)
+            writeInt(event.amount)
+        }
+    }
     bytes()
 }
 

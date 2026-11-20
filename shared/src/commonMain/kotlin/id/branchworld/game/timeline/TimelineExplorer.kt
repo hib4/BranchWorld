@@ -4,6 +4,7 @@ import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.SettlementEvent
 import id.branchworld.game.ecology.canonicalHash
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
@@ -71,7 +72,11 @@ internal data class ComparedBranch(
     val hash: String,
     val metrics: EcologyMetrics,
     val events: List<InterventionMarker>,
+    val settlement: SettlementMetrics?,
+    val settlementEvents: List<SettlementEvent>,
 )
+
+internal data class SettlementMetrics(val residents: Long, val food: Long, val homes: Long, val wood: Long)
 
 internal data class TimelinePair(val tick: Long, val left: ComparedBranch, val right: ComparedBranch)
 
@@ -87,8 +92,13 @@ internal data class ComparisonReplay(
 
     private suspend fun ReplayRequest.read(events: List<InterventionMarker>): ComparedBranch {
         val state = replay().engine.state
+        val occupied = state.settlements?.sites?.filter { it.residents > 0 }
         return ComparedBranch(
             state.renderProjection(terrain).copy(branchId = branchId), state.canonicalHash(), state.metrics(), events,
+            occupied?.let { SettlementMetrics(it.sumOf { site -> site.residents.toLong() },
+                it.sumOf { site -> site.food.toLong() }, it.sumOf { site -> site.homes.toLong() },
+                it.sumOf { site -> site.wood.toLong() }) },
+            state.settlements?.events.orEmpty(),
         )
     }
 }

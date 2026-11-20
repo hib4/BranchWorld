@@ -22,11 +22,16 @@ data class WorldRenderProjection(
     val ecology: EcologyReadout? = null,
     val climate: ClimatePose? = null,
     val branchId: Int? = null,
+    val settlements: List<SettlementPose>? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
 
 data class GroundPoint(val x: Int, val z: Int, val elevationTwice: Int)
+
+data class SettlementPose(
+    val id: Int, val homes: List<GroundPoint>, val field: GroundPoint, val resident: GroundPoint?,
+)
 
 data class CreaturePose(
     val id: Long,
@@ -97,6 +102,14 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         val daylight = minOf((phase + 60f) / 120f, (660f - phase) / 120f).coerceIn(0f, 1f)
         val dawn = ((phase - 1140f) / 120f).coerceIn(0f, 0.5f)
         ClimatePose(tick / DayLength + 1, phase < DayLength / 2, it.weather, maxOf(daylight, dawn))
+    },
+    settlements = settlements?.sites?.map { site ->
+        SettlementPose(
+            site.id,
+            site.lots.take(site.homes).map { it.project(terrain) },
+            site.field.project(terrain),
+            site.center.takeIf { site.residents > 0 }?.project(terrain),
+        )
     },
 )
 

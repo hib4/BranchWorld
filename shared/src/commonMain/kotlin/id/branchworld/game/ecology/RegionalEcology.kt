@@ -25,6 +25,7 @@ internal class RegionalEcology(private val island: IslandEcology) {
     fun inspect(state: EcologyState): List<RegionReadout> {
         val patches = state.patches.groupBy { it.cell.region() }
         val occupied = state.patches.mapTo(state.springs.toMutableSet()) { it.cell }
+        state.settlements?.let { occupied.addAll(it.reservedCells()) }
         return List(RegionCount) { region ->
             val local = patches[region].orEmpty()
             RegionReadout(
@@ -36,8 +37,9 @@ internal class RegionalEcology(private val island: IslandEcology) {
         }
     }
 
-    fun plant(region: Int, patches: MutableList<ForagePatch>, springs: List<GridCell>): Int {
+    fun plant(region: Int, patches: MutableList<ForagePatch>, springs: List<GridCell>, reserved: List<GridCell> = emptyList()): Int {
         val occupied = patches.mapTo(springs.toMutableSet()) { it.cell }
+        occupied.addAll(reserved)
         var planted = 0
         for (cell in sites[region].orEmpty()) {
             if (planted == PlantingLimit) break

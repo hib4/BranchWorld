@@ -9,16 +9,10 @@ import kotlin.test.assertTrue
 
 class DioramaAssetsTest {
     @Test
-    fun completeGlbSetAndRelativeResourcesAreBundled() {
+    fun modelFilesAndRelativeResourcesAreBundled() {
         for (asset in DioramaAsset.entries) {
             val bytes = resource(asset.path)
-            val header = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
-            assertEquals(0x46546C67, header.int, asset.path)
-            assertEquals(2, header.int, asset.path)
-            assertEquals(bytes.size, header.int, asset.path)
-            val jsonSize = header.int
-            assertEquals(0x4E4F534A, header.int, asset.path)
-            val metadata = bytes.decodeToString(startIndex = header.position(), endIndex = header.position() + jsonSize)
+            val metadata = if (asset.file.endsWith(".gltf")) bytes.decodeToString() else binaryMetadata(bytes, asset.path)
             for (reference in uri.findAll(metadata)) {
                 val path = "${asset.path.substringBeforeLast('/')}/${reference.groupValues[1]}"
                 assertTrue(resource(path).isNotEmpty(), path)
@@ -30,6 +24,16 @@ class DioramaAssetsTest {
                 assertTrue(uri.findAll(metadata).any { it.groupValues[1] == "Textures/colormap.png" })
             }
         }
+    }
+
+    private fun binaryMetadata(bytes: ByteArray, path: String): String {
+        val header = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        assertEquals(0x46546C67, header.int, path)
+        assertEquals(2, header.int, path)
+        assertEquals(bytes.size, header.int, path)
+        val jsonSize = header.int
+        assertEquals(0x4E4F534A, header.int, path)
+        return bytes.decodeToString(startIndex = header.position(), endIndex = header.position() + jsonSize)
     }
 
     private fun resource(path: String): ByteArray =

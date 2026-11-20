@@ -4,6 +4,8 @@ import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.TerrainIdentity
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 
 @Serializable
 enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2) }
@@ -66,6 +68,7 @@ internal data class EcologyLedger(
 )
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class EcologyState(
     val terrain: TerrainIdentity,
     val tick: Long,
@@ -76,6 +79,13 @@ internal data class EcologyState(
     val nextEntityId: Long,
     val ledger: EcologyLedger = EcologyLedger(),
     val environment: Environment? = null,
+    // Omit the new field in old rules so checksum re-encoding stays byte-for-byte compatible.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val settlements: SettlementWorld? = null,
 ) {
-    val rulesVersion: Int get() = if (environment == null) EcologyRulesVersion else EnvironmentalRulesVersion
+    val rulesVersion: Int get() = when {
+        settlements != null -> CivilizationRulesVersion
+        environment != null -> EnvironmentalRulesVersion
+        else -> EcologyRulesVersion
+    }
 }

@@ -11,12 +11,12 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal class AndroidWorldSaveStore(directory: File) : WorldSaveStore {
-    private val slot = AtomicFile(File(directory, "island-v2.json"))
-    private val legacy = AtomicFile(File(directory, "island-v1.json"))
+    private val slot = AtomicFile(File(directory, "island-v3.json"))
+    private val legacy = listOf(2, 1).map { AtomicFile(File(directory, "island-v$it.json")) }
 
     override suspend fun read(maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
         access.withLock {
-            read(slot, maxBytes) ?: read(legacy, maxBytes)
+            read(slot, maxBytes) ?: legacy.firstNotNullOfOrNull { read(it, maxBytes) }
         }
     }
 

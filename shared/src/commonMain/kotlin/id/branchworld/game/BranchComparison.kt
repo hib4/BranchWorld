@@ -43,11 +43,15 @@ import branchworld.shared.generated.resources.comparison_disjoint
 import branchworld.shared.generated.resources.comparison_event_loading
 import branchworld.shared.generated.resources.comparison_events
 import branchworld.shared.generated.resources.comparison_forage
+import branchworld.shared.generated.resources.comparison_homes
 import branchworld.shared.generated.resources.comparison_left
 import branchworld.shared.generated.resources.comparison_loading
 import branchworld.shared.generated.resources.comparison_no_events
 import branchworld.shared.generated.resources.comparison_open
 import branchworld.shared.generated.resources.comparison_rabbits
+import branchworld.shared.generated.resources.comparison_residents
+import branchworld.shared.generated.resources.comparison_stored_food
+import branchworld.shared.generated.resources.comparison_stored_wood
 import branchworld.shared.generated.resources.comparison_right
 import branchworld.shared.generated.resources.comparison_saplings
 import branchworld.shared.generated.resources.comparison_select_left
@@ -194,6 +198,19 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
                 val delta = if (change > 0) "+$change" else change.toString()
                 MetricRow(stringResource(labels[index]), a.toString(), b.toString(), delta)
             }
+            val a = left.settlement
+            val b = right.settlement
+            if (a != null && b != null) {
+                for ((label, first, second) in listOf(
+                    Triple(Res.string.comparison_residents, a.residents, b.residents),
+                    Triple(Res.string.comparison_stored_food, a.food, b.food),
+                    Triple(Res.string.comparison_stored_wood, a.wood, b.wood),
+                    Triple(Res.string.comparison_homes, a.homes, b.homes),
+                )) {
+                    val change = second - first
+                    MetricRow(stringResource(label), first.toString(), second.toString(), if (change > 0) "+$change" else change.toString())
+                }
+            }
         }
     }
 }
@@ -214,6 +231,7 @@ private fun ComparisonEvents(island: IslandLoad.Ready, branch: BranchSummary, si
     Text(stringResource(Res.string.comparison_events, branch.name), style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.semantics { heading() })
     if (side.events.isEmpty()) Text(stringResource(Res.string.comparison_no_events))
+    for (milestone in side.settlementEvents) Text(milestone.label(), style = MaterialTheme.typography.bodySmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (marker in side.events) {
             OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label()) }

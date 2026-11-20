@@ -41,9 +41,9 @@ For an intervention demo, open seed `104729`, play until shortly after rain begi
 
 **Save world** captures the current tick and any queued interventions in one local slot. After closing and reopening BranchWorld, choose **Load saved world** from Home. The island opens paused at the saved tick. Press **Play** to resume and apply any queued interventions.
 
-Open seed `104729` and use **Timeline** → **Play to tick** to reach `300`. Select **Fork here** and name the branch **Restored Forest**. In **Inspect world**, choose **B3** and select **Reforest region**. Play the child to `900`, select **Main** in the timeline tree, and play it to the same tick.
+Start a new island with seed `104729` and use **Timeline** → **Play to tick** to reach `300`. Select the founding milestone to see the settlement in C2 at tick `60`. Return to `300`, select **Fork here**, and name the branch **Restored Forest**. In **Inspect world**, choose **C2** and select **Reforest region**. Play the child to `900`, select **Main** in the timeline tree, and play it to the same tick.
 
-Choose **Compare branches** to see both histories at tick `900`. **Show left** and **Show right** switch the island at the same camera position. The table shows the difference from the left branch. Select the **Reforest B3 at tick 301** event to see how many saplings the command planted. Close comparison, choose **Save world**, then quit and relaunch. Use **Load saved world** and reopen comparison. An existing single-island save opens as **Main** starting at its saved tick.
+Choose **Compare branches** to see both histories at tick `900`. **Show left** and **Show right** switch the island at the same camera position. Main has 76 stored wood and Restored Forest has 124. Select **Reforest C2 at tick 301** to see the six saplings the command planted. Close comparison, choose **Save world**, then quit and relaunch. Use **Load saved world** and reopen comparison. Older saves retain their original rules. An existing single-island save opens as **Main** at its saved tick.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -53,7 +53,7 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
 - `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny and deer GLBs use the bundled Kenney texture.
 - Shared Kotlin generates terrain, climate, props, and traversability from the seed and worldgen version. Kool builds chunk meshes and instances the bundled pines and rocks from a static terrain projection.
-- Rules v4 advances weather, interventions, forage, creature needs, movement, and population turnover in shared Kotlin at fixed ticks. The renderer consumes read-only climate, sapling, forage, and creature projections. Rules v1–v3 retain their replay fixtures.
+- Rules v5 adds settlements to the shared fixed-tick ecology. Cohorts farm, gather, expand, and respond to shortages. The renderer receives read-only homes, farm, and resident positions. Rules v1–v4 retain their replay fixtures.
 
 ## Source asset inventory
 

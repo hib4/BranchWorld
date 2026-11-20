@@ -66,6 +66,7 @@ import branchworld.shared.generated.resources.timeline_earlier_events
 import branchworld.shared.generated.resources.world_tick
 import branchworld.shared.generated.resources.plants_applied
 import branchworld.shared.generated.resources.supplement_applied
+import branchworld.shared.generated.resources.settlement_inspector
 import androidx.compose.ui.semantics.contentDescription
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
@@ -110,6 +111,8 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
     val feedback by island.interventions.collectAsStateWithLifecycle()
     val markers = remember(island, branch.id, branch.interventionCount, feedback.queued) { island.markers(branch.id) }
     val executed = remember(markers) { markers.filterNot { it.queued } }
+    val milestones = remember(island, branch.id, branch.milestoneCount) { island.settlementEvents(branch.id) }
+    val markedTicks = remember(executed, milestones) { (executed.map { it.tick } + milestones.map { it.tick }).distinct() }
     val tree = remember(view.branches) { view.branches.inTreeOrder() }
 
     Text(stringResource(Res.string.timeline_branch, branch.name), style = MaterialTheme.typography.titleMedium)
@@ -144,7 +147,7 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
     Text(stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()))
     TimelineScrubber(
         branch.start..branch.head, view.tick, !view.seeking,
-        markers = executed, onStart = island.clock::pause,
+        markers = markedTicks, onStart = island.clock::pause,
     ) { requested ->
         if (requested != view.tick) operations.launch { island.seek(requested) }
     }
@@ -200,6 +203,17 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
         }
     }
     for (result in feedback.applied) Text(result.label(), live)
+    if (milestones.isNotEmpty()) {
+        Text(stringResource(Res.string.settlement_inspector), style = MaterialTheme.typography.titleSmall)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (milestone in milestones) {
+                OutlinedButton(
+                    onClick = { operations.launch { island.seek(milestone.tick) } },
+                    enabled = !view.seeking && milestone.tick != view.tick,
+                ) { Text(milestone.label()) }
+            }
+        }
+    }
     if (forkDialog) {
         BranchNameDialog(
             title = stringResource(Res.string.timeline_fork_at, view.tick.toString()),
@@ -250,7 +264,7 @@ internal fun TimelineScrubber(
     range: LongRange,
     tick: Long,
     enabled: Boolean,
-    markers: List<InterventionMarker> = emptyList(),
+    markers: List<Long> = emptyList(),
     onStart: () -> Unit = {},
     onSeek: (Long) -> Unit,
 ) {
@@ -278,8 +292,8 @@ internal fun TimelineScrubber(
     if (markers.isNotEmpty()) {
         val ink = MaterialTheme.colorScheme.tertiary
         Canvas(Modifier.fillMaxWidth().height(7.dp).padding(horizontal = 10.dp)) {
-            for (event in markers) {
-                drawCircle(ink, 2.5.dp.toPx(), Offset(range.fractionAt(event.tick) * size.width, size.height / 2))
+            for (tick in markers) {
+                drawCircle(ink, 2.5.dp.toPx(), Offset(range.fractionAt(tick) * size.width, size.height / 2))
             }
         }
     }
