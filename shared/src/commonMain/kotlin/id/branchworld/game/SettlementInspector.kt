@@ -28,9 +28,11 @@ import id.branchworld.game.ecology.region
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun SettlementInspector(world: SettlementWorld) {
-    Text(stringResource(Res.string.settlement_inspector), style = MaterialTheme.typography.titleSmall,
-        modifier = Modifier.semantics { heading() })
+internal fun SettlementInspector(world: SettlementWorld, showHeading: Boolean = true) {
+    if (showHeading) {
+        Text(stringResource(Res.string.settlement_inspector), style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.semantics { heading() })
+    }
     if (world.sites.isEmpty()) Text(stringResource(Res.string.settlement_searching))
     for (site in world.sites) {
         Text(stringResource(Res.string.settlement_site, site.id, regionName(site.center.region())))

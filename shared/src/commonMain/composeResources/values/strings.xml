@@ -146,7 +146,7 @@
     <string name="other_islands">Other islands</string>
     <string name="island_seed_named">Island %1$s</string>
     <string name="world_journal">World journal</string>
-    <string name="reduced_camera_motion">Reduce camera motion</string>
+    <string name="reduced_camera_motion">Reduce motion</string>
     <string name="restore_grove">Restore grove</string>
     <string name="inspect_story">Inspect</string>
     <string name="world_rain_note">Rain is falling. Watch how the island responds.</string>

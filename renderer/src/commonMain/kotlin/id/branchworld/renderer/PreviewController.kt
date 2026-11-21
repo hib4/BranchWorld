@@ -32,6 +32,7 @@ internal class PreviewController {
     val camera = MutableStateFlow(PreviewCamera())
     val presentation = MutableStateFlow(WorldCamera())
     val aspect = MutableStateFlow(1f)
+    val manualOrbit = MutableStateFlow(0L)
     private val _tracking = MutableStateFlow(false)
     val tracking: Boolean get() = _tracking.value
 
@@ -87,6 +88,7 @@ internal class PreviewController {
 
     fun orbit(dx: Float, dy: Float) {
         focusAnimation?.cancel()
+        manualOrbit.update { it + 1 }
         camera.update { it.orbit(dx, dy) }
     }
 

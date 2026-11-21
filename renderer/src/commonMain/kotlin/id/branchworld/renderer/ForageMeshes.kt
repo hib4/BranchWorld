@@ -12,8 +12,11 @@ import de.fabmax.kool.util.Color
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.simulation.ForagePose
 import id.branchworld.game.simulation.GroundPoint
+import id.branchworld.game.terrain.TerrainMap
+import kotlin.math.cos
+import kotlin.math.sin
 
-internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
+internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<GroundPoint>) {
     private val meshes = ForageKind.entries.associateWith { kind ->
         scene.addColorMesh("$kind forage", instances = MeshInstanceList(InstanceLayouts.ModelMat)) {
             generate {
@@ -78,18 +81,31 @@ internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
     init {
         scene.addColorMesh("Freshwater springs") {
             generate {
-                color = Color(0.19f, 0.64f, 0.89f)
                 for (spring in springs) {
                     val point = cellPosition(spring.x, spring.z, spring.elevationTwice)
-                    cylinder {
-                        radius = 0.081f
-                        height = 0.036f
-                        steps = 12
-                        origin.set(point.x, point.y + 0.018f, point.z)
+                    val count = 11
+                    fun edge(index: Int, size: Float): Vec3f {
+                        val angle = index * 0.57119864f
+                        val radius = size * (0.84f + ((spring.x * 83 + index * 7) and 7) / 24f)
+                        val x = point.x + cos(angle) * radius * 1.2f
+                        val z = point.z + sin(angle) * radius * 0.86f
+                        return Vec3f(x, terrain.heightAt(x, z) + 0.017f, z)
+                    }
+                    color = Color(0.13f, 0.37f, 0.35f)
+                    val pool = vertex(Vec3f(point.x, point.y + 0.020f, point.z), Vec3f.Y_AXIS)
+                    color = Color(0.29f, 0.56f, 0.48f)
+                    val wet = List(count) { vertex(edge(it, 0.108f), Vec3f.Y_AXIS) }
+                    color = Color(0.35f, 0.38f, 0.26f)
+                    val stones = List(count) { vertex(edge(it, 0.157f), Vec3f.Y_AXIS) }
+                    repeat(count) { i ->
+                        val next = (i + 1) % count
+                        addTriIndices(pool, wet[next], wet[i])
+                        addTriIndices(wet[i], wet[next], stones[next])
+                        addTriIndices(wet[i], stones[next], stones[i])
                     }
                 }
             }
-            shader = KslBlinnPhongShader { color { vertexColor() } }
+            shader = KslBlinnPhongShader { color { vertexColor() }; specularStrength(0.13f) }
         }
     }
 

@@ -30,6 +30,7 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -37,6 +38,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -60,6 +62,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
@@ -141,6 +144,7 @@ fun App(
     playSound: ((WorldSound) -> Unit)? = null,
     viewportCamera: (WorldCamera) -> Unit = {},
     playInUnfocusedWindow: Boolean = false,
+    setAmbience: ((WorldAmbience) -> Unit)? = null,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
     var soundEnabled by rememberSaveable { mutableStateOf(true) }
@@ -195,6 +199,13 @@ fun App(
         islands.acknowledgeRestore(restored.tick)
     }
     val playbackState = if (playInUnfocusedWindow) Lifecycle.State.STARTED else Lifecycle.State.RESUMED
+    if (setAmbience != null) {
+        val lifecycleState by lifecycle.currentStateAsState()
+        val sink by rememberUpdatedState(setAmbience)
+        val mix = worldAmbience(soundEnabled, foreground && lifecycleState.isAtLeast(playbackState), pose?.climate)
+        LaunchedEffect(mix) { sink(mix) }
+        DisposableEffect(Unit) { onDispose { sink(WorldAmbience.Silent) } }
+    }
     LaunchedEffect(clock, lifecycle, isWorld, foreground, playbackState) {
         if (clock != null && isWorld && foreground) {
             lifecycle.repeatOnLifecycle(playbackState) {
@@ -213,7 +224,8 @@ fun App(
     if (creatureFocus != null && pose?.creatures?.none { it.id == creatureFocus.id } == true) {
         LaunchedEffect(creatureFocus) { focus = null }
     }
-    SideEffect { viewportCamera(WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest)) }
+    val cameraRequest = WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest)
+    SideEffect { viewportCamera(cameraRequest) }
 
     val showPanel: (WorldPanel?) -> Unit = { destination ->
         if (destination != panel || destination == null) {
@@ -254,8 +266,11 @@ fun App(
             val failed = (load as? IslandLoad.Failed)?.seed == seed
             if (!isWorld) {
                 val veil = listOf(NightGreen.copy(alpha = 0.94f), NightGreen.copy(alpha = 0.52f), Color.Transparent)
-                Box(Modifier.matchParentSize().background(if (wide) Brush.horizontalGradient(0f to veil[0], 0.26f to veil[1], 0.64f to veil[2])
-                    else Brush.verticalGradient(veil.asReversed(), startY = 0f)))
+                Box(Modifier.matchParentSize().background(if (wide) {
+                    Brush.horizontalGradient(0f to veil[0], 0.26f to veil[1], 0.59f to veil[2])
+                } else {
+                    Brush.verticalGradient(0.51f to veil[2], 0.74f to veil[1], 1f to veil[0])
+                }))
                 Column(
                     Modifier.align(if (wide) Alignment.CenterStart else Alignment.BottomStart)
                         .safeContentPadding().widthIn(max = if (wide) 380.dp else 460.dp)
@@ -383,7 +398,9 @@ fun App(
                                     } else {
                                         PanelButton(Res.string.other_islands, storage != SaveStatus.Busy) { showPanel(WorldPanel.Islands) }
                                     }
-                                    if (playSound != null) ToggleSetting(Res.string.world_sounds, soundEnabled) { soundEnabled = it }
+                                    if (playSound != null || setAmbience != null) {
+                                        ToggleSetting(Res.string.world_sounds, soundEnabled) { soundEnabled = it }
+                                    }
                                     ToggleSetting(Res.string.reduced_camera_motion, reducedMotion) { reducedMotion = it }
                                 }
                                 WorldPanel.Islands -> {
@@ -396,7 +413,11 @@ fun App(
                                         }) { Text(label) }
                                     }
                                 }
-                                WorldPanel.Inspect -> session?.let { WorldInspector(it, onCreatureFocus = { id -> requestFocus(WorldCamera.Focus.Creature(id)) }) }
+                                WorldPanel.Inspect -> session?.let {
+                                    WorldInspector(it, compact = !wide, onCreatureFocus = { id ->
+                                        requestFocus(WorldCamera.Focus.Creature(id))
+                                    })
+                                }
                                 WorldPanel.Grove -> session?.let {
                                     GroveControls(it, onRegionFocus = { region -> requestFocus(WorldCamera.Focus.Region(region)) })
                                     PlaybackButton(it)

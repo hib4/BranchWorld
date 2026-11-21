@@ -1,13 +1,36 @@
 package id.branchworld.renderer
 
 import androidx.compose.runtime.MonotonicFrameClock
+import id.branchworld.game.ecology.CreatureAction
+import id.branchworld.game.ecology.Species
+import id.branchworld.game.simulation.CreatureHeading
+import id.branchworld.game.simulation.CreaturePose
+import id.branchworld.game.simulation.GroundPoint
+import id.branchworld.game.terrain.IslandGenerator
+import id.branchworld.game.terrain.PropKind
+import id.branchworld.game.terrain.TerrainKey
+
 import kotlinx.coroutines.runBlocking
+import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class PreviewCameraTest {
+    @Test
+    fun creatureFocusMovesTheInitialCameraOutFromBehindAForegroundTree() {
+        val terrain = IslandGenerator.generate(TerrainKey(104729L))
+        val pine = (0 until terrain.propCount).map(terrain::prop).first { prop ->
+            prop.kind == PropKind.Pine && terrain.cellAt(prop.x, prop.z - 2)?.walkable == true
+        }
+        val cell = checkNotNull(terrain.cellAt(pine.x, pine.z - 2))
+        val deer = CreaturePose(5, Species.Deer, GroundPoint(pine.x, pine.z - 2, cell.elevationTwice),
+            CreatureHeading.PositiveZ, CreatureAction.Idle)
+        val selected = creatureViewYaw(terrain, deer, PreviewCamera(yaw = 0f))
+        assertTrue(abs(selected) >= 0.55f)
+    }
+
     @Test
     fun orbitKeepsTheCameraAwayFromThePoles() {
         val camera = PreviewCamera()

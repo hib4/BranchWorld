@@ -2,6 +2,7 @@ package id.branchworld.game
 
 import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -31,10 +32,11 @@ class DioramaDeviceTest {
         try {
             tap(bounds("Begin story", enabled = true))
             tap(bounds("Pause"))
+            bounds("Play")
             bounds("Focus island")
             assertTrue(findVisible { it.text == "Send bunny left" } == null)
             tap(bounds("Menu"))
-            tap(bounds("Reduce camera motion"))
+            tap(bounds("Reduce motion"))
             tap(bounds("Close"))
 
             val screen = requireNotNull(input.takeScreenshot())
@@ -44,6 +46,9 @@ class DioramaDeviceTest {
             val span = viewport.width() / 7
 
             waitUntil("paused viewport pixels to settle") { difference(viewport, action = {}) < 0.002 }
+            val orbit = firstVisibleOrbit(viewport, start, span)
+            println("BranchWorldInput orbitToVisibleMs=$orbit surface=${viewport.width()}x${viewport.height()}")
+            resetCamera()
             assertTrue("One-finger drag did not orbit", difference(viewport) {
                 gesture(start, start.copy(x = start.x + span))
             } > 0.01)
@@ -113,6 +118,29 @@ class DioramaDeviceTest {
         SystemClock.sleep(500)
     }
 
+    private fun firstVisibleOrbit(region: Rect, start: Point, span: Int): Long {
+        val before = requireNotNull(input.takeScreenshot())
+        try {
+            val end = start.copy(x = start.x + span)
+            val timestamp = SystemClock.uptimeMillis()
+            send(timestamp, MotionEvent.ACTION_DOWN, start)
+            val movement = SystemClock.uptimeMillis()
+            send(timestamp, MotionEvent.ACTION_MOVE, end)
+            send(timestamp, MotionEvent.ACTION_UP, end)
+            repeat(25) {
+                val after = requireNotNull(input.takeScreenshot())
+                try {
+                    if (changedFraction(region, before, after) > 0.01) return SystemClock.uptimeMillis() - movement
+                } finally {
+                    after.recycle()
+                }
+            }
+            error("The camera drag never appeared on the Android display")
+        } finally {
+            before.recycle()
+        }
+    }
+
     private fun difference(region: Rect, action: () -> Unit): Double {
         val before = requireNotNull(input.takeScreenshot())
         try {
@@ -120,25 +148,27 @@ class DioramaDeviceTest {
             SystemClock.sleep(500)
             val after = requireNotNull(input.takeScreenshot())
             try {
-                var changed = 0
-                var samples = 0
-                for (y in region.top until region.bottom step 6) {
-                    for (x in region.left until region.right step 6) {
-                        val a = before.getPixel(x, y)
-                        val b = after.getPixel(x, y)
-                        if (maxOf(channelDelta(a, b, 0), channelDelta(a, b, 8), channelDelta(a, b, 16)) > 8) {
-                            changed++
-                        }
-                        samples++
-                    }
-                }
-                return changed.toDouble() / samples
+                return changedFraction(region, before, after)
             } finally {
                 after.recycle()
             }
         } finally {
             before.recycle()
         }
+    }
+
+    private fun changedFraction(region: Rect, before: Bitmap, after: Bitmap): Double {
+        var changed = 0
+        var samples = 0
+        for (y in region.top until region.bottom step 8) {
+            for (x in region.left until region.right step 8) {
+                val a = before.getPixel(x, y)
+                val b = after.getPixel(x, y)
+                if (maxOf(channelDelta(a, b, 0), channelDelta(a, b, 8), channelDelta(a, b, 16)) > 8) changed++
+                samples++
+            }
+        }
+        return changed.toDouble() / samples
     }
 
     private fun channelDelta(a: Int, b: Int, shift: Int): Int =

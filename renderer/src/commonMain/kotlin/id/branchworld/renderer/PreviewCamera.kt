@@ -1,7 +1,13 @@
 package id.branchworld.renderer
 
+import id.branchworld.game.simulation.CreatureHeading
+import id.branchworld.game.simulation.CreaturePose
+import id.branchworld.game.terrain.PropKind
+import id.branchworld.game.terrain.TerrainMap
+import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.tan
 
 internal data class PreviewCamera(
     val yaw: Float = 0.62f,
@@ -54,5 +60,48 @@ internal fun heroCamera(aspect: Float, opening: Boolean): PreviewCamera {
         camera.copy(distance = distance, targetX = 0.95f * sin(camera.yaw), targetZ = 0.95f * cos(camera.yaw))
     }
 }
+
+/** Pick an initial viewing angle when a creature is framed. Regular orbit takes over afterward. */
+internal fun creatureViewYaw(terrain: TerrainMap, animal: CreaturePose, camera: PreviewCamera): Float {
+    val ground = animal.ground
+    val point = cellPosition(ground.x, ground.z, ground.elevationTwice)
+    val eyeLine = point.y + 0.19f
+    val incline = tan(camera.pitch)
+    val face = when (animal.heading) {
+        CreatureHeading.PositiveZ -> 0f
+        CreatureHeading.PositiveX -> Tau / 4f
+        CreatureHeading.NegativeZ -> Tau / 2f
+        CreatureHeading.NegativeX -> -Tau / 4f
+    }
+    fun penalty(offset: Float): Float {
+        val yaw = camera.yaw + offset
+        val dx = sin(yaw)
+        val dz = cos(yaw)
+        var weight = abs(offset) * 0.29f + (1f - cos(yaw - face - 0.37f)) * 0.13f
+        for (index in 0 until terrain.propCount) {
+            val prop = terrain.prop(index)
+            if (prop.kind != PropKind.Pine) continue
+            val x = (prop.x + 0.5f) * CellSize
+            val z = (prop.z + 0.5f) * CellSize
+            val along = (x - point.x) * dx + (z - point.z) * dz
+            if (along !in 0.07f..2.75f) continue
+            val cross = abs((x - point.x) * dz - (z - point.z) * dx)
+            val scale = prop.scalePercent / 100f
+            val height = eyeLine + along * incline - terrain.heightAt(x, z)
+            if (height in 0f..(1.03f * scale) && cross < 0.25f * scale) {
+                weight += 1.5f + (1f - cross / (0.25f * scale))
+            }
+        }
+        for (step in 1..6) {
+            val along = step * 0.26f
+            val groundHeight = terrain.heightAt(point.x + dx * along, point.z + dz * along)
+            if (groundHeight > eyeLine + along * incline) weight += 1.8f
+        }
+        return weight
+    }
+    return camera.yaw + CreatureViewOffsets.minBy(::penalty)
+}
+
+private val CreatureViewOffsets = floatArrayOf(0f, -0.55f, 0.55f, -1.10f, 1.10f, -1.75f, 1.75f, -2.4f, 2.4f)
 
 private const val Tau = 6.2831855f

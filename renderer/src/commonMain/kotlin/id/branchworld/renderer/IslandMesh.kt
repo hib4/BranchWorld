@@ -11,6 +11,7 @@ import de.fabmax.kool.util.Color
 import kotlin.math.sin
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.roundToInt
 import id.branchworld.game.terrain.Biome
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.TerrainMap.Companion.MaxCell
@@ -44,11 +45,7 @@ internal fun TerrainMap.facets(chunkX: Int, chunkZ: Int): List<TerrainFacet> = b
     }
 }
 
-internal fun Scene.addIsland(terrain: TerrainMap) {
-    val groundShader = KslBlinnPhongShader {
-        color { vertexColor() }
-        specularStrength(0.035f)
-    }
+internal fun Scene.addIsland(terrain: TerrainMap, water: CoastalWater, groundShader: KslBlinnPhongShader) {
     for (chunkZ in MinCell..MaxCell step ChunkSize) {
         for (chunkX in MinCell..MaxCell step ChunkSize) {
             val faces = terrain.facets(chunkX, chunkZ)
@@ -56,15 +53,29 @@ internal fun Scene.addIsland(terrain: TerrainMap) {
             addColorMesh("Terrain $chunkX,$chunkZ") {
                 generate {
                     for (face in faces) {
-                        val source = face.biome.palette()
-                        val patch = sin(face.a.x * 2.8f + face.a.z * 1.8f) * cos(face.a.z * 3.3f)
-                        val grain = sin(face.b.x * 41f + face.b.z * 35f) * 0.028f
-                        val tone = 1f + patch * 0.12f + grain
-                        color = Color(source.r * tone, source.g * tone, source.b * tone)
                         val normal = face.normal()
-                        val a = vertex(face.a, normal)
-                        val b = vertex(face.b, normal)
-                        val c = vertex(face.c, normal)
+                        fun painted(p: Vec3f): Int {
+                            val drift = 0.5f + sin(p.x * 2.8f + p.z * 1.8f) * cos(p.z * 2.4f) * 0.5f
+                            val detail = sin(p.x * 17f - p.z * 22f) * 0.025f
+                            val x = (p.x / CellSize).roundToInt()
+                            val z = (p.z / CellSize).roundToInt()
+                            var total = 0
+                            var source = face.biome.palette()
+                            for (neighborZ in z - 1..z) {
+                                for (neighborX in x - 1..x) {
+                                    val biome = terrain.cellAt(neighborX, neighborZ)?.biome ?: continue
+                                    if (biome == Biome.Water) continue
+                                    val neighbor = biome.palette().mix(biome.accent(), drift * 0.64f)
+                                    source = source.mix(neighbor, 1f / ++total)
+                                }
+                            }
+                            val tone = 0.91f + (normal.y * 0.08f) + detail
+                            color = Color(source.r * tone, source.g * tone, source.b * tone)
+                            return vertex(p, normal)
+                        }
+                        val a = painted(face.a)
+                        val b = painted(face.b)
+                        val c = painted(face.c)
                         addTriIndices(a, b, c)
                     }
                 }
@@ -73,25 +84,24 @@ internal fun Scene.addIsland(terrain: TerrainMap) {
         }
     }
 
-    addWater(terrain)
+    addWater(terrain, water)
 }
 
-private fun Scene.addWater(terrain: TerrainMap) {
+private fun Scene.addWater(terrain: TerrainMap, water: CoastalWater) {
     addColorMesh("Coastal water") {
         generate {
-            val interior = (MinCell..TerrainMap.MaxCorner step 2).map { it * CellSize }
+            val interior = (MinCell..TerrainMap.MaxCorner).map { it * CellSize }
             val coordinates = listOf(-72f, -24f, -10f, -6.5f) + interior + listOf(6.5f, 10f, 24f, 72f)
             val vertices = coordinates.map { z ->
                 coordinates.map { x ->
-                    val cellX = (x / CellSize).toInt()
-                    val cellZ = (z / CellSize).toInt()
+                    val cellX = (x / CellSize).roundToInt()
+                    val cellZ = (z / CellSize).roundToInt()
                     val h = if (cellX in MinCell..TerrainMap.MaxCorner && cellZ in MinCell..TerrainMap.MaxCorner) {
                         terrain.cornerElevation(cellX, cellZ)
                     } else TerrainMap.MinElevation
-                    val shallows = ((h + 17f) / 18f).coerceIn(0f, 1f)
-                    val variation = sin(x * 3.4f + z * 1.6f) * cos(z * 4.6f) * 0.017f
-                    color = Color(0.15f + shallows * 0.32f + variation, 0.40f + shallows * 0.31f + variation,
-                        0.47f + shallows * 0.18f + variation)
+                    val shallows = ((h + 18f) / 18f).coerceIn(0f, 1f)
+                    color = Color(0.081f + shallows * 0.26f, 0.31f + shallows * 0.35f,
+                        0.39f + shallows * 0.19f, shallows)
                     vertex(Vec3f(x, SeaLevel, z), Vec3f.Y_AXIS)
                 }
             }
@@ -106,32 +116,8 @@ private fun Scene.addWater(terrain: TerrainMap) {
                 }
             }
         }
-        shader = KslUnlitShader { color { vertexColor() } }
+        shader = water
     }
-}
-
-internal fun Scene.addWavelets(terrain: TerrainMap) = addColorMesh("Shore ripples") {
-    generate {
-        for (z in MinCell + 2 until MaxCell - 2) {
-            for (x in MinCell + 2 until MaxCell - 2) {
-                val cell = terrain.cellAt(x, z) ?: continue
-                val pattern = (x * 37 + z * 19) and 31
-                if (cell.biome != Biome.Water || cell.elevationTwice !in -35..-3 || pattern > 2) continue
-                val p = cellPosition(x, z, 0)
-                val length = 0.12f + pattern * 0.038f
-                val y = SeaLevel + 0.008f
-                color = Color(0.79f, 0.92f, 0.80f, 0f)
-                val a = vertex(Vec3f(p.x - length, y, p.z - 0.022f), Vec3f.Y_AXIS)
-                val d = vertex(Vec3f(p.x + length, y, p.z + 0.018f), Vec3f.Y_AXIS)
-                color = Color(0.84f, 0.96f, 0.86f, 0.36f)
-                val b = vertex(Vec3f(p.x, y, p.z - 0.015f), Vec3f.Y_AXIS)
-                val c = vertex(Vec3f(p.x + 0.026f, y, p.z + 0.016f), Vec3f.Y_AXIS)
-                addTriIndices(a, c, b)
-                addTriIndices(b, c, d)
-            }
-        }
-    }
-    shader = translucentSurface()
 }
 
 internal fun Scene.addRegionHighlight(terrain: TerrainMap, region: Int) =
@@ -164,7 +150,15 @@ internal fun translucentSurface() = KslUnlitShader {
 private fun Biome.palette() = when (this) {
     Biome.Water -> Color(0.12f, 0.46f, 0.53f)
     Biome.Beach -> Color(0.76f, 0.64f, 0.41f)
-    Biome.Meadow -> Color(0.43f, 0.59f, 0.25f)
-    Biome.PineForest -> Color(0.22f, 0.41f, 0.27f)
-    Biome.RockyUpland -> Color(0.49f, 0.48f, 0.39f)
+    Biome.Meadow -> Color(0.32f, 0.51f, 0.20f)
+    Biome.PineForest -> Color(0.19f, 0.34f, 0.21f)
+    Biome.RockyUpland -> Color(0.42f, 0.41f, 0.33f)
+}
+
+private fun Biome.accent() = when (this) {
+    Biome.Water -> Color(0.14f, 0.49f, 0.53f)
+    Biome.Beach -> Color(0.80f, 0.70f, 0.48f)
+    Biome.Meadow -> Color(0.54f, 0.62f, 0.27f)
+    Biome.PineForest -> Color(0.34f, 0.44f, 0.23f)
+    Biome.RockyUpland -> Color(0.52f, 0.48f, 0.36f)
 }

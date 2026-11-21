@@ -21,8 +21,6 @@ import org.jetbrains.skia.ColorType
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 import kotlin.math.roundToInt
-import kotlin.time.TimeMark
-import kotlin.time.TimeSource
 
 internal class DesktopFrameOutput(private val controller: PreviewController) : DioramaOutput {
     val frame = MutableStateFlow<ImageBitmap?>(null)
@@ -63,14 +61,16 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
         val size = requestedSize.value
         if (size.x != current.pass.width || size.y != current.pass.height) {
             current.pass.setSize(size.x, size.y)
+            current.resizeRevision++
         }
         if (!current.texture.isLoaded || current.readback?.isActive == true || current.failed) return
-        if (current.lastReadback?.elapsedNow()?.inWholeMilliseconds?.let { it < 32 } == true) return
-        current.lastReadback = TimeSource.Monotonic.markNow()
+        val resizeRevision = current.resizeRevision
         current.readback = current.scene.coroutineScope.launch {
             try {
                 val pixels = current.texture.download()
-                if (target !== current) return@launch
+                if (target !== current || !controller.foreground.value || requestedSize.value != size ||
+                    resizeRevision != current.resizeRevision || pixels.width != size.x || pixels.height != size.y
+                ) return@launch
                 val bytes = ByteArray(pixels.width * pixels.height * 4)
                 (pixels.data as Uint8Buffer).useRaw { it.duplicate().clear().get(bytes) }
                 // The scene fills the viewport. Vulkan blend pipelines can leave translucent
@@ -107,7 +107,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
         var readback: Job? = null
         var failed = false
         var reported = false
-        var lastReadback: TimeMark? = null
+        var resizeRevision = 0
         val timing = FrameTiming("compose")
     }
 }

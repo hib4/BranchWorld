@@ -57,9 +57,9 @@ BranchWorld opens on **The Fading Grove**, the live scene for seed `104729`. Cho
 | --- | --- | --- |
 | Orbit | Drag one finger | Drag the primary mouse button or focus the viewport and use the arrow keys |
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
-| Zoom | Pinch | Scroll |
+| Zoom | Pinch | Scroll or press `+` and `-` in the focused viewport |
 
-Use **Focus island** to return to the opening overview. **Inspect** lets you select and follow a creature or check on a settlement. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
+Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. **Inspect** lets you select and follow a creature or check on a settlement. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
 
 **Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** on the opening screen restores the world in a paused state. Older saves retain their original rules, and an existing single-island save opens as **Main** at its saved tick.
 
@@ -89,5 +89,7 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 | KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future inhabitants. |
 | KayKit Character Animations (`characters/kaykit-character-animations`) | 14 GLB and 14 FBX animation files plus two mannequin variants in each format. | Separate Rig Medium and Rig Large motion clips. Candidate motion library for compatible characters. |
 | Kenney Interface Sounds (`audio/kenney-interface-sounds`) | 100 OGG audio files. | Two clips are bundled as small mono WAVs for fork and save feedback. |
+
+The runtime tree set uses Kenney Nature’s `tree_pineRoundA`, `tree_pineRoundB`, and `tree_pineTallA_detailed`, with in-engine matte materials and normalized ground pivots. The original BranchWorld surf, wind, rain, and bird layers can be regenerated with `python3 assets/audio/branchworld/generate_coast.py`. World Sounds controls the ambience and interaction cues. Reduce Motion holds decorative effects and camera transitions while keeping weather and lighting visible.
 
 Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on Android and Desktop.

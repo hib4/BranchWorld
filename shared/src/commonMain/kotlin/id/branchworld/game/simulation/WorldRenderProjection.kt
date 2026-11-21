@@ -50,7 +50,13 @@ data class ForagePose(
     val planted: Boolean = false,
 )
 
-data class ClimatePose(val day: Long, val isDaylight: Boolean, val weather: Weather, val daylight: Float)
+data class ClimatePose(
+    val day: Long,
+    val isDaylight: Boolean,
+    val weather: Weather,
+    val daylight: Float,
+    val dayPhase: Float = 0f,
+)
 
 data class EcologyReadout(
     val rabbits: Int,
@@ -98,12 +104,7 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         ledger.births,
         ledger.deaths,
     ),
-    climate = environment?.let {
-        val phase = tick % DayLength
-        val daylight = minOf((phase + 60f) / 120f, (660f - phase) / 120f).coerceIn(0f, 1f)
-        val dawn = ((phase - 1140f) / 120f).coerceIn(0f, 0.5f)
-        ClimatePose(tick / DayLength + 1, phase < DayLength / 2, it.weather, maxOf(daylight, dawn))
-    },
+    climate = environment?.let { climatePose(tick, it.weather) },
     settlements = settlements?.sites?.map { site ->
         SettlementPose(
             site.id,
@@ -113,6 +114,14 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         )
     },
 )
+
+internal fun climatePose(tick: Long, weather: Weather): ClimatePose {
+    val phase = tick % DayLength
+    val daylight = minOf((phase + 60f) / 120f, (660f - phase) / 120f).coerceIn(0f, 1f)
+    val dawn = ((phase - 1140f) / 120f).coerceIn(0f, 0.5f)
+    return ClimatePose(tick / DayLength + 1, phase < DayLength / 2, weather,
+        maxOf(daylight, dawn), phase.toFloat() / DayLength)
+}
 
 private fun GridCell.project(terrain: TerrainMap?) =
     GroundPoint(x, z, terrain?.terrainCell(this)?.elevationTwice ?: 0)

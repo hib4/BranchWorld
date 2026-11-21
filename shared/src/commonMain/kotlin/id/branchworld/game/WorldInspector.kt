@@ -55,6 +55,7 @@ import branchworld.shared.generated.resources.reforest_region
 import branchworld.shared.generated.resources.regional_ecology
 import branchworld.shared.generated.resources.region_details
 import branchworld.shared.generated.resources.region_instructions
+import branchworld.shared.generated.resources.settlement_inspector
 import branchworld.shared.generated.resources.species_deer
 import branchworld.shared.generated.resources.species_rabbit
 import branchworld.shared.generated.resources.supplement_applied
@@ -67,15 +68,24 @@ import id.branchworld.game.ecology.Species
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun WorldInspector(island: IslandLoad.Ready, onCreatureFocus: (Long) -> Unit) {
+internal fun WorldInspector(island: IslandLoad.Ready, compact: Boolean, onCreatureFocus: (Long) -> Unit) {
     var regionsOpen by rememberSaveable { mutableStateOf(false) }
+    var settlementsOpen by rememberSaveable { mutableStateOf(false) }
     val pose by island.clock.render.collectAsStateWithLifecycle()
     val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
+    val settlements = island.clock.state.settlements
     key(pose.branchId) { CreatureInspector(creatures, onCreatureFocus) }
     HorizontalDivider()
-    island.clock.state.settlements?.let { SettlementInspector(it) }
-    FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
-        label = { Text(stringResource(Res.string.regional_ecology)) })
+    if (!compact && settlements != null) SettlementInspector(settlements)
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (compact && settlements != null) {
+            FilterChip(selected = settlementsOpen, onClick = { settlementsOpen = !settlementsOpen },
+                label = { Text(stringResource(Res.string.settlement_inspector)) })
+        }
+        FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
+            label = { Text(stringResource(Res.string.regional_ecology)) })
+    }
+    if (compact && settlements != null && settlementsOpen) SettlementInspector(settlements, showHeading = false)
     if (regionsOpen) RegionalControls(island)
 }
 

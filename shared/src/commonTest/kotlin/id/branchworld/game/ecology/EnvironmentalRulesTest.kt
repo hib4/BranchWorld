@@ -61,7 +61,12 @@ class EnvironmentalRulesTest {
         assertTrue(rainEnd - 300 in 240..360)
         assertEquals(Weather.Dry, live.advanceTo(rainEnd).environment?.weather)
         assertFalse(live.advanceTo(900).renderProjection(terrain).climate!!.isDaylight)
-        assertTrue(live.advanceTo(1200).renderProjection(terrain).climate!!.isDaylight)
+        val last = assertNotNull(live.advanceTo(1199).renderProjection(terrain).climate)
+        val next = assertNotNull(live.advanceTo(1200).renderProjection(terrain).climate)
+        assertEquals(1199f / 1200f, last.dayPhase)
+        assertEquals(0f, next.dayPhase)
+        assertEquals(last.day + 1, next.day)
+        assertTrue(next.isDaylight)
 
         val patch = dry.patches.first().copy(biomass = 20)
         val control = dry.copy(patches = listOf(patch), creatures = emptyList())

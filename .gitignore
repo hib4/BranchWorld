@@ -21,4 +21,7 @@ node_modules/
 .agents/
 skills-lock.json
 
-/assets/
+/assets/*
+!/assets/audio/
+/assets/audio/*
+!/assets/audio/branchworld/

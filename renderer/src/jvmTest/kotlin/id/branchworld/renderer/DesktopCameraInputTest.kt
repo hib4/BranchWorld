@@ -4,11 +4,15 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.MouseButton
+import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runComposeUiTest
 import androidx.compose.ui.unit.dp
 import kotlin.test.Test
@@ -17,6 +21,37 @@ import kotlin.test.assertNotEquals
 
 @OptIn(ExperimentalTestApi::class)
 class DesktopCameraInputTest {
+    @Test
+    fun focusedViewportHandlesKeyboardOrbitPanZoomAndReset() = runComposeUiTest {
+        val controller = PreviewController()
+        setContent {
+            Box(Modifier.size(160.dp).testTag("viewport").desktopCameraInput(controller))
+        }
+        val viewport = onNodeWithTag("viewport")
+        viewport.performMouseInput {
+            moveTo(center)
+            press(MouseButton.Primary)
+            release(MouseButton.Primary)
+        }
+        viewport.assertIsFocused()
+        viewport.performKeyInput { pressKey(Key.DirectionLeft) }
+        val orbit = controller.camera.value
+        assertNotEquals(PreviewCamera().yaw, orbit.yaw)
+        viewport.performKeyInput {
+            keyDown(Key.ShiftLeft)
+            pressKey(Key.DirectionUp)
+            keyUp(Key.ShiftLeft)
+            pressKey(Key.Equals)
+        }
+        val zoomed = controller.camera.value
+        assertEquals(orbit.yaw, zoomed.yaw)
+        assertNotEquals(orbit.targetZ, zoomed.targetZ)
+        assertNotEquals(orbit.distance, zoomed.distance)
+        viewport.performKeyInput { pressKey(Key.MoveHome) }
+        waitForIdle()
+        assertEquals(PreviewCamera(), controller.camera.value)
+    }
+
     @Test
     fun primaryAndSecondaryMouseDragsReachTheCamera() = runComposeUiTest {
         val controller = PreviewController()

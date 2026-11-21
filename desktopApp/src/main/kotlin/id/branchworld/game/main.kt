@@ -31,6 +31,7 @@ fun main() {
                 playInUnfocusedWindow = true,
                 saveStore = saveStore,
                 playSound = sounds::play,
+                setAmbience = sounds::setAmbience,
             )
         }
     }

@@ -4,6 +4,7 @@ import de.fabmax.kool.math.MutableVec3f
 import de.fabmax.kool.math.Vec3f
 import de.fabmax.kool.modules.ksl.KslBlinnPhongShader
 import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.scene.Mesh
 import de.fabmax.kool.scene.addColorMesh
 import de.fabmax.kool.util.Color
 import id.branchworld.game.terrain.Biome
@@ -16,7 +17,7 @@ import kotlin.math.floor
 import kotlin.math.sin
 
 /** Small decorative forms use only the recorded geography and never affect creature paths. */
-internal fun Scene.addLandscapeDetails(terrain: TerrainMap) {
+internal fun Scene.addLandscapeDetails(terrain: TerrainMap, wind: MeadowWind): Mesh<*> {
     val slate = Color(0.40f, 0.44f, 0.37f)
     val sandstone = Color(0.58f, 0.54f, 0.43f)
     val moss = Color(0.31f, 0.40f, 0.24f)
@@ -81,18 +82,19 @@ internal fun Scene.addLandscapeDetails(terrain: TerrainMap) {
         generate {
             for (index in 0 until terrain.propCount) {
                 val prop = terrain.prop(index)
-                if (prop.kind != PropKind.Pine) continue
+                if (prop.kind != PropKind.Pine && prop.kind != PropKind.Rock) continue
                 val scale = prop.scalePercent / 100f
-                val x = (prop.x + 0.5f) * CellSize + 0.12f * scale
-                val z = (prop.z + 0.5f) * CellSize + 0.14f * scale
-                val radius = 0.28f * scale
-                color = Color(0.06f, 0.14f, 0.13f, 0.27f)
+                val pine = prop.kind == PropKind.Pine
+                val x = (prop.x + 0.5f) * CellSize + (if (pine) 0.24f else 0.09f) * scale
+                val z = (prop.z + 0.5f) * CellSize + (if (pine) 0.23f else 0.09f) * scale
+                val radius = (if (pine) 0.34f else 0.23f) * scale
+                color = Color(0.054f, 0.096f, 0.089f, if (pine) 0.39f else 0.27f)
                 val center = vertex(Vec3f(x, terrain.heightAt(x, z) + 0.013f, z), Vec3f.Y_AXIS)
                 color = Color(0.06f, 0.14f, 0.13f, 0f)
                 val edge = List(10) { step ->
                     val angle = step * 0.62831855f
                     val px = x + cos(angle) * radius
-                    val pz = z + sin(angle) * radius * 1.24f
+                    val pz = z + sin(angle) * radius * 1.44f
                     vertex(Vec3f(px, terrain.heightAt(px, pz) + 0.016f, pz), Vec3f.Y_AXIS)
                 }
                 edge.indices.forEach { step -> addTriIndices(center, edge[(step + 1) % edge.size], edge[step]) }
@@ -100,9 +102,34 @@ internal fun Scene.addLandscapeDetails(terrain: TerrainMap) {
         }
         shader = translucentSurface()
     }
+    return addColorMesh("Wind in the meadow") {
+        generate {
+            for (z in MinCell..MaxCell) {
+                for (x in MinCell..MaxCell) {
+                    val cell = terrain.cellAt(x, z) ?: continue
+                    if ((cell.biome != Biome.Meadow && cell.biome != Biome.PineForest) || !cell.walkable) continue
+                    val pattern = (x * 6971 xor z * 2887) and 255
+                    if (pattern > 57 || sin(x * 0.29f) * cos(z * 0.35f) < -0.38f) continue
+                    for (blade in 0..3) {
+                        val px = (x + 0.32f + blade * 0.13f) * CellSize
+                        val pz = (z + 0.44f + (blade * 3 % 4) * 0.12f) * CellSize
+                        val root = terrain.heightAt(px, pz) - 0.006f
+                        val h = 0.049f + ((pattern + blade * 11) % 9) * 0.010f
+                        color = Color(0.25f, 0.36f, 0.15f, 0f)
+                        val base = vertex(Vec3f(px, root, pz), Vec3f.Y_AXIS)
+                        val edge = vertex(Vec3f(px + 0.017f, root, pz + 0.012f), Vec3f.Y_AXIS)
+                        color = if (pattern < 11) Color(0.68f, 0.64f, 0.29f) else Color(0.41f, 0.57f, 0.24f)
+                        val tip = vertex(Vec3f(px + 0.024f, root + h, pz - 0.013f), Vec3f.Y_AXIS)
+                        addTriIndices(base, edge, tip)
+                    }
+                }
+            }
+        }
+        shader = wind
+    }
 }
 
-private fun TerrainMap.heightAt(x: Float, z: Float): Float {
+internal fun TerrainMap.heightAt(x: Float, z: Float): Float {
     val cellX = floor(x / CellSize).toInt().coerceIn(MinCell, MaxCell)
     val cellZ = floor(z / CellSize).toInt().coerceIn(MinCell, MaxCell)
     val fx = (x / CellSize - cellX).coerceIn(0f, 1f)

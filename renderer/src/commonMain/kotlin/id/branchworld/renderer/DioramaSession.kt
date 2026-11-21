@@ -4,9 +4,13 @@ import de.fabmax.kool.Assets
 import de.fabmax.kool.KoolContext
 import de.fabmax.kool.math.MutableMat4f
 import de.fabmax.kool.math.Vec3f
+import de.fabmax.kool.math.Vec2f
+import de.fabmax.kool.math.Vec4f
 import de.fabmax.kool.math.deg
 import de.fabmax.kool.modules.gltf.GltfLoadConfig
 import de.fabmax.kool.modules.gltf.loadGltfFile
+import de.fabmax.kool.modules.ksl.KslBlinnPhongShader
+import de.fabmax.kool.modules.ksl.KslPbrShader
 import de.fabmax.kool.pipeline.ClearColorFill
 import de.fabmax.kool.pipeline.backend.stats.BackendStats
 import de.fabmax.kool.scene.Model
@@ -14,11 +18,11 @@ import de.fabmax.kool.scene.Node
 import de.fabmax.kool.scene.PerspectiveCamera
 import de.fabmax.kool.scene.addColorMesh
 import de.fabmax.kool.scene.InstanceLayouts
+import de.fabmax.kool.scene.Light
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
-import id.branchworld.game.ecology.Weather
 import id.branchworld.game.simulation.ClimatePose
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
@@ -47,10 +51,19 @@ internal class DioramaSession(
     private var forage: ForageMeshes? = null
     private var previousRegion: Int? = null
     private var highlight: Node? = null
-    private var waves: Node? = null
+    private var water: CoastalWater? = null
+    private var wind: MeadowWind? = null
+    private var ground: KslBlinnPhongShader? = null
+    private var canopy = emptyList<KslPbrShader>()
+    private var fineGrass: Node? = null
     private var rain: Node? = null
+    private var localDetails: LocalDetails? = null
+    private var light = coastalLight(null, false)
     private var previousClimate: ClimatePose? = null
     private var previousOpening = false
+    private var creatureFocusRevision: Int? = null
+    private var creatureFocusOrbit = 0L
+    private var creatureFocusYaw: Float? = null
     private var propModels = emptyList<Model>()
     private var settlements: SettlementModels? = null
     private var assetFrame = -1
@@ -78,7 +91,8 @@ internal class DioramaSession(
         val current = scene ?: buildScene(world.terrain).also {
             scene = it
             renderedWorld = world
-            forage = ForageMeshes(it, world.poses.value.springs)
+            forage = ForageMeshes(it, world.terrain, world.poses.value.springs)
+            localDetails = LocalDetails(it, world.terrain)
             controller.status.value = "Loading island…"
             output?.attach(it)
             context.addScene(it)
@@ -89,6 +103,10 @@ internal class DioramaSession(
         val request = controller.presentation.value
         val snapshot = world.poses.value
         val focus = request.focus
+        if (focus !is WorldCamera.Focus.Creature) {
+            creatureFocusRevision = null
+            creatureFocusYaw = null
+        }
         val region = (focus as? WorldCamera.Focus.Region)?.index?.takeIf { it in 0..15 }
         if (region != previousRegion) {
             highlight?.let {
@@ -102,9 +120,17 @@ internal class DioramaSession(
             val previous = controller.camera.value
             val narrow = controller.aspect.value < 0.8f
             val target = when (focus) {
-                is WorldCamera.Focus.Creature -> snapshot.creatures.firstOrNull { it.id == focus.id }?.ground?.let {
-                    val center = cellPosition(it.x, it.z, it.elevationTwice)
-                    previous.copy(targetX = center.x, targetY = center.y + if (narrow) -0.65f else 0.19f,
+                is WorldCamera.Focus.Creature -> snapshot.creatures.firstOrNull { it.id == focus.id }?.let { animal ->
+                    val orbit = controller.manualOrbit.value
+                    if (creatureFocusRevision != request.focusRequest) {
+                        creatureFocusRevision = request.focusRequest
+                        creatureFocusOrbit = orbit
+                        creatureFocusYaw = creatureViewYaw(world.terrain, animal, previous)
+                    } else if (creatureFocusOrbit != orbit) creatureFocusYaw = null
+                    val ground = animal.ground
+                    val center = cellPosition(ground.x, ground.z, ground.elevationTwice)
+                    previous.copy(yaw = creatureFocusYaw ?: previous.yaw,
+                        targetX = center.x, targetY = center.y + if (narrow) -0.65f else 0.19f,
                         targetZ = center.z, distance = if (narrow) 4.4f else 3.4f)
                 }
                 is WorldCamera.Focus.Region -> region?.let {
@@ -131,19 +157,32 @@ internal class DioramaSession(
         )
         val wildlife = creatures
         val time = if (request.reducedMotion) 0f else Time.gameTime.toFloat()
-        waves?.transform?.setIdentity()?.translate(0.042f * sin(time * 1.5f), 0f, 0.024f * cos(time * 1.1f))
-        rain?.apply {
-            isVisible = snapshot.climate?.weather == Weather.Rain && !request.reducedMotion
-            if (isVisible) transform.setIdentity().translate(0f, -(time * 2.1f) % 1.7f, 0f)
-        }
-        if (snapshot.climate != previousClimate || request.opening != previousOpening) {
-            snapshot.climate?.let { current.showClimate(it, request.opening) }
+        if (snapshot.climate != previousClimate || request.opening != previousOpening || assetFrame < 0) {
+            val nextLight = coastalLight(snapshot.climate, request.opening)
+            if (light != nextLight) {
+                light = nextLight
+                current.showLight(nextLight)
+            }
             previousClimate = snapshot.climate
             previousOpening = request.opening
         }
-        wildlife?.show(snapshot)
+        water?.time = time
+        wind?.apply {
+            this.time = time
+            amplitude = if (request.reducedMotion) 0f else if (light.rain) 0.057f else 0.026f
+        }
+        val canopyWind = Vec2f(time, if (request.reducedMotion) 0f else if (light.rain) 0.045f else 0.019f)
+        for (shader in canopy) shader.uniform2f("uPineWind").set(canopyWind)
+        // The fine blades are subpixel at survey height on a smaller render budget.
+        fineGrass?.isVisible = output != null || pose.distance < 12.4f
+        rain?.apply {
+            isVisible = light.rain && !request.reducedMotion
+            if (isVisible) transform.setIdentity().translate(0f, -(time * 3.6f) % 1.7f, 0f)
+        }
+        wildlife?.show(snapshot, request.reducedMotion)
         settlements?.show(snapshot.settlements.orEmpty())
         forage?.show(snapshot.forage)
+        localDetails?.show(snapshot, light, time, request.reducedMotion)
         output?.update()
         if (wildlife != null && wildlife.ready && settlements?.ready != false &&
             propModels.all { model -> model.textures.values.all { it.isLoaded } }
@@ -169,10 +208,17 @@ internal class DioramaSession(
         creatures = null
         forage = null
         previousClimate = null
+        creatureFocusRevision = null
+        creatureFocusYaw = null
         previousRegion = null
         highlight = null
-        waves = null
+        water = null
+        wind = null
+        ground = null
+        canopy = emptyList()
+        fineGrass = null
         rain = null
+        localDetails = null
         propModels = emptyList()
         settlements = null
         assetFrame = -1
@@ -190,33 +236,46 @@ internal class DioramaSession(
         mainRenderPass.clearColor = ClearColorFill(Color(0.18f, 0.41f, 0.47f))
         camera.setClipRange(0.1f, 90f)
         (camera as? PerspectiveCamera)?.fovY = 47f.deg
-        lighting.singleDirectionalLight {
-            setup(Vec3f(-0.55f, -1.4f, -0.9f)).setColor(Color(1f, 0.91f, 0.73f), 1.25f)
-        }
-        lighting.addDirectionalLight {
-            setup(Vec3f(0.6f, -0.72f, 1f)).setColor(Color(0.72f, 0.88f, 1f), 0.56f)
-        }
-        addIsland(terrain)
-        addLandscapeDetails(terrain)
-        waves = addWavelets(terrain)
+        lighting.singleDirectionalLight { setup(Vec3f(-0.55f, -1.4f, -0.9f)) }
+        lighting.addDirectionalLight { setup(Vec3f(0.6f, -0.72f, 1f)) }
+        val waterMaterial = CoastalWater().also { water = it }
+        val meadowMaterial = MeadowWind().also { wind = it }
+        val groundMaterial = KslBlinnPhongShader {
+            color { vertexColor() }
+            specularStrength(0.035f)
+            modelCustomizer = { coastalHaze() }
+        }.also { ground = it }
+        light = coastalLight(null, false)
+        showLight(light)
+        addIsland(terrain, waterMaterial, groundMaterial)
+        fineGrass = addLandscapeDetails(terrain, meadowMaterial)
         rain = addRain()
         onRelease { println("BranchWorldRenderer sceneReleased") }
     }
 
-    private fun Scene.showClimate(climate: ClimatePose, opening: Boolean) {
-        val rain = climate.weather == Weather.Rain
-        val daylight = if (opening && climate.isDaylight && !rain) maxOf(0.85f, climate.daylight) else climate.daylight
-        val key = if (rain) Color(0.75f, 0.86f, 1f) else Color(1f, 0.94f, 0.77f)
-        val ambient = Color(0.68f, 0.82f, 1f)
-        lighting.lights[0].setColor(key, 0.19f + daylight * if (rain) 0.74f else 1.02f)
-        lighting.lights[1].setColor(ambient, 0.46f + daylight * 0.08f)
+    private fun Scene.showLight(light: CoastalLight) {
+        (lighting.lights[0] as Light.Directional).setup(light.direction).setColor(light.lightColor, light.strength)
+        lighting.lights[1].setColor(light.fillColor, light.fill)
+        water?.apply {
+            haze = light.haze
+            atmosphere = Vec4f(light.sun, light.twilight, if (light.rain) 1f else 0f, 0f)
+        }
+        wind?.tint = Color(0.56f, 0.63f, 0.70f).mix(Color(1.08f, 1.02f, 0.85f), light.sun)
+        updateLandHaze(light)
+    }
+
+    private fun updateLandHaze(light: CoastalLight) {
+        val haze = light.haze
+        val mist = Vec4f(haze.r * haze.r, haze.g * haze.g, haze.b * haze.b, if (light.rain) 0.49f else 0.31f)
+        ground?.uniform4f("uLandHaze")?.set(mist)
+        for (shader in canopy) shader.uniform4f("uLandHaze").set(mist)
     }
 
     private fun Scene.addRain() = addColorMesh("Light rain") {
         isVisible = false
         generate {
-            color = Color(0.73f, 0.86f, 1f, 0.37f)
-            repeat(220) { index ->
+            color = Color(0.71f, 0.83f, 0.95f, 0.22f)
+            repeat(if (output == null) 136 else 196) { index ->
                 // Repeat the same field vertically so moving it by one layer loops cleanly.
                 val x = ((index * 83) % 521) / 43f - 6f
                 val z = ((index * 197) % 491) / 41f - 6f
@@ -224,8 +283,8 @@ internal class DioramaSession(
                 for (layer in 0..3) {
                     val y = height + layer * 1.7f
                     val a = vertex(Vec3f(x, y, z), Vec3f.Z_AXIS)
-                    val b = vertex(Vec3f(x + 0.011f, y, z), Vec3f.Z_AXIS)
-                    val c = vertex(Vec3f(x + 0.053f, y + 0.18f, z + 0.018f), Vec3f.Z_AXIS)
+                    val b = vertex(Vec3f(x + 0.014f, y, z), Vec3f.Z_AXIS)
+                    val c = vertex(Vec3f(x + 0.047f, y + 0.19f, z + 0.018f), Vec3f.Z_AXIS)
                     addTriIndices(a, b, c)
                 }
             }
@@ -235,16 +294,18 @@ internal class DioramaSession(
 
     private suspend fun loadModels(target: Scene, world: WorldRenderSource) {
         try {
-            propModels = listOfNotNull(
-                target.placeInstances(world.terrain, PropKind.Pine, DioramaAsset.Pine, 0.66f),
-            )
+            propModels = PineVariants.mapNotNull { variant -> target.placePines(world.terrain, variant) }
+            canopy = propModels.flatMap { model -> model.meshes.values.mapNotNull { it.shader as? KslPbrShader } }
+            updateLandHaze(light)
             val assets = loadCreatureAssets()
             val towns = if (world.poses.value.settlements != null) SettlementModels.load(target) else null
             if (scene !== target || !currentCoroutineContext().isActive) {
                 throw CancellationException("The island scene was replaced while loading wildlife")
             }
             settlements = towns
-            creatures = CreatureModels(target, assets).also { it.show(world.poses.value) }
+            creatures = CreatureModels(target, assets, world.terrain).also {
+                it.show(world.poses.value, controller.presentation.value.reducedMotion)
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -253,34 +314,46 @@ internal class DioramaSession(
         }
     }
 
-    private suspend fun Scene.placeInstances(
-        terrain: TerrainMap,
-        kind: PropKind,
-        asset: DioramaAsset,
-        assetScale: Float,
-    ): Model? {
+    private suspend fun Scene.placePines(terrain: TerrainMap, variant: PineVariant): Model? {
         val matrices = buildList {
             for (index in 0 until terrain.propCount) {
                 val prop = terrain.prop(index)
-                if (prop.kind != kind) continue
+                if (prop.kind != PropKind.Pine) continue
+                val pattern = (prop.x * 37 xor prop.z * 53) and 15
+                val chosen = if (pattern < 7) PineVariants[0] else if (pattern < 12) PineVariants[1] else PineVariants[2]
+                if (variant != chosen) continue
                 val cell = checkNotNull(terrain.cellAt(prop.x, prop.z))
                 val center = cellPosition(prop.x, prop.z, cell.elevationTwice)
                 val variation = 0.82f + ((prop.x * 17 + prop.z * 41) and 15) / 38f
-                val scale = assetScale * variation * (prop.scalePercent / 100f)
-                // Both authored prop roots are offset 0.05 units below their mesh base.
+                val scale = variant.height / variant.sourceHeight * variation * (prop.scalePercent / 100f)
+                // The Kenney scene nodes put the base 0.05 units below their file origin.
                 add(MutableMat4f()
-                    .translate(center.x, center.y + 0.05f * scale, center.z)
+                    .translate(center.x, terrain.heightAt(center.x, center.z) + 0.05f * scale, center.z)
                     .rotate(prop.yawDegrees.toFloat().deg, Vec3f.Y_AXIS)
                     .scale(scale))
             }
         }
         if (matrices.isEmpty()) return null
-        val imported = Assets.loadGltfFile(asset.path).getOrThrow()
+        val imported = Assets.loadGltfFile(variant.asset.path).getOrThrow()
         return imported.makeModel(GltfLoadConfig(
             assetLoader = Assets.defaultLoader,
             applyTransforms = true,
             loadAnimations = false,
             instanceLayout = InstanceLayouts.ModelMat,
+            pbrBlock = { primitive ->
+                val tint = when (primitive.material) {
+                    0 -> Color(0.28f, 0.161f, 0.084f)
+                    1 -> variant.foliage
+                    else -> variant.foliage.mix(Color(0.22f, 0.31f, 0.11f), 0.35f)
+                }
+                color { constColor(tint) }
+                metallic(0f)
+                roughness(0.94f)
+                modelCustomizer = {
+                    pineSway()
+                    coastalHaze()
+                }
+            },
         )).also { model ->
             attachWhileCurrent(model)
             model.meshes.values.forEach { mesh ->
@@ -300,6 +373,14 @@ internal class DioramaSession(
         addNode(model)
     }
 }
+
+private data class PineVariant(val asset: DioramaAsset, val height: Float, val sourceHeight: Float, val foliage: Color)
+
+private val PineVariants = listOf(
+    PineVariant(DioramaAsset.Pine, 0.89f, 1.3664f, Color(0.070f, 0.206f, 0.114f)),
+    PineVariant(DioramaAsset.RoundedPine, 0.72f, 1.1959f, Color(0.130f, 0.244f, 0.103f)),
+    PineVariant(DioramaAsset.TallPine, 1.04f, 1.5296f, Color(0.058f, 0.158f, 0.108f)),
+)
 
 internal interface DioramaOutput {
     fun attach(scene: Scene)
