@@ -56,6 +56,7 @@ internal class IslandEcology(val terrain: TerrainMap) {
         cells.minByOrNull { distance[cellId(it)] }
 
     private fun springs(): List<GridCell> {
+        terrain.watershed?.let { return it.drinkingBanks.map { (x, z) -> GridCell(x, z) } }
         val distance = terrainDistance(navigation.spawn)
         val byMoisture = reachable.sortedByDescending { terrain.terrainCell(it).moisture }
         val candidates = byMoisture.take((reachable.size + 1) / 2).sortedByDescending {

@@ -51,7 +51,7 @@ adb install build/release/BranchWorld-android-local.apk
 
 ### Play and compare
 
-BranchWorld opens on **The Fading Grove**, the live scene for seed `104729`. Choose **Begin story** to start time, or **Continue** to load the local save. Other island seeds and camera motion settings are in **Menu**.
+BranchWorld opens on **The Fading Grove**, a river valley entering its dry season at seed `104729`. Choose **Begin story** to start time or **Continue** to load the local save. **Explore islands** also opens **Cairnwater**, a lake between stone ridges, and **Heron Reach**, a cape that shelters reed beds and tidal shallows. Camera motion settings are in **Menu**.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
@@ -59,11 +59,11 @@ BranchWorld opens on **The Fading Grove**, the live scene for seed `104729`. Cho
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
 | Zoom | Pinch | Scroll or press `+` and `-` in the focused viewport |
 
-Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. **Inspect** lets you select and follow a creature or check on a settlement. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
+Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. **Inspect** lets you follow a creature, check on a settlement, or open **Landmarks** and see what nearby soil conditions mean for growth. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
 
-**Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** on the opening screen restores the world in a paused state. Older saves retain their original rules, and an existing single-island save opens as **Main** at its saved tick.
+**Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** restores the world in a paused state. Older saves retain their original rules and geography, and an existing single-island save opens as **Main** at its saved tick.
 
-For the reproducible branching walkthrough, start on seed `104729`. Pause, then use **Timeline** → **Play to tick** to reach `600`. Use **Go to tick** to rewind to `300`. Choose **Fork here** and name the branch **Restored Forest**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings. Reopen Timeline, play the child to `900`, select **Main**, and play it to `900` as well. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On narrow screens, open **Compare details** to see the branch picker, time controls, and changes. Main has 76 stored wood and Restored Forest has 124. Select **Reforest C2 at tick 301** to see the six saplings planted by that command. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
+For the branching walkthrough, begin a new Fading Grove story. Pause, then use **Timeline** → **Play to tick** to reach `900`. Rewind to `260` with **Go to tick** and choose **Fork here**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings. Play the child to `900`. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On a narrow screen, **Compare details** reveals the branch picker, time controls, and recorded changes. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -72,8 +72,8 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
 - `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny and deer GLBs use the bundled Kenney texture.
-- Shared Kotlin generates terrain, climate, props, and traversability from the seed and worldgen version. Kool builds chunk meshes and instances the bundled pines and rocks from a static terrain projection.
-- Rules v5 adds settlements to the shared fixed-tick ecology. Cohorts farm, gather, expand, and respond to shortages. The renderer receives read-only homes, farm, and resident positions. Rules v1–v4 retain their replay fixtures.
+- Shared Kotlin generates terrain, drainage, soils, props, and traversability from the seed and worldgen version. Kool builds chunk meshes, fills the generated channels and basins, and instances the bundled trees from a read-only terrain projection.
+- Rules v6 links seasonal rain and soil moisture to forage and farms. Recharge is recorded in each history and drives the displayed water level. Rules v5 and earlier use their original terrain and replay fixtures.
 
 ## Source asset inventory
 

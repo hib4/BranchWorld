@@ -19,12 +19,59 @@ import id.branchworld.game.App
 import id.branchworld.game.WorldAmbience
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.terrain.IslandLandscape
+import id.branchworld.game.terrain.LandmarkKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
 
 @OptIn(ExperimentalTestApi::class)
 class DesktopEcologyUiTest {
+    @Test
+    fun namedGalleryLoadsEachLandscapeAndLandmarkFocus() = runComposeUiTest {
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        }
+        var viewport: WorldRenderSource? = null
+        var camera = WorldCamera()
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                Box(Modifier.requiredSize(390.dp, 720.dp)) {
+                    App(viewport = { _, world -> SideEffect { viewport = world } }, viewportCamera = { camera = it })
+                }
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Valley }
+        val valley = viewport
+        onNodeWithText("Explore islands").performScrollTo().performClick()
+        onNodeWithText("Cairnwater").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Tarn }
+        onNodeWithText("Explore island").performScrollTo().performClick()
+        onNodeWithText("Pause").performClick()
+        onNodeWithText("Inspect").performClick()
+        onNodeWithText("Landmarks").performClick()
+        onNodeWithText("Cairnwater Lake").performScrollTo().performClick()
+        waitUntil { camera.focus == WorldCamera.Focus.Landmark(LandmarkKind.Basin) }
+        onNodeWithText("Close").performClick()
+        onNodeWithText("Menu").performClick()
+        onNodeWithText("Back to home").performScrollTo().performClick()
+        onNodeWithText("Explore islands").performScrollTo().performClick()
+        onNodeWithText("Heron Reach").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Marsh }
+        onNodeWithText("Explore island").performScrollTo().performClick()
+        onNodeWithText("Pause").performClick()
+        onNodeWithText("Inspect").performClick()
+        onNodeWithText("Landmarks").performClick()
+        onNodeWithText("Heron Marsh").performScrollTo().performClick()
+        waitUntil { camera.focus == WorldCamera.Focus.Landmark(LandmarkKind.Basin) }
+        onNodeWithText("Close").performClick()
+        onNodeWithText("Menu").performClick()
+        onNodeWithText("Back to home").performScrollTo().performClick()
+        onNodeWithText("Explore islands").performScrollTo().performClick()
+        onNodeWithText("The Fading Grove").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { viewport === valley }
+    }
+
     @Test
     fun compactInspectorDisclosesSettlementDetailsOnDemand() = runComposeUiTest {
         val owner = object : LifecycleOwner {

@@ -12,7 +12,7 @@ import id.branchworld.game.terrain.TerrainMap
 
 /** Single writer of ecology state. Distances are rebuilt from terrain. */
 internal class EcologyEngine(
-    terrain: TerrainMap,
+    private val terrain: TerrainMap,
     checkpoint: EcologyState? = null,
     replayInputs: List<WorldCommand> = emptyList(),
     rulesVersion: Int = checkpoint?.rulesVersion ?: EcologyRulesVersion,
@@ -25,6 +25,7 @@ internal class EcologyEngine(
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
+            WatershedRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed, watershed = true), settlements = SettlementWorld())
             CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
             EnvironmentalRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed))
             else -> it
@@ -39,6 +40,8 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
+        require((rulesVersion == WatershedRulesVersion) == (terrain.watershed != null))
+        require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
         require(state.settlements == null || state.environment != null)
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
@@ -96,8 +99,11 @@ internal class EcologyEngine(
         val initial = baseline.patches.sumOf { it.biomass }.toULong()
         require(required >= initial && required - initial == supply)
         val environment = requireNotNull(state.environment)
-        if (state.tick < 300) require(environment == Environment.start(state.terrain.key.seed))
-        else require(environment.nextChange - state.tick in 0..360)
+        if (state.tick < 300) {
+            val opening = Environment.start(state.terrain.key.seed, terrain.watershed != null)
+            val recharge = opening.recharge?.let { (it - 2 * (state.tick / 10).toInt()).coerceAtLeast(0) }
+            require(environment == opening.copy(recharge = recharge))
+        } else require(environment.nextChange - state.tick in 0..360)
         state.settlements?.let {
             economy.validate(it, state.tick, state.patches, state.springs)
             require(it.gatheredFood.toULong() + it.gatheredWood.toULong() <= ledger.consumed.toULong())
@@ -172,7 +178,10 @@ internal class EcologyEngine(
             val multiplier = if (environment?.weather == Weather.Rain) 2 else 1
             for ((index, patch) in patches.withIndex()) {
                 if (patch.biomass < patch.capacity) {
-                    patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + patch.regrowth * multiplier))
+                    val recharge = environment?.recharge
+                    val growth = if (recharge == null) patch.regrowth * multiplier
+                    else growthForSoil(terrain.soilMoisture(patch.cell, recharge), patch.regrowth)
+                    patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + growth))
                 }
             }
         }
@@ -197,7 +206,9 @@ internal class EcologyEngine(
         }
         val ledger = previous.ledger
         val settlements = previous.settlements?.let {
-            if (tick % SettlementTurn == 0L) economy.advance(it, tick, requireNotNull(environment).weather, patches, previous.springs)
+            if (tick % SettlementTurn == 0L) economy.advance(
+                it, tick, requireNotNull(environment).weather, patches, previous.springs, environment.recharge,
+            )
             else it
         }
         return previous.copy(

@@ -52,6 +52,7 @@ internal class DioramaSession(
     private var previousRegion: Int? = null
     private var highlight: Node? = null
     private var water: CoastalWater? = null
+    private var inland: InlandWater? = null
     private var wind: MeadowWind? = null
     private var ground: KslBlinnPhongShader? = null
     private var canopy = emptyList<KslPbrShader>()
@@ -140,6 +141,15 @@ internal class DioramaSession(
                     previous.copy(targetX = center.x, targetY = center.y.coerceAtLeast(0f) + if (narrow) -0.78f else 0.25f,
                         targetZ = center.z, distance = if (narrow) 6.1f else 5.5f)
                 }
+                is WorldCamera.Focus.Landmark -> world.terrain.watershed?.let { watershed ->
+                    watershed.landmarks.firstOrNull { it.kind == focus.kind }?.let { landmark ->
+                        val height = watershed.waterAt(landmark.x, landmark.z)?.surfaceTwice ?: 0
+                        val center = cellPosition(landmark.x, landmark.z, height)
+                        previous.copy(targetX = center.x, targetZ = center.z,
+                            targetY = center.y + if (narrow) -0.65f else 0.12f,
+                            distance = if (narrow) 5.3f else 4.6f)
+                    }
+                }
                 null -> null
             }
             if (target != null) {
@@ -167,9 +177,13 @@ internal class DioramaSession(
             previousOpening = request.opening
         }
         water?.time = time
+        inland?.apply {
+            this.time = time
+            recharge = (snapshot.climate?.watershed?.recharge ?: 64) / 255f
+        }
         wind?.apply {
             this.time = time
-            amplitude = if (request.reducedMotion) 0f else if (light.rain) 0.057f else 0.026f
+            amplitude = if (request.reducedMotion) 0f else if (light.storm) 0.077f else if (light.rain) 0.057f else 0.026f
         }
         val canopyWind = Vec2f(time, if (request.reducedMotion) 0f else if (light.rain) 0.045f else 0.019f)
         for (shader in canopy) shader.uniform2f("uPineWind").set(canopyWind)
@@ -177,7 +191,7 @@ internal class DioramaSession(
         fineGrass?.isVisible = output != null || pose.distance < 12.4f
         rain?.apply {
             isVisible = light.rain && !request.reducedMotion
-            if (isVisible) transform.setIdentity().translate(0f, -(time * 3.6f) % 1.7f, 0f)
+            if (isVisible) transform.setIdentity().translate(0f, -(time * if (light.storm) 5.6f else 3.6f) % 1.7f, 0f)
         }
         wildlife?.show(snapshot, request.reducedMotion)
         settlements?.show(snapshot.settlements.orEmpty())
@@ -213,6 +227,7 @@ internal class DioramaSession(
         previousRegion = null
         highlight = null
         water = null
+        inland = null
         wind = null
         ground = null
         canopy = emptyList()
@@ -239,6 +254,7 @@ internal class DioramaSession(
         lighting.singleDirectionalLight { setup(Vec3f(-0.55f, -1.4f, -0.9f)) }
         lighting.addDirectionalLight { setup(Vec3f(0.6f, -0.72f, 1f)) }
         val waterMaterial = CoastalWater().also { water = it }
+        val inlandMaterial = terrain.watershed?.let { InlandWater().also { shader -> inland = shader } }
         val meadowMaterial = MeadowWind().also { wind = it }
         val groundMaterial = KslBlinnPhongShader {
             color { vertexColor() }
@@ -248,6 +264,10 @@ internal class DioramaSession(
         light = coastalLight(null, false)
         showLight(light)
         addIsland(terrain, waterMaterial, groundMaterial)
+        if (inlandMaterial != null) {
+            addInlandWater(terrain, inlandMaterial)
+            addReedBanks(terrain, meadowMaterial, compact = output == null)
+        }
         fineGrass = addLandscapeDetails(terrain, meadowMaterial)
         rain = addRain()
         onRelease { println("BranchWorldRenderer sceneReleased") }
@@ -257,6 +277,10 @@ internal class DioramaSession(
         (lighting.lights[0] as Light.Directional).setup(light.direction).setColor(light.lightColor, light.strength)
         lighting.lights[1].setColor(light.fillColor, light.fill)
         water?.apply {
+            haze = light.haze
+            atmosphere = Vec4f(light.sun, light.twilight, if (light.rain) 1f else 0f, 0f)
+        }
+        inland?.apply {
             haze = light.haze
             atmosphere = Vec4f(light.sun, light.twilight, if (light.rain) 1f else 0f, 0f)
         }

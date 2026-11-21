@@ -7,8 +7,10 @@ import kotlin.math.abs
 @Serializable
 data class TerrainKey(val seed: Long, val worldgenVersion: Int = 1)
 
+internal const val WatershedWorldgenVersion = 2
+
 enum class Biome(internal val id: Int) {
-    Water(0), Beach(1), Meadow(2), PineForest(3), RockyUpland(4),
+    Water(0), Beach(1), Meadow(2), PineForest(3), RockyUpland(4), Wetland(5),
 }
 
 enum class PropKind(internal val id: Int) { Pine(1), Rock(2) }
@@ -38,6 +40,7 @@ class TerrainMap internal constructor(
     private val elevations: IntArray,
     private val cells: Array<TerrainCell>,
     private val props: List<TerrainProp>,
+    val watershed: Watershed? = null,
 ) {
     val propCount: Int get() = props.size
     val digest: ULong = digestTerrain()
@@ -80,6 +83,7 @@ class TerrainMap internal constructor(
             addInt(prop.scalePercent)
             addInt(prop.yawDegrees)
         }
+        watershed?.writeDigest(this)
     }.value
 
     companion object {

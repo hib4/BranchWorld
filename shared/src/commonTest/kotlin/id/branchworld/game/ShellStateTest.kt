@@ -45,12 +45,14 @@ class ShellStateTest {
 
     @Test
     fun saverRestoresTheActiveRouteAndOverlay() {
-        val state = ShellState().selectSeed(271828).openWorld().toggleDiagnostics()
+        val state = ShellState().selectIsland(IslandGallery[1]).openWorld().toggleDiagnostics()
         val saver = ShellState.saver
         val saved = assertNotNull(with(saver) { SaverScope { true }.save(state) })
 
         assertEquals(state, saver.restore(saved))
         assertEquals(271828L, state.back().seed)
         assertEquals(ShellState().openWorld(), saver.restore(listOf("world", false)))
+        val legacy = assertNotNull(saver.restore(listOf("world", false, 104729L)))
+        assertEquals(1, legacy.terrain.worldgenVersion)
     }
 }

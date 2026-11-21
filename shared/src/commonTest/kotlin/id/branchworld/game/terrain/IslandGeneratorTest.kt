@@ -31,7 +31,7 @@ class IslandGeneratorTest {
                 }
             }
         }
-        assertFailsWith<IllegalArgumentException> { IslandGenerator.generate(TerrainKey(104729, 2)) }
+        assertFailsWith<IllegalArgumentException> { IslandGenerator.generate(TerrainKey(104729, 3)) }
     }
 
     @Test
@@ -61,7 +61,7 @@ class IslandGeneratorTest {
                     biomes.add(cell.biome)
                 }
             }
-            assertEquals(Biome.entries.toSet(), biomes, "seed=${map.key.seed}")
+            assertEquals(Biome.entries.filter { it != Biome.Wetland }.toSet(), biomes, "seed=${map.key.seed}")
             assertTrue(landCells.size in 600..2300)
             assertNull(map.cellAt(Int.MIN_VALUE, 0))
             assertFalse(map.canStep(0, 0, Int.MAX_VALUE, 0))

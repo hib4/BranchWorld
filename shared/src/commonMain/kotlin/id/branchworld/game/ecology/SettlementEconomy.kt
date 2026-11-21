@@ -17,6 +17,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         weather: Weather,
         patches: MutableList<ForagePatch>,
         springs: List<GridCell>,
+        recharge: Int? = null,
     ): SettlementWorld {
         if (tick % SettlementTurn != 0L) return state
         if (state.sites.isEmpty()) {
@@ -35,7 +36,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         val woodland = local.count { patches[it].kind == ForageKind.Browse && patches[it].biomass > patches[it].capacity / 4 }
         val gatheredWood = harvest(patches, local, ForageKind.Browse, lumberers * (2 + minOf(6, woodland / 2)), StockLimit - previous.wood)
         val quarried = minOf(previous.stoneRemaining, miners * 4, StockLimit - previous.stone)
-        val produced = cropYield(previous.field, farmers, weather)
+        val produced = cropYield(previous.field, farmers, weather, recharge)
         val availableFood = previous.food + produced + harvest
         val shortage = if (availableFood < demand) minOf(3, previous.shortage + 1) else 0
         val surplus = if (availableFood - demand >= demand * 2) minOf(3, previous.surplus + 1) else 0
@@ -90,7 +91,8 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         )
     }
 
-    internal fun cropYield(field: GridCell, workers: Int, weather: Weather): Int {
+    internal fun cropYield(field: GridCell, workers: Int, weather: Weather, recharge: Int? = null): Int {
+        if (recharge != null) return workers * cropPerWorker(terrain.soilMoisture(field, recharge))
         val soil = if (terrain.terrainCell(field).moisture >= 120) 2 else 1
         return workers * (soil + if (weather == Weather.Rain) 1 else 0)
     }

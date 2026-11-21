@@ -13,13 +13,15 @@ import id.branchworld.game.ecology.Weather
 import id.branchworld.game.simulation.ClimatePose
 import kotlin.math.abs
 
-internal data class CoastalLight(val sun: Float, val twilight: Float, val rain: Boolean) {
-    val haze: Color get() = if (rain) Color(0.27f, 0.40f, 0.45f)
+internal data class CoastalLight(val sun: Float, val twilight: Float, val rain: Boolean, val storm: Boolean = false) {
+    val haze: Color get() = if (storm) Color(0.22f, 0.34f, 0.40f)
+    else if (rain) Color(0.27f, 0.40f, 0.45f)
     else Color(0.31f, 0.53f, 0.58f).mix(Color(0.17f, 0.23f, 0.36f), 1f - sun)
     val lightColor: Color get() = if (rain) Color(0.68f, 0.79f, 0.89f)
     else Color(1f, 0.94f, 0.79f).mix(Color(1f, 0.57f, 0.30f), twilight * 0.8f)
     val fillColor: Color get() = if (rain) Color(0.72f, 0.86f, 1f) else Color(0.64f, 0.77f, 1f)
-    val strength: Float get() = if (rain) 0.26f + 0.64f * sun else 0.20f + 1.00f * sun + 0.46f * twilight
+    val strength: Float get() = if (storm) 0.24f + 0.42f * sun
+    else if (rain) 0.26f + 0.64f * sun else 0.20f + 1.00f * sun + 0.46f * twilight
     val fill: Float get() = 0.40f + sun * 0.14f + if (rain) 0.12f else 0f
     val direction: Vec3f get() = Vec3f(-0.58f - twilight * 0.42f, -1.45f + twilight * 0.92f, -0.86f)
 }
@@ -59,7 +61,7 @@ internal fun coastalLight(climate: ClimatePose?, opening: Boolean): CoastalLight
     val phase = climate.dayPhase
     val twilight = (1f - abs(phase - 0.52f) / 0.12f).coerceIn(0f, 1f)
     val sun = if (phase <= 0.5f) maxOf(climate.daylight, 0.74f * (1f - phase)) else climate.daylight
-    return CoastalLight(sun, twilight, rain)
+    return CoastalLight(sun, twilight, rain, climate.isStorm)
 }
 
 internal fun KslProgram.coastalHaze() {

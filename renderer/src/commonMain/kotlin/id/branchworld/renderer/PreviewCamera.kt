@@ -3,6 +3,8 @@ package id.branchworld.renderer
 import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.CreaturePose
 import id.branchworld.game.terrain.PropKind
+import id.branchworld.game.terrain.IslandLandscape
+import id.branchworld.game.terrain.LandmarkKind
 import id.branchworld.game.terrain.TerrainMap
 import kotlin.math.abs
 import kotlin.math.cos
@@ -48,16 +50,28 @@ internal data class PreviewCamera(
         if (factor.isFinite() && factor > 0f) copy(distance = (distance / factor).coerceIn(3f, 18f)) else this
 }
 
-internal fun heroCamera(aspect: Float, opening: Boolean): PreviewCamera {
-    val camera = PreviewCamera()
+internal fun heroCamera(aspect: Float, opening: Boolean, terrain: TerrainMap? = null): PreviewCamera {
+    val watershed = terrain?.watershed
+    val camera = if (watershed == null) PreviewCamera() else {
+        val basin = watershed.landmarks.first { it.kind == LandmarkKind.Basin }
+        val yaw = when (watershed.landscape) {
+            IslandLandscape.Valley -> 0.39f
+            IslandLandscape.Tarn -> 0.80f
+            IslandLandscape.Marsh -> 0.54f
+        }
+        PreviewCamera(yaw = yaw, pitch = 0.80f, distance = 8.8f,
+            targetX = basin.x * CellSize * 0.49f, targetZ = basin.z * CellSize * 0.26f, targetY = 0.28f)
+    }
     val narrow = aspect < 0.83f
     val distance = camera.distance + if (narrow) ((0.83f - aspect) * 8f).coerceAtMost(3f) else 0f
     if (!opening) return camera.copy(distance = distance)
     return if (aspect > 1.3f) {
         // Shift the look-at point left so the foreground clears the chapter introduction.
-        camera.copy(distance = distance, targetX = -1.75f * cos(camera.yaw), targetZ = 1.75f * sin(camera.yaw))
+        camera.copy(distance = distance, targetX = camera.targetX - 1.75f * cos(camera.yaw),
+            targetZ = camera.targetZ + 1.75f * sin(camera.yaw))
     } else {
-        camera.copy(distance = distance, targetX = 0.95f * sin(camera.yaw), targetZ = 0.95f * cos(camera.yaw))
+        camera.copy(distance = distance, targetX = camera.targetX + 0.95f * sin(camera.yaw),
+            targetZ = camera.targetZ + 0.95f * cos(camera.yaw))
     }
 }
 

@@ -79,7 +79,7 @@ internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<Gro
     private val previousGroups = mutableMapOf<Mesh<*>, List<ForagePose>>()
 
     init {
-        scene.addColorMesh("Freshwater springs") {
+        if (terrain.watershed == null) scene.addColorMesh("Freshwater springs") {
             generate {
                 for (spring in springs) {
                     val point = cellPosition(spring.x, spring.z, spring.elevationTwice)

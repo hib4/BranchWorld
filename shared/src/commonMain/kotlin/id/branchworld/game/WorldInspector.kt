@@ -47,6 +47,7 @@ import branchworld.shared.generated.resources.grove_fork_to_plant
 import branchworld.shared.generated.resources.grove_pending
 import branchworld.shared.generated.resources.grove_target_help
 import branchworld.shared.generated.resources.inspect_animal
+import branchworld.shared.generated.resources.landmarks
 import branchworld.shared.generated.resources.no_forage_deficit
 import branchworld.shared.generated.resources.no_planting_sites
 import branchworld.shared.generated.resources.no_wildlife
@@ -65,19 +66,32 @@ import id.branchworld.game.ecology.CreatureAction
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.RegionWidth
 import id.branchworld.game.ecology.Species
+import id.branchworld.game.terrain.LandmarkKind
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun WorldInspector(island: IslandLoad.Ready, compact: Boolean, onCreatureFocus: (Long) -> Unit) {
+internal fun WorldInspector(
+    island: IslandLoad.Ready,
+    compact: Boolean,
+    onCreatureFocus: (Long) -> Unit,
+    onLandmarkFocus: (LandmarkKind) -> Unit,
+) {
     var regionsOpen by rememberSaveable { mutableStateOf(false) }
     var settlementsOpen by rememberSaveable { mutableStateOf(false) }
+    var landmarksOpen by rememberSaveable { mutableStateOf(false) }
     val pose by island.clock.render.collectAsStateWithLifecycle()
     val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
     val settlements = island.clock.state.settlements
+    val watershed = island.world.terrain.watershed
+    val water = pose.climate?.watershed
     key(pose.branchId) { CreatureInspector(creatures, onCreatureFocus) }
     HorizontalDivider()
     if (!compact && settlements != null) SettlementInspector(settlements)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (watershed != null && water != null) {
+            FilterChip(selected = landmarksOpen, onClick = { landmarksOpen = !landmarksOpen },
+                label = { Text(stringResource(Res.string.landmarks)) })
+        }
         if (compact && settlements != null) {
             FilterChip(selected = settlementsOpen, onClick = { settlementsOpen = !settlementsOpen },
                 label = { Text(stringResource(Res.string.settlement_inspector)) })
@@ -85,6 +99,7 @@ internal fun WorldInspector(island: IslandLoad.Ready, compact: Boolean, onCreatu
         FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
             label = { Text(stringResource(Res.string.regional_ecology)) })
     }
+    if (landmarksOpen && watershed != null && water != null) LandscapeGuide(watershed, water, onLandmarkFocus)
     if (compact && settlements != null && settlementsOpen) SettlementInspector(settlements, showHeading = false)
     if (regionsOpen) RegionalControls(island)
 }

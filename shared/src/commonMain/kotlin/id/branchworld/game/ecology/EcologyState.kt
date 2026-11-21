@@ -23,6 +23,7 @@ internal enum class Need(internal val canonicalId: Int) {
 
 internal const val EcologyRulesVersion = 3
 internal const val EnvironmentalRulesVersion = 4
+internal const val WatershedRulesVersion = 6
 internal const val MaxReserve = 1000
 internal const val MaxPerSpecies = 8
 internal const val MaturityTicks = 240L
@@ -84,6 +85,7 @@ internal data class EcologyState(
     val settlements: SettlementWorld? = null,
 ) {
     val rulesVersion: Int get() = when {
+        environment?.recharge != null -> WatershedRulesVersion
         settlements != null -> CivilizationRulesVersion
         environment != null -> EnvironmentalRulesVersion
         else -> EcologyRulesVersion

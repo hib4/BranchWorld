@@ -50,6 +50,7 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         writeInt(if (it.weather == Weather.Dry) 0 else 1)
         writeLong(it.nextChange)
         writeULong(it.randomState)
+        it.recharge?.let(::writeInt)
         writeLong(ledger.introduced)
         patches.forEach { patch -> writeInt(if (patch.planted) 1 else 0) }
     }

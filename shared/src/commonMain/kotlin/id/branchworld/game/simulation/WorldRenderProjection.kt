@@ -5,11 +5,18 @@ import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.Season
 import id.branchworld.game.ecology.Weather
+import id.branchworld.game.ecology.cropPerWorker
+import id.branchworld.game.ecology.seasonAt
+import id.branchworld.game.ecology.soilMoisture
 import id.branchworld.game.ecology.terrainCell
+import id.branchworld.game.terrain.Biome
+import id.branchworld.game.terrain.LandmarkKind
 import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
+import kotlin.math.abs
 
 class WorldRenderSource(val terrain: TerrainMap, val poses: StateFlow<WorldRenderProjection>)
 
@@ -56,7 +63,18 @@ data class ClimatePose(
     val weather: Weather,
     val daylight: Float,
     val dayPhase: Float = 0f,
+    val watershed: WatershedPose? = null,
+) {
+    val isStorm: Boolean get() = weather == Weather.Rain && watershed?.season == Season.Wet
+}
+
+data class WatershedPose(
+    val season: Season,
+    val recharge: Int,
+    val bankConditions: Map<LandmarkKind, BankCondition>,
 )
+
+enum class BankCondition { Parched, Holding, Recharged }
 
 data class EcologyReadout(
     val rabbits: Int,
@@ -104,7 +122,29 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         ledger.births,
         ledger.deaths,
     ),
-    climate = environment?.let { climatePose(tick, it.weather) },
+    climate = environment?.let {
+        climatePose(tick, it.weather).copy(watershed = it.recharge?.let { recharge ->
+            val landmarks = checkNotNull(terrain.watershed).landmarks
+            WatershedPose(seasonAt(tick), recharge, landmarks.associate { landmark ->
+                var sum = 0
+                var sampled = 0
+                for (dz in -4..4) for (dx in -4..4) {
+                    if (abs(dx) + abs(dz) > 4) continue
+                    val cell = GridCell(landmark.x + dx, landmark.z + dz)
+                    val ground = terrain.cellAt(cell.x, cell.z) ?: continue
+                    if (!ground.walkable || ground.biome !in ForageBiomes) continue
+                    sum += terrain.soilMoisture(cell, recharge)
+                    sampled++
+                }
+                val moisture = if (sampled > 0) sum / sampled else recharge
+                landmark.kind to when (cropPerWorker(moisture)) {
+                    1 -> BankCondition.Parched
+                    2 -> BankCondition.Holding
+                    else -> BankCondition.Recharged
+                }
+            })
+        })
+    },
     settlements = settlements?.sites?.map { site ->
         SettlementPose(
             site.id,
@@ -125,3 +165,5 @@ internal fun climatePose(tick: Long, weather: Weather): ClimatePose {
 
 private fun GridCell.project(terrain: TerrainMap?) =
     GroundPoint(x, z, terrain?.terrainCell(this)?.elevationTwice ?: 0)
+
+private val ForageBiomes = setOf(Biome.Meadow, Biome.PineForest)

@@ -13,6 +13,7 @@ import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.roundToInt
 import id.branchworld.game.terrain.Biome
+import id.branchworld.game.terrain.IslandLandscape
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.TerrainMap.Companion.MaxCell
 import id.branchworld.game.terrain.TerrainMap.Companion.MinCell
@@ -46,6 +47,7 @@ internal fun TerrainMap.facets(chunkX: Int, chunkZ: Int): List<TerrainFacet> = b
 }
 
 internal fun Scene.addIsland(terrain: TerrainMap, water: CoastalWater, groundShader: KslBlinnPhongShader) {
+    val landscape = terrain.watershed?.landscape
     for (chunkZ in MinCell..MaxCell step ChunkSize) {
         for (chunkX in MinCell..MaxCell step ChunkSize) {
             val faces = terrain.facets(chunkX, chunkZ)
@@ -65,7 +67,7 @@ internal fun Scene.addIsland(terrain: TerrainMap, water: CoastalWater, groundSha
                                 for (neighborX in x - 1..x) {
                                     val biome = terrain.cellAt(neighborX, neighborZ)?.biome ?: continue
                                     if (biome == Biome.Water) continue
-                                    val neighbor = biome.palette().mix(biome.accent(), drift * 0.64f)
+                                    val neighbor = biome.paint(landscape, drift)
                                     source = source.mix(neighbor, 1f / ++total)
                                 }
                             }
@@ -153,6 +155,7 @@ private fun Biome.palette() = when (this) {
     Biome.Meadow -> Color(0.32f, 0.51f, 0.20f)
     Biome.PineForest -> Color(0.19f, 0.34f, 0.21f)
     Biome.RockyUpland -> Color(0.42f, 0.41f, 0.33f)
+    Biome.Wetland -> Color(0.33f, 0.42f, 0.24f)
 }
 
 private fun Biome.accent() = when (this) {
@@ -161,4 +164,15 @@ private fun Biome.accent() = when (this) {
     Biome.Meadow -> Color(0.54f, 0.62f, 0.27f)
     Biome.PineForest -> Color(0.34f, 0.44f, 0.23f)
     Biome.RockyUpland -> Color(0.52f, 0.48f, 0.36f)
+    Biome.Wetland -> Color(0.52f, 0.53f, 0.27f)
+}
+
+private fun Biome.paint(landscape: IslandLandscape?, drift: Float): Color = when {
+    this == Biome.RockyUpland && landscape == IslandLandscape.Tarn ->
+        Color(0.38f, 0.41f, 0.46f).mix(Color(0.58f, 0.54f, 0.46f), drift * 0.7f)
+    this == Biome.Meadow && landscape == IslandLandscape.Marsh ->
+        Color(0.39f, 0.49f, 0.24f).mix(Color(0.65f, 0.61f, 0.32f), drift * 0.7f)
+    this == Biome.Meadow && landscape == IslandLandscape.Valley ->
+        Color(0.29f, 0.49f, 0.24f).mix(Color(0.53f, 0.63f, 0.26f), drift * 0.69f)
+    else -> palette().mix(accent(), drift * 0.64f)
 }

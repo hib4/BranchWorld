@@ -78,17 +78,13 @@ import branchworld.shared.generated.resources.show_comparison_details
 import branchworld.shared.generated.resources.diagnostics_platform
 import branchworld.shared.generated.resources.diagnostics_seed
 import branchworld.shared.generated.resources.diagnostics_title
-import branchworld.shared.generated.resources.fading_grove
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.grove_dry_note
-import branchworld.shared.generated.resources.grove_opening
 import branchworld.shared.generated.resources.inspect_story
 import branchworld.shared.generated.resources.island_generating
 import branchworld.shared.generated.resources.island_generation_failed
 import branchworld.shared.generated.resources.island_opening
-import branchworld.shared.generated.resources.island_seed_named
 import branchworld.shared.generated.resources.open_timeline
-import branchworld.shared.generated.resources.other_island
 import branchworld.shared.generated.resources.other_islands
 import branchworld.shared.generated.resources.pause_world
 import branchworld.shared.generated.resources.play_world
@@ -102,11 +98,18 @@ import branchworld.shared.generated.resources.world_journal
 import branchworld.shared.generated.resources.world_menu
 import branchworld.shared.generated.resources.world_rain_note
 import branchworld.shared.generated.resources.world_sounds
+import branchworld.shared.generated.resources.explore_island
+import branchworld.shared.generated.resources.valley_storm_note
+import branchworld.shared.generated.resources.valley_refill_note
+import branchworld.shared.generated.resources.valley_low_note
+import branchworld.shared.generated.resources.valley_clear_note
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.Weather
+import id.branchworld.game.ecology.Season
 import id.branchworld.game.save.WorldSaveStore
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.terrain.WatershedWorldgenVersion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -165,8 +168,9 @@ fun App(
     val storage by islands.saveStatus.collectAsStateWithLifecycle()
     val load by islands.state.collectAsStateWithLifecycle()
     val seed = state.seed
-    var comparisonDetailsOpen by rememberSaveable(seed) { mutableStateOf(false) }
-    val session = (load as? IslandLoad.Ready)?.takeIf { it.clock.seed == seed }
+    val terrain = state.terrain
+    var comparisonDetailsOpen by rememberSaveable(terrain) { mutableStateOf(false) }
+    val session = (load as? IslandLoad.Ready)?.takeIf { it.world.terrain.key == terrain }
     val comparison = session?.comparison?.collectAsStateWithLifecycle()?.value
     val pose = session?.world?.poses?.collectAsStateWithLifecycle()?.value
     val clock = session?.clock
@@ -180,7 +184,7 @@ fun App(
             announcedPlanting = null
             return@LaunchedEffect
         }
-        val event = "$seed/${session.timelineView.value.branchId}/${planting.tick}/${planting.region}"
+        val event = "${terrain.worldgenVersion}/$seed/${session.timelineView.value.branchId}/${planting.tick}/${planting.region}"
         if (announcedPlanting == event) return@LaunchedEffect
         announcedPlanting = event
         plantingNotice = planting.amount
@@ -190,10 +194,10 @@ fun App(
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    LaunchedEffect(islands, seed) { islands.open(seed) }
+    LaunchedEffect(islands, terrain) { islands.open(terrain) }
     LaunchedEffect(storage) {
         val restored = storage as? SaveStatus.Restored ?: return@LaunchedEffect
-        state = state.copy(seed = restored.seed).openWorld()
+        state = state.copy(terrain = restored.terrain).openWorld()
         panel = null
         focus = null
         islands.acknowledgeRestore(restored.tick)
@@ -210,7 +214,7 @@ fun App(
         if (clock != null && isWorld && foreground) {
             lifecycle.repeatOnLifecycle(playbackState) {
                 clock.run(isActive = {
-                    state.route == ShellRoute.World && state.seed == clock.seed &&
+                    state.route == ShellRoute.World && state.terrain == terrain &&
                         lifecycle.currentState.isAtLeast(playbackState)
                 })
             }
@@ -255,6 +259,7 @@ fun App(
             } else false
         }) {
             val wide = maxWidth >= 760.dp && maxHeight >= 420.dp
+            val sideIntroduction = maxWidth >= 760.dp && maxWidth > maxHeight * 1.3f
             val short = maxHeight < 540.dp
             val height = maxHeight
             if (viewport == null && session != null) {
@@ -262,33 +267,37 @@ fun App(
             } else {
                 viewport?.invoke(Modifier.matchParentSize(), session?.world)
             }
-            val chapter = stringResource(if (seed == IslandSeeds.first()) Res.string.fading_grove else Res.string.other_island)
-            val failed = (load as? IslandLoad.Failed)?.seed == seed
+            val chapter = stringResource(islandTitle(terrain))
+            val failed = (load as? IslandLoad.Failed)?.key == terrain
             if (!isWorld) {
                 val veil = listOf(NightGreen.copy(alpha = 0.94f), NightGreen.copy(alpha = 0.52f), Color.Transparent)
-                Box(Modifier.matchParentSize().background(if (wide) {
-                    Brush.horizontalGradient(0f to veil[0], 0.26f to veil[1], 0.59f to veil[2])
+                Box(Modifier.matchParentSize().background(if (sideIntroduction) {
+                    if (terrain.worldgenVersion == WatershedWorldgenVersion) {
+                        Brush.horizontalGradient(0f to veil[0], 0.31f to NightGreen.copy(alpha = 0.82f),
+                            0.51f to NightGreen.copy(alpha = 0.71f), 0.67f to veil[2])
+                    } else Brush.horizontalGradient(0f to veil[0], 0.26f to veil[1], 0.59f to veil[2])
                 } else {
                     Brush.verticalGradient(0.51f to veil[2], 0.74f to veil[1], 1f to veil[0])
                 }))
                 Column(
-                    Modifier.align(if (wide) Alignment.CenterStart else Alignment.BottomStart)
-                        .safeContentPadding().widthIn(max = if (wide) 380.dp else 460.dp)
-                        .heightIn(max = if (wide || short) height else height * 0.65f)
-                        .verticalScroll(rememberScrollState()).padding(if (wide) 32.dp else 20.dp),
+                    Modifier.align(if (sideIntroduction) Alignment.CenterStart else Alignment.BottomStart)
+                        .safeContentPadding().widthIn(max = if (sideIntroduction) 380.dp else 460.dp)
+                        .heightIn(max = if (sideIntroduction || short) height else height * 0.65f)
+                        .verticalScroll(rememberScrollState()).padding(if (sideIntroduction) 32.dp else 20.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     Text(stringResource(Res.string.branchworld_title), color = Color(0xFFFFD89C), style = MaterialTheme.typography.titleMedium)
                     Text(chapter, Modifier.semantics { heading() }, color = Parchment,
-                        style = if (wide) MaterialTheme.typography.displayLarge.copy(lineHeight = 52.sp) else MaterialTheme.typography.displaySmall)
-                    Text(stringResource(if (seed == IslandSeeds.first()) Res.string.grove_opening else Res.string.island_opening),
+                        style = if (sideIntroduction && !short) MaterialTheme.typography.displayLarge.copy(lineHeight = 52.sp)
+                        else MaterialTheme.typography.displaySmall)
+                    Text(stringResource(islandDescription(terrain)),
                         color = Parchment, style = MaterialTheme.typography.bodyLarge)
                     if (session == null && !failed && storage != SaveStatus.Busy) {
                         Text(stringResource(Res.string.island_generating), color = Parchment)
                     }
                     if (failed) {
                         Text(stringResource(Res.string.island_generation_failed), color = Parchment)
-                        Button(onClick = { operations.launch { islands.open(seed) } }) { Text(stringResource(Res.string.retry_island)) }
+                        Button(onClick = { operations.launch { islands.open(terrain) } }) { Text(stringResource(Res.string.retry_island)) }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
@@ -300,7 +309,7 @@ fun App(
                                 if (clock != null && clock.state.tick == 0L && !clock.playback.value.playing) clock.togglePlaying()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD89C), contentColor = NightGreen),
-                        ) { Text(stringResource(Res.string.begin_story)) }
+                        ) { Text(stringResource(if (seed == IslandSeeds.first()) Res.string.begin_story else Res.string.explore_island)) }
                         if (saveStore != null) {
                             TextButton(
                                 onClick = { operations.launch { islands.restore(saveStore) } },
@@ -310,10 +319,16 @@ fun App(
                         }
                     }
                     if (storage != null) CompositionLocalProvider(LocalContentColor provides Parchment) { SaveMessage(storage) }
-                    TextButton(
-                        onClick = { showPanel(WorldPanel.Menu) },
-                        colors = ButtonDefaults.textButtonColors(contentColor = Parchment),
-                    ) { Text(stringResource(Res.string.world_menu)) }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(
+                            onClick = { showPanel(WorldPanel.Islands) }, enabled = storage != SaveStatus.Busy,
+                            colors = ButtonDefaults.textButtonColors(contentColor = Parchment),
+                        ) { Text(stringResource(Res.string.other_islands)) }
+                        TextButton(
+                            onClick = { showPanel(WorldPanel.Menu) },
+                            colors = ButtonDefaults.textButtonColors(contentColor = Parchment),
+                        ) { Text(stringResource(Res.string.world_menu)) }
+                    }
                 }
             }
             if (isWorld && session != null) {
@@ -324,8 +339,13 @@ fun App(
                             Readout {
                                 Text(chapter, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.semantics { heading() })
                                 val climate = pose?.climate
+                                val watershed = climate?.watershed
                                 val isHollowmere = seed == IslandSeeds.first()
                                 val concern = when {
+                                    watershed?.season == Season.Wet && climate.weather == Weather.Rain -> Res.string.valley_storm_note
+                                    watershed != null && climate.weather == Weather.Rain -> Res.string.valley_refill_note
+                                    watershed != null && watershed.recharge < 52 -> Res.string.valley_low_note
+                                    watershed != null -> Res.string.valley_clear_note
                                     climate?.weather == Weather.Rain -> Res.string.world_rain_note
                                     climate?.weather == Weather.Dry && isHollowmere -> Res.string.grove_dry_note
                                     climate?.weather == Weather.Dry -> Res.string.world_dry_note
@@ -363,7 +383,7 @@ fun App(
                 Box(Modifier.align(Alignment.Center).padding(16.dp)) {
                     Readout {
                         Text(stringResource(if (failed) Res.string.island_generation_failed else Res.string.island_generating))
-                        if (failed) TextButton(onClick = { operations.launch { islands.open(seed) } }) { Text(stringResource(Res.string.retry_island)) }
+                        if (failed) TextButton(onClick = { operations.launch { islands.open(terrain) } }) { Text(stringResource(Res.string.retry_island)) }
                     }
                 }
             }
@@ -395,8 +415,6 @@ fun App(
                                             showPanel(null)
                                         }
                                         PanelButton(Res.string.show_diagnostics) { showPanel(WorldPanel.Diagnostics) }
-                                    } else {
-                                        PanelButton(Res.string.other_islands, storage != SaveStatus.Busy) { showPanel(WorldPanel.Islands) }
                                     }
                                     if (playSound != null || setAmbience != null) {
                                         ToggleSetting(Res.string.world_sounds, soundEnabled) { soundEnabled = it }
@@ -404,19 +422,17 @@ fun App(
                                     ToggleSetting(Res.string.reduced_camera_motion, reducedMotion) { reducedMotion = it }
                                 }
                                 WorldPanel.Islands -> {
-                                    IslandSeeds.forEach { candidate ->
-                                        val label = if (candidate == IslandSeeds.first()) stringResource(Res.string.fading_grove)
-                                        else stringResource(Res.string.island_seed_named, candidate.toString())
-                                        OutlinedButton(enabled = storage != SaveStatus.Busy, onClick = {
-                                            state = state.selectSeed(candidate)
-                                            showPanel(null)
-                                        }) { Text(label) }
+                                    IslandPicker(terrain, enabled = storage != SaveStatus.Busy) { candidate ->
+                                        state = state.selectIsland(candidate)
+                                        showPanel(null)
                                     }
                                 }
                                 WorldPanel.Inspect -> session?.let {
-                                    WorldInspector(it, compact = !wide, onCreatureFocus = { id ->
-                                        requestFocus(WorldCamera.Focus.Creature(id))
-                                    })
+                                    WorldInspector(
+                                        it, compact = !wide,
+                                        onCreatureFocus = { id -> requestFocus(WorldCamera.Focus.Creature(id)) },
+                                        onLandmarkFocus = { kind -> requestFocus(WorldCamera.Focus.Landmark(kind)) },
+                                    )
                                 }
                                 WorldPanel.Grove -> session?.let {
                                     GroveControls(it, onRegionFocus = { region -> requestFocus(WorldCamera.Focus.Region(region)) })

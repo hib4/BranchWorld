@@ -13,8 +13,13 @@ import kotlin.math.abs
 
 /** Worldgen v1 uses integer sampling and independent salts for each field. */
 object IslandGenerator {
-    fun generate(key: TerrainKey): TerrainMap {
-        require(key.worldgenVersion == 1) { "Unsupported world generation version ${key.worldgenVersion}" }
+    fun generate(key: TerrainKey): TerrainMap = when (key.worldgenVersion) {
+        1 -> legacy(key)
+        WatershedWorldgenVersion -> WatershedGenerator.generate(key)
+        else -> throw IllegalArgumentException("Unsupported world generation version ${key.worldgenVersion}")
+    }
+
+    private fun legacy(key: TerrainKey): TerrainMap {
         val seed = key.seed.toULong()
         val shape = IslandShape(SplitMix64(mix64(seed xor ShapeSalt)))
         val elevations = IntArray((Size + 1) * (Size + 1))
@@ -98,7 +103,7 @@ object IslandGenerator {
         return props.sortedWith(compareBy(TerrainProp::z, TerrainProp::x))
     }
 
-    private fun noise(seed: ULong, x: Int, z: Int, period: Int): Int {
+    internal fun noise(seed: ULong, x: Int, z: Int, period: Int): Int {
         val latticeX = x shr period.countTrailingZeroBits()
         val latticeZ = z shr period.countTrailingZeroBits()
         val offsetX = x and (period - 1)
@@ -109,7 +114,7 @@ object IslandGenerator {
         return (top * (period - offsetZ) + bottom * offsetZ) / (period * period)
     }
 
-    private fun coordinateHash(seed: ULong, x: Int, z: Int): ULong =
+    internal fun coordinateHash(seed: ULong, x: Int, z: Int): ULong =
         mix64(seed xor (x.toULong() * 0x9e3779b97f4a7c15uL) xor (z.toULong() * 0xd1b54a32d192ed03uL))
 
     private data class PropCandidate(val x: Int, val z: Int, val kind: PropKind, val rank: ULong)

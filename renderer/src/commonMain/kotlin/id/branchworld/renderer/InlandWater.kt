@@ -1,0 +1,192 @@
+package id.branchworld.renderer
+
+import de.fabmax.kool.math.Vec3f
+import de.fabmax.kool.math.Vec4f
+import de.fabmax.kool.modules.ksl.KslShader
+import de.fabmax.kool.modules.ksl.blocks.cameraData
+import de.fabmax.kool.modules.ksl.lang.*
+import de.fabmax.kool.scene.Scene
+import de.fabmax.kool.scene.VertexLayouts
+import de.fabmax.kool.scene.addColorMesh
+import de.fabmax.kool.scene.vertexAttrib
+import de.fabmax.kool.util.Color
+import id.branchworld.game.terrain.TerrainMap
+import id.branchworld.game.terrain.TerrainMap.Companion.MaxCell
+import id.branchworld.game.terrain.TerrainMap.Companion.MinCell
+import id.branchworld.game.terrain.WaterCell
+import id.branchworld.game.terrain.WaterKind
+
+/** Static water geometry shares elevation samples at every corner, including chunk borders. */
+internal fun Scene.addInlandWater(terrain: TerrainMap, material: InlandWater) {
+    val watershed = checkNotNull(terrain.watershed)
+    fun WaterKind.paint() = when (this) {
+        WaterKind.Stream -> 0f
+        WaterKind.Lake -> 0.45f
+        WaterKind.Marsh -> 1f
+    }
+    fun cornerSample(x: Int, z: Int, fallback: WaterCell): Vec4f {
+        var count = 0
+        var level = 0f
+        var flowX = 0f
+        var flowZ = 0f
+        var paint = 0f
+        for (dz in -1..0) for (dx in -1..0) {
+            val cx = x + dx
+            val cz = z + dz
+            val cell = watershed.waterAt(cx, cz) ?: continue
+            level += cell.surfaceTwice
+            flowX += cell.downstreamX - cx
+            flowZ += cell.downstreamZ - cz
+            paint += cell.kind.paint()
+            count++
+        }
+        return if (count == 0) Vec4f(fallback.surfaceTwice.toFloat(), 0f, 0f, fallback.kind.paint())
+        else Vec4f(level / count, flowX / count, flowZ / count, paint / count)
+    }
+    addColorMesh("Watershed") {
+        generate {
+            for (z in MinCell..MaxCell) for (x in MinCell..MaxCell) {
+                val own = watershed.waterAt(x, z)
+                var nearby = own
+                if (nearby == null) {
+                    // One tile of apron gives the surface room to meet a sloped bank.
+                    for (dz in -1..1) for (dx in -1..1) {
+                        if (nearby == null) nearby = watershed.waterAt(x + dx, z + dz)
+                    }
+                }
+                val water = nearby ?: continue
+                fun point(cx: Int, cz: Int): Int {
+                    val px = cx * CellSize
+                    val pz = cz * CellSize
+                    val bed = terrain.cornerElevation(cx, cz) * ElevationScale
+                    val sample = cornerSample(cx, cz, water)
+                    val level = sample.x * ElevationScale / 2
+                    color = Color(0.5f + sample.y * 0.5f, 0.5f + sample.z * 0.5f, sample.w, (bed + 1f) * 0.4f)
+                    return vertex(Vec3f(px, level, pz), Vec3f.Y_AXIS)
+                }
+                val a = point(x, z)
+                val b = point(x + 1, z)
+                val c = point(x, z + 1)
+                val d = point(x + 1, z + 1)
+                addTriIndices(a, c, d)
+                addTriIndices(a, d, b)
+            }
+        }
+        shader = material
+    }
+}
+
+internal fun Scene.addReedBanks(terrain: TerrainMap, wind: MeadowWind, compact: Boolean) {
+    val watershed = checkNotNull(terrain.watershed)
+    addColorMesh("Rushes and reed seed heads") {
+        generate {
+            for (z in MinCell..MaxCell) for (x in MinCell..MaxCell) {
+                val water = watershed.waterAt(x, z) ?: continue
+                if (water.kind == WaterKind.Stream && water.surfaceTwice > 22) continue
+                val pattern = (x * 2099 xor z * 6553) and 255
+                val threshold = if (water.kind == WaterKind.Marsh) 100 else 53
+                if (pattern > if (compact) threshold * 3 / 4 else threshold) continue
+                // Framing the open surface leaves the main channel legible at survey distance.
+                if (watershed.waterAt(x - 1, z) != null && watershed.waterAt(x + 1, z) != null &&
+                    watershed.waterAt(x, z - 1) != null && watershed.waterAt(x, z + 1) != null) continue
+                for (blade in 0..4) {
+                    val px = (x + 0.21f + blade * 0.13f) * CellSize
+                    val pz = (z + 0.37f + (blade * 3 % 5) * 0.13f) * CellSize
+                    val stem = (water.surfaceTwice - 3) * ElevationScale / 2
+                    val root = maxOf(stem, terrain.heightAt(px, pz))
+                    val height = 0.12f + ((pattern + blade * 7) % 15) * 0.012f
+                    val lean = (blade - 2) * 0.023f
+                    color = Color(0.32f, 0.43f, 0.17f, 0f)
+                    val base = vertex(Vec3f(px - 0.012f, stem, pz), Vec3f.Y_AXIS)
+                    val edge = vertex(Vec3f(px + 0.014f, stem, pz + 0.013f), Vec3f.Y_AXIS)
+                    color = if (blade % 2 == 0) Color(0.64f, 0.65f, 0.27f, 0.7f) else Color(0.45f, 0.54f, 0.19f, 0.7f)
+                    val tip = vertex(Vec3f(px + lean, root + height, pz + 0.02f), Vec3f.Y_AXIS)
+                    addTriIndices(base, edge, tip)
+                    if (blade % 2 == 0) {
+                        color = Color(0.54f, 0.40f, 0.19f, 0.7f)
+                        val lower = vertex(Vec3f(px + lean * 0.82f - 0.017f, root + height * 0.67f, pz + 0.018f), Vec3f.Y_AXIS)
+                        val upper = vertex(Vec3f(px + lean + 0.014f, root + height * 1.10f, pz + 0.017f), Vec3f.Y_AXIS)
+                        addTriIndices(lower, tip, upper)
+                    }
+                }
+            }
+        }
+        shader = wind
+    }
+}
+
+internal class InlandWater : KslShader("Inland water") {
+    var time by uniform1f("uRiverTime")
+    var recharge by uniform1f("uRiverRecharge", 0.25f)
+    var atmosphere by uniform4f("uRiverAtmosphere", Vec4f(0.96f, 0f, 0f, 0f))
+    var haze by uniformColor("uRiverHaze", Color(0.31f, 0.53f, 0.58f))
+
+    init {
+        program.apply {
+            optimizeExpressions = false
+            val camera = cameraData()
+            val world = interStageFloat3("riverPosition")
+            val data = interStageFloat4("riverGround")
+            val clock = uniformFloat1("uRiverTime")
+            val level = uniformFloat1("uRiverRecharge")
+            val air = uniformFloat4("uRiverAtmosphere")
+            val mist = uniformFloat4("uRiverHaze")
+            vertexStage {
+                main {
+                    val position = vertexAttrib(VertexLayouts.Position.position)
+                    val height = float1Var(position.y + (level - 0.40f.const) * 0.12f.const *
+                        smoothStep(0.025f.const, 0.19f.const, position.y), "surfaceLevel")
+                    world.input set float3Value(position.x, height, position.z)
+                    data.input set vertexAttrib(VertexLayouts.Color.color)
+                    outPosition set camera.viewProjMat * float4Value(position.x, height, position.z, 1f.const)
+                }
+            }
+            fragmentStage {
+                main {
+                    val p = world.output
+                    val info = data.output
+                    val bed = float1Var(info.a * 2.5f.const - 1f.const, "riverBed")
+                    val depth = float1Var(p.y - bed, "riverDepth")
+                    `if`(depth lt 0.004f.const) { discard() }
+                    `if`(p.y lt 0.016f.const) { discard() }
+                    val kind = info.b
+                    val flow = float2Var(info.rg * 0.55f.const + float2Value(0.13f, 0.71f), "downstream")
+                    val flowRate = float1Var(1.35f.const - smoothStep(0.10f.const, 0.72f.const, kind), "flowSpeed")
+                    val longWave = float1Var(sin(dot(p.xz, flow) * 15f.const - clock * flowRate * 2.6f.const +
+                        sin(p.x * 7.9f.const + p.z * 5.8f.const - clock * 0.77f.const) * 1.58f.const), "current")
+                    val crossWave = float1Var(sin(p.x * 26f.const - p.z * 19f.const + clock * 1.25f.const), "riverGlints")
+                    val deep = float3Var(mix(float3Value(0.12f, 0.43f, 0.45f), float3Value(0.24f, 0.42f, 0.30f), kind), "deepWater")
+                    val lake = float1Var(1f.const - smoothStep(0.04f.const, 0.38f.const, abs(kind - 0.45f.const)), "lakeBasin")
+                    deep set mix(deep, float3Value(0.12f, 0.35f, 0.47f), lake * 0.72f.const)
+                    val shallow = float3Var(mix(float3Value(0.45f, 0.64f, 0.48f), float3Value(0.48f, 0.55f, 0.34f), kind), "shallowWater")
+                    val base = float3Var(mix(shallow, deep, smoothStep(0.006f.const, 0.10f.const, depth)), "riverColor")
+                    val light = float3Var(mix(float3Value(0.53f, 0.64f, 0.83f), float3Value(1.04f, 1.01f, 0.92f), air.x), "riverLight")
+                    val sheen = float1Var(smoothStep(0.37f.const, 0.92f.const, longWave) *
+                        smoothStep(-0.56f.const, 0.96f.const, crossWave), "sheen")
+                    val wetEdge = float1Var(smoothStep(0.006f.const, 0.032f.const, depth) *
+                        (1f.const - smoothStep(0.030f.const, 0.070f.const, depth)), "wetEdge")
+                    val reflection = float1Var(sheen * 0.075f.const + wetEdge * 0.055f.const + longWave * 0.012f.const, "reflection")
+                    val water = float3Var(base * light * (1f.const - air.z * 0.15f.const), "paintedWater")
+                    water += float3Value(0.70f, 0.89f, 0.82f) * reflection
+                    water += float3Value(0.99f, 0.55f, 0.32f) * air.y * (sheen * 0.075f.const + 0.018f.const)
+                    val coastDepth = float1Var(clamp((bed * 32f.const + 18f.const) / 18f.const, 0f.const, 1f.const), "tideDepth")
+                    val coastBase = float3Var(float3Value(0.081f, 0.31f, 0.39f) +
+                        float3Value(0.26f, 0.35f, 0.19f) * coastDepth, "coastBase")
+                    val coastLight = float3Var(mix(float3Value(0.52f, 0.60f, 0.78f), float3Value(1f, 1f, 1f), air.x), "coastLight")
+                    val overcast = float3Var(mix(float3Value(1f, 1f, 1f), float3Value(0.78f, 0.87f, 0.96f), air.z), "coastOvercast")
+                    val tidal = float3Var(coastBase * coastLight * overcast, "tidalWater")
+                    val shoreWave = float1Var(sin(p.z * 18f.const + p.x * 8.3f.const + clock * 1.55f.const +
+                        sin(p.x * 5.7f.const - p.z * 2.1f.const + clock * 0.41f.const) * 1.29f.const), "shoreWave")
+                    val seaCross = float1Var(sin(p.x * 12.1f.const - p.z * 8.7f.const - clock * 0.89f.const), "seaCross")
+                    val coastRipple = float1Var(smoothStep(0.53f.const, 0.96f.const, shoreWave) *
+                        smoothStep(-0.16f.const, 0.88f.const, seaCross), "coastRipple")
+                    tidal += float3Value(0.64f, 0.89f, 0.85f) * ((shoreWave + seaCross) * 0.008f.const + coastRipple * 0.031f.const)
+                    val inland = float1Var(smoothStep(0.018f.const, 0.17f.const, p.y), "inlandMix")
+                    val horizon = float1Var(smoothStep(4.8f.const, 16f.const, distance(camera.position, p)), "inlandHorizon")
+                    val color = float3Var(mix(tidal, water, inland), "estuaryColor")
+                    colorOutput(mix(color, mist.rgb, horizon * (0.42f.const + 0.24f.const * air.z)), 1f.const)
+                }
+            }
+        }
+    }
+}

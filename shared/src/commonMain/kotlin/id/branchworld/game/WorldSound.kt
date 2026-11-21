@@ -17,7 +17,8 @@ enum class WorldAmbience(val surf: Float, val wind: Float, val rain: Float, val 
     Silent(0f, 0f, 0f, 0f),
     Sunlit(0.48f, 0.36f, 0f, 0.36f),
     Twilight(0.42f, 0.26f, 0f, 0f),
-    Rain(0.25f, 0.44f, 0.68f, 0f);
+    Rain(0.25f, 0.44f, 0.68f, 0f),
+    Storm(0.27f, 0.63f, 0.83f, 0f);
 
     fun volume(layer: AmbienceLayer): Float = when (layer) {
         AmbienceLayer.Surf -> surf
@@ -35,6 +36,7 @@ enum class AmbienceLayer(private val fileName: String) {
 
 internal fun worldAmbience(enabled: Boolean, active: Boolean, climate: ClimatePose?): WorldAmbience = when {
     !enabled || !active || climate == null -> WorldAmbience.Silent
+    climate.isStorm -> WorldAmbience.Storm
     climate.weather == Weather.Rain -> WorldAmbience.Rain
     climate.dayPhase >= 0.46f && climate.dayPhase < 0.96f -> WorldAmbience.Twilight
     else -> WorldAmbience.Sunlit

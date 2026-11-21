@@ -40,8 +40,8 @@ internal class PreviewController {
         if (width < 2 || height < 2) return
         val ratio = width.toFloat() / height
         val opening = presentation.value.opening
-        val before = heroCamera(aspect.value, opening)
-        val after = heroCamera(ratio, opening)
+        val before = heroCamera(aspect.value, opening, renderWorld?.terrain)
+        val after = heroCamera(ratio, opening, renderWorld?.terrain)
         aspect.value = ratio
         camera.update { pose ->
             pose.copy(
@@ -57,10 +57,10 @@ internal class PreviewController {
         if (previous == request) return
         presentation.value = request
         if (previous.opening != request.opening) {
-            val target = heroCamera(aspect.value, request.opening)
+            val target = heroCamera(aspect.value, request.opening, renderWorld?.terrain)
             if (previous.opening) {
                 // Carry the player's orbit and zoom through entering the chapter.
-                val before = heroCamera(aspect.value, true)
+                val before = heroCamera(aspect.value, true, renderWorld?.terrain)
                 camera.update { it.copy(targetX = it.targetX + target.targetX - before.targetX,
                     targetZ = it.targetZ + target.targetZ - before.targetZ) }
             } else camera.value = target
@@ -77,7 +77,7 @@ internal class PreviewController {
 
     fun showWorld(projection: WorldRenderSource?) {
         if (projection != null && projection !== world.value) {
-            camera.value = heroCamera(aspect.value, presentation.value.opening)
+            camera.value = heroCamera(aspect.value, presentation.value.opening, projection.terrain)
             enteredAt.value = TimeSource.Monotonic.markNow()
             status.value = "Loading island…"
         }
@@ -108,7 +108,7 @@ internal class PreviewController {
         focusAnimation?.cancel()
         val start = camera.value
         _tracking.value = false
-        val target = heroCamera(aspect.value, presentation.value.opening)
+        val target = heroCamera(aspect.value, presentation.value.opening, renderWorld?.terrain)
         return scope.launch {
             if (presentation.value.reducedMotion) {
                 camera.value = target

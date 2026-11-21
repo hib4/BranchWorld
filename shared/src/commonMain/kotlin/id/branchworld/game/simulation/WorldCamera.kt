@@ -1,5 +1,7 @@
 package id.branchworld.game.simulation
 
+import id.branchworld.game.terrain.LandmarkKind
+
 /** Viewport requests from the player interface. They never enter world commands or saves. */
 data class WorldCamera(
     val focus: Focus? = null,
@@ -10,5 +12,6 @@ data class WorldCamera(
     sealed interface Focus {
         data class Region(val index: Int) : Focus
         data class Creature(val id: Long) : Focus
+        data class Landmark(val kind: LandmarkKind) : Focus
     }
 }

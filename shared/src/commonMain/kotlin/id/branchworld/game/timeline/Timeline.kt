@@ -3,6 +3,7 @@ package id.branchworld.game.timeline
 import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
+import id.branchworld.game.ecology.WatershedRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.SettlementEvent
@@ -219,7 +220,10 @@ internal class Timeline private constructor(
     }
 
     companion object {
-        fun start(terrain: TerrainMap, rulesVersion: Int = EnvironmentalRulesVersion): Timeline {
+        fun start(
+            terrain: TerrainMap,
+            rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else WatershedRulesVersion,
+        ): Timeline {
             val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false)
             return Timeline(terrain, root(engine.state, emptyList()), engine)
         }

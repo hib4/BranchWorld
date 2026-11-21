@@ -3,10 +3,12 @@ package id.branchworld.game.save
 import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
+import id.branchworld.game.ecology.WatershedRulesVersion
 import id.branchworld.game.simulation.canonicalHash
 import id.branchworld.game.simulation.commandOrder
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainMap
+import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.MaxBranchNameLength
 import id.branchworld.game.timeline.MaxBranches
 import id.branchworld.game.timeline.MaxCommands
@@ -26,9 +28,8 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
-    private const val SchemaVersion = 3
-    private const val LegacyTimelineSchema = 2
-    private const val WorldgenVersion = 1
+    private const val WatershedSchema = 4
+    private const val CivilizationSchema = 3
     private val json = Json { encodeDefaults = true }
 
     @Serializable
@@ -41,9 +42,12 @@ internal object TimelineSaveCodec {
     )
 
     fun encode(timeline: TimelineCheckpoint): ByteArray {
-        val rules = timeline.branches.first().start.rulesVersion
-        require(rules == EnvironmentalRulesVersion || rules == CivilizationRulesVersion)
-        val envelope = Envelope(SchemaVersion, rules, WorldgenVersion, integrity(timeline), timeline)
+        val root = timeline.branches.first().start
+        val rules = root.rulesVersion
+        val worldgen = root.terrain.key.worldgenVersion
+        val schema = if (rules == WatershedRulesVersion) WatershedSchema else CivilizationSchema
+        require(isSupported(schema, rules, worldgen))
+        val envelope = Envelope(schema, rules, worldgen, integrity(timeline), timeline)
         return json.encodeToString(envelope).encodeToByteArray().also { require(it.size <= MaxBytes) }
     }
 
@@ -59,24 +63,30 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            LegacyTimelineSchema, SchemaVersion -> Unit
+            2, CivilizationSchema, WatershedSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
-        if ((rules != EnvironmentalRulesVersion && (rules != CivilizationRulesVersion || schema != SchemaVersion)) ||
-            version(header["worldgenVersion"]?.jsonPrimitive?.intOrNull) != WorldgenVersion
-        ) throw IncompatibleSave()
+        val worldgen = version(header["worldgenVersion"]?.jsonPrimitive?.intOrNull)
+        if (!isSupported(schema, rules, worldgen)) throw IncompatibleSave()
         val envelope = json.decodeFromJsonElement(Envelope.serializer(), header)
         val checkpoint = envelope.timeline
         require(envelope.integrity == integrity(checkpoint))
         val root = requireNotNull(checkpoint.branches.firstOrNull())
-        require(root.start.terrain.key.worldgenVersion == WorldgenVersion)
+        require(root.start.terrain.key.worldgenVersion == worldgen)
         val terrain = IslandGenerator.generate(root.start.terrain.key)
         validate(terrain, checkpoint, rules)
         return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
     }
 
     private fun version(value: Int?): Int = requireNotNull(value)
+
+    private fun isSupported(schema: Int, rules: Int, worldgen: Int): Boolean = when (schema) {
+        2 -> worldgen == 1 && rules == EnvironmentalRulesVersion
+        CivilizationSchema -> worldgen == 1 && (rules == EnvironmentalRulesVersion || rules == CivilizationRulesVersion)
+        WatershedSchema -> worldgen == WatershedWorldgenVersion && rules == WatershedRulesVersion
+        else -> false
+    }
 
     private fun integrity(checkpoint: TimelineCheckpoint): String =
         json.encodeToString(checkpoint).encodeToByteArray().canonicalHash()
