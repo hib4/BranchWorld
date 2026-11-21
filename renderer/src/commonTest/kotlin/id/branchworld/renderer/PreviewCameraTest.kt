@@ -1,5 +1,7 @@
 package id.branchworld.renderer
 
+import androidx.compose.runtime.MonotonicFrameClock
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -27,6 +29,14 @@ class PreviewCameraTest {
 
     @Test
     fun panIsBoundedAndFocusRestoresTheWholePose() {
+        val frameClock = object : MonotonicFrameClock {
+            private var time = 0L
+
+            override suspend fun <R> withFrameNanos(onFrame: (Long) -> R): R {
+                time += 16_666_667L
+                return onFrame(time)
+            }
+        }
         val controller = PreviewController()
         controller.orbit(0.25f, -0.12f)
         controller.zoom(1.4f)
@@ -35,7 +45,7 @@ class PreviewCameraTest {
 
         assertTrue(moved.targetX in -5f..5f && moved.targetZ in -5f..5f)
         assertNotEquals(PreviewCamera(), moved)
-        controller.focus()
+        runBlocking(frameClock) { controller.focus(this).join() }
         assertEquals(PreviewCamera(), controller.camera.value)
     }
 }

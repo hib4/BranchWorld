@@ -5,7 +5,7 @@
     <string name="world_title">Island %1$s</string>
     <string name="island_seed">Island seed</string>
     <string name="island_generating">Generating island…</string>
-    <string name="island_generation_failed">Could not generate the island. Go back to try again.</string>
+    <string name="island_generation_failed">Could not generate the island.</string>
     <string name="play_world">Play</string>
     <string name="pause_world">Pause</string>
     <string name="world_speed">%1$d×</string>
@@ -46,11 +46,11 @@
     <string name="save_world">Save world</string>
     <string name="load_world">Load saved world</string>
     <string name="save_busy">Working with the saved world…</string>
-    <string name="save_missing">There is no saved world yet.</string>
-    <string name="save_corrupt">The saved world is damaged.</string>
-    <string name="save_incompatible">This version of BranchWorld cannot open that save.</string>
-    <string name="save_unreadable">Could not read the saved world.</string>
-    <string name="save_unwritable">Could not save the world.</string>
+    <string name="save_missing">There is no saved world yet. Open an island to start one.</string>
+    <string name="save_corrupt">The saved world is damaged. You can open a new island. The damaged file stays in place.</string>
+    <string name="save_incompatible">This save needs a compatible version of BranchWorld. You can still open a new island.</string>
+    <string name="save_unreadable">Could not read the saved world. Check that storage is available and try again.</string>
+    <string name="save_unwritable">Could not save the world. Free up space or check storage access, then try again.</string>
     <string name="save_saved">Saved at tick %1$s</string>
     <string name="save_loaded">Loaded at tick %1$s</string>
     <string name="save_replace">Replace save</string>
@@ -100,7 +100,7 @@
     <string name="comparison_deer">Deer</string>
     <string name="comparison_births">Births through tick</string>
     <string name="comparison_deaths">Deaths through tick</string>
-    <string name="comparison_events">Recent interventions in %1$s</string>
+    <string name="comparison_events">History in %1$s</string>
     <string name="comparison_no_events">No recorded interventions by this tick.</string>
     <string name="comparison_event_loading">Checking the intervention outcome…</string>
     <string name="settlement_inspector">Settlements</string>
@@ -129,4 +129,10 @@
     <string name="diagnostics_seed">Seed: %1$s</string>
     <string name="diagnostics_position">Bunny cell: %1$d, %2$d</string>
     <string name="diagnostics_lifecycle">Lifecycle: %1$s</string>
+    <string name="branch_guide">How to branch</string>
+    <string name="branch_guide_play">Open seed 104729. In Timeline, play to 600 and go back to tick 300.</string>
+    <string name="branch_guide_fork">Choose Fork here. Open Inspect world and reforest C2 on the new branch.</string>
+    <string name="branch_guide_compare">Play both branches to 900. Open Compare branches to see what changed.</string>
+    <string name="world_sounds">World sounds</string>
+    <string name="retry_island">Retry island</string>
 </resources>

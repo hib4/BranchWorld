@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,6 +22,8 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -49,6 +52,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.close_inspector
+import branchworld.shared.generated.resources.close_timeline
+import branchworld.shared.generated.resources.inspect_world
+import branchworld.shared.generated.resources.open_timeline
+import branchworld.shared.generated.resources.branch_guide
+import branchworld.shared.generated.resources.branch_guide_play
+import branchworld.shared.generated.resources.branch_guide_fork
+import branchworld.shared.generated.resources.branch_guide_compare
+import branchworld.shared.generated.resources.retry_island
+import branchworld.shared.generated.resources.world_sounds
 import branchworld.shared.generated.resources.back_to_home
 import branchworld.shared.generated.resources.branchworld_tagline
 import branchworld.shared.generated.resources.branchworld_title
@@ -91,8 +104,10 @@ fun App(
     registerBackHandler: @Composable (enabled: Boolean, onBack: () -> Unit) -> Unit = { _, _ -> },
     foreground: Boolean = true,
     saveStore: WorldSaveStore? = null,
+    playSound: ((WorldSound) -> Unit)? = null,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
+    var soundEnabled by rememberSaveable { mutableStateOf(false) }
     val isWorld = state.route == ShellRoute.World
     var hasOpenedWorld by remember { mutableStateOf(isWorld) }
     val owner = LocalViewModelStoreOwner.current
@@ -152,11 +167,17 @@ fun App(
                         diagnosticsVisible = state.diagnosticsVisible,
                         onToggleDiagnostics = { state = state.toggleDiagnostics() },
                         onBack = goHome,
+                        onRetry = { operations.launch { islands.open(selectedSeed) } },
+                        onForked = { if (soundEnabled) playSound?.invoke(WorldSound.Fork) },
                         saveControls = saveStore?.let {
                             {
                                 SaveControls(
                                     status = storage,
-                                    onSave = { replace -> operations.launch { islands.save(it, replace) } },
+                                    onSave = { replace ->
+                                        operations.launch {
+                                            if (islands.save(it, replace) && soundEnabled) playSound?.invoke(WorldSound.Save)
+                                        }
+                                    },
                                     onDismiss = islands::dismissSaveStatus,
                                 )
                             }
@@ -177,6 +198,8 @@ fun App(
                                 },
                                 onLoad = saveStore?.let { { operations.launch { islands.restore(it) } } },
                                 saveStatus = storage,
+                                soundEnabled = soundEnabled,
+                                onToggleSound = if (playSound != null) ({ soundEnabled = !soundEnabled }) else null,
                             )
                         }
                     }
@@ -193,8 +216,11 @@ private fun HomeScreen(
     onOpenWorld: () -> Unit,
     onLoad: (() -> Unit)?,
     saveStatus: SaveStatus?,
+    soundEnabled: Boolean,
+    onToggleSound: (() -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    var showGuide by rememberSaveable { mutableStateOf(false) }
     Column(
         modifier = modifier
             .widthIn(max = 640.dp)
@@ -231,6 +257,21 @@ private fun HomeScreen(
             Text(stringResource(Res.string.open_world))
         }
         if (onLoad != null) LoadControls(saveStatus, onLoad)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = showGuide, onClick = { showGuide = !showGuide },
+                label = { Text(stringResource(Res.string.branch_guide)) })
+            if (onToggleSound != null) {
+                FilterChip(selected = soundEnabled, onClick = onToggleSound,
+                    label = { Text(stringResource(Res.string.world_sounds)) })
+            }
+        }
+        if (showGuide) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(stringResource(Res.string.branch_guide_play))
+                Text(stringResource(Res.string.branch_guide_fork))
+                Text(stringResource(Res.string.branch_guide_compare))
+            }
+        }
     }
 }
 
@@ -247,9 +288,13 @@ private fun WorldScreen(
     diagnosticsVisible: Boolean,
     onToggleDiagnostics: () -> Unit,
     onBack: () -> Unit,
+    onRetry: () -> Unit,
+    onForked: () -> Unit,
     saveControls: (@Composable () -> Unit)?,
     modifier: Modifier = Modifier,
 ) {
+    var timelineOpen by rememberSaveable(seed) { mutableStateOf(false) }
+    var inspectorOpen by remember(session) { mutableStateOf(false) }
     val clock = session?.clock
     val comparison = session?.comparison?.collectAsStateWithLifecycle()?.value
     Column(
@@ -288,7 +333,10 @@ private fun WorldScreen(
             }
             if (active && world == null) {
                 val message = if (generationFailed) Res.string.island_generation_failed else Res.string.island_generating
-                Text(stringResource(message), modifier = Modifier.align(Alignment.Center).padding(16.dp))
+                Column(Modifier.align(Alignment.Center).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(message))
+                    if (generationFailed) TextButton(onClick = onRetry) { Text(stringResource(Res.string.retry_island)) }
+                }
             }
             if (active && world != null && viewportHud != null) {
                 Box(Modifier.align(Alignment.TopStart).padding(12.dp)) { viewportHud() }
@@ -303,22 +351,33 @@ private fun WorldScreen(
                 ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp))
             }
         }
-        if (active && comparison == null) Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
-                Text(stringResource(Res.string.back_to_home), textAlign = TextAlign.Center)
+        if (active && comparison == null) {
+            if (session != null) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { timelineOpen = !timelineOpen }) {
+                        Text(stringResource(if (timelineOpen) Res.string.close_timeline else Res.string.open_timeline))
+                    }
+                    OutlinedButton(onClick = { inspectorOpen = !inspectorOpen }) {
+                        Text(stringResource(if (inspectorOpen) Res.string.close_inspector else Res.string.inspect_world))
+                    }
+                }
+                saveControls?.invoke()
             }
-            Button(onClick = onToggleDiagnostics, modifier = Modifier.weight(1f), enabled = clock != null) {
-                val label = if (diagnosticsVisible) Res.string.hide_diagnostics else Res.string.show_diagnostics
-                Text(stringResource(label), textAlign = TextAlign.Center)
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+                    Text(stringResource(Res.string.back_to_home), textAlign = TextAlign.Center)
+                }
+                OutlinedButton(onClick = onToggleDiagnostics, modifier = Modifier.weight(1f), enabled = clock != null) {
+                    val label = if (diagnosticsVisible) Res.string.hide_diagnostics else Res.string.show_diagnostics
+                    Text(stringResource(label), textAlign = TextAlign.Center)
+                }
             }
-        }
-        if (active && session != null) {
-            if (comparison == null) saveControls?.invoke()
-            TimelineControls(session, visible = comparison == null)
-            if (comparison == null) WorldInspector(session) else ComparisonDetails(session, comparison)
+            if (session != null) {
+                if (timelineOpen) TimelineControls(session, onForked)
+                if (inspectorOpen) WorldInspector(session)
+            }
+        } else if (active && session != null && comparison != null) {
+            ComparisonDetails(session, comparison)
         }
     }
 }

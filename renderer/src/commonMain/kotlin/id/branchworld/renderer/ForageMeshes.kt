@@ -73,6 +73,7 @@ internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
         }
     }
     private var previous: List<ForagePose>? = null
+    private val previousGroups = mutableMapOf<Mesh<*>, List<ForagePose>>()
 
     init {
         scene.addColorMesh("Freshwater springs") {
@@ -102,6 +103,7 @@ internal class ForageMeshes(scene: Scene, springs: List<GroundPoint>) {
     }
 
     private fun Mesh<*>.show(visible: List<ForagePose>) {
+        if (previousGroups.put(this, visible) == visible) return
         isVisible = visible.isNotEmpty()
         if (visible.isEmpty()) return
         val transform = MutableMat4f()

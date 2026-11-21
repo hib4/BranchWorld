@@ -23,6 +23,7 @@ data class WorldRenderProjection(
     val climate: ClimatePose? = null,
     val branchId: Int? = null,
     val settlements: List<SettlementPose>? = null,
+    val interpolateCreatures: Boolean = false,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }

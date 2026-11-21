@@ -36,10 +36,8 @@ import branchworld.shared.generated.resources.animal_label
 import branchworld.shared.generated.resources.animal_needs
 import branchworld.shared.generated.resources.animal_resting
 import branchworld.shared.generated.resources.animal_walking
-import branchworld.shared.generated.resources.close_inspector
 import branchworld.shared.generated.resources.commands_queued
 import branchworld.shared.generated.resources.inspect_animal
-import branchworld.shared.generated.resources.inspect_world
 import branchworld.shared.generated.resources.no_forage_deficit
 import branchworld.shared.generated.resources.no_planting_sites
 import branchworld.shared.generated.resources.no_wildlife
@@ -60,23 +58,17 @@ import org.jetbrains.compose.resources.stringResource
 
 @Composable
 internal fun WorldInspector(island: IslandLoad.Ready) {
-    var open by remember(island) { mutableStateOf(false) }
-    OutlinedButton(onClick = { open = !open }) {
-        Text(stringResource(if (open) Res.string.close_inspector else Res.string.inspect_world))
-    }
-    if (open) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                RegionalControls(island)
-                val pose by island.clock.render.collectAsStateWithLifecycle()
-                island.clock.state.settlements?.let { SettlementInspector(it) }
-                val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
-                key(pose.branchId) { CreatureInspector(creatures) }
-            }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            RegionalControls(island)
+            val pose by island.clock.render.collectAsStateWithLifecycle()
+            island.clock.state.settlements?.let { SettlementInspector(it) }
+            val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
+            key(pose.branchId) { CreatureInspector(creatures) }
         }
     }
 }

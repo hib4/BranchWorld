@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -25,20 +26,25 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.foundation.layout.height
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
-import branchworld.shared.generated.resources.close_timeline
 import branchworld.shared.generated.resources.comparison_open
 import branchworld.shared.generated.resources.comparison_needs_fork
-import branchworld.shared.generated.resources.open_timeline
 import branchworld.shared.generated.resources.save_cancel
 import branchworld.shared.generated.resources.timeline_branch
 import branchworld.shared.generated.resources.timeline_branch_limit
@@ -80,34 +86,51 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun TimelineControls(island: IslandLoad.Ready, visible: Boolean) {
-    var open by rememberSaveable(island.clock.seed) { mutableStateOf(false) }
-    if (!visible) return
+internal fun TimelineControls(island: IslandLoad.Ready, onForked: () -> Unit) {
     val view by island.timelineView.collectAsStateWithLifecycle()
-    OutlinedButton(onClick = { open = !open }) {
-        Text(stringResource(if (open) Res.string.close_timeline else Res.string.open_timeline))
-    }
-    if (open) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            shape = MaterialTheme.shapes.large,
-        ) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                TimelinePanel(island, view)
-            }
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        shape = MaterialTheme.shapes.large,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            TimelinePanel(island, view, onForked)
         }
     }
 }
 
 @Composable
-private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
+private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked: () -> Unit) {
     val operations = rememberCoroutineScope()
     var input by rememberSaveable(view.branchId) { mutableStateOf("") }
     var forkDialog by remember { mutableStateOf(false) }
     var renameDialog by remember { mutableStateOf(false) }
     val target = input.toLongOrNull()
     val branch = view.active
+    val focus = LocalFocusManager.current
+    val canSeek = !view.seeking && target != null && target in branch.start..branch.head && target != view.tick
+    val canPlay = !view.seeking && target != null && target > view.tick
+    fun seek() {
+        focus.clearFocus()
+        target?.let { operations.launch { island.seek(it) } }
+    }
+    fun playTo() {
+        focus.clearFocus()
+        target?.let(island::playTo)
+    }
+    val submitTick = {
+        when {
+            canSeek -> {
+                seek()
+                true
+            }
+            canPlay -> {
+                playTo()
+                true
+            }
+            else -> false
+        }
+    }
     val feedback by island.interventions.collectAsStateWithLifecycle()
     val markers = remember(island, branch.id, branch.interventionCount, feedback.queued) { island.markers(branch.id) }
     val executed = remember(markers) { markers.filterNot { it.queued } }
@@ -154,20 +177,21 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
     OutlinedTextField(
         value = input,
         onValueChange = { if (it.length <= 19 && it.all { char -> char in '0'..'9' }) input = it },
-        modifier = Modifier.widthIn(max = 220.dp),
+        modifier = Modifier.widthIn(max = 220.dp).submitTickOnEnter(submitTick),
         label = { Text(stringResource(Res.string.timeline_tick_entry)) },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+        keyboardActions = KeyboardActions(onGo = { submitTick() }),
         enabled = !view.seeking,
         singleLine = true,
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(
-            onClick = { target?.let { operations.launch { island.seek(it) } } },
-            enabled = !view.seeking && target != null && target in branch.start..branch.head && target != view.tick,
+            onClick = ::seek,
+            enabled = canSeek,
         ) { Text(stringResource(Res.string.timeline_seek)) }
         OutlinedButton(
-            onClick = { target?.let(island::playTo) },
-            enabled = !view.seeking && target != null && target > view.tick,
+            onClick = ::playTo,
+            enabled = canPlay,
         ) { Text(stringResource(Res.string.timeline_play_to)) }
         OutlinedButton(
             onClick = {
@@ -220,7 +244,12 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView) {
             action = stringResource(Res.string.timeline_create),
             suggestedName = stringResource(Res.string.timeline_default_name, view.branches.size + 1),
             onDismiss = { forkDialog = false },
-            onFork = { if (island.fork(it)) forkDialog = false },
+            onFork = {
+                if (island.fork(it)) {
+                    forkDialog = false
+                    onForked()
+                }
+            },
         )
     }
     if (renameDialog) {
@@ -309,4 +338,8 @@ internal fun InterventionMarker.label(): String {
 internal fun InterventionResult.label(): String {
     val resource = if (kind == Intervention.Reforest) Res.string.plants_applied else Res.string.supplement_applied
     return stringResource(resource, tick.toString(), regionName(region), amount)
+}
+
+internal fun Modifier.submitTickOnEnter(submit: () -> Boolean): Modifier = onPreviewKeyEvent {
+    it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter) && submit()
 }

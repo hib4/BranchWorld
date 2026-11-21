@@ -1,6 +1,7 @@
 package id.branchworld.renderer
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
@@ -9,15 +10,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
@@ -44,6 +51,7 @@ class DesktopDiorama {
     fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
         SideEffect { controller.showWorld(projection) }
         val frame by output.frame.collectAsState()
+        val focus = remember { FocusRequester() }
         Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).onSizeChanged(output::resize)) {
             // Kool's Vulkan backend needs an AWT peer. The visible viewport is the
             // separately sized offscreen output composited by Compose.
@@ -57,7 +65,12 @@ class DesktopDiorama {
                         bitmap = it,
                         contentDescription = null,
                         contentScale = ContentScale.FillBounds,
-                        modifier = Modifier.matchParentSize().desktopCameraInput(controller),
+                        modifier = Modifier.matchParentSize()
+                            .focusRequester(focus)
+                            .onPreviewKeyEvent(::cameraKey)
+                            .focusable()
+                            .semantics { contentDescription = "Island camera. Arrow keys orbit. Shift and arrow keys pan." }
+                            .desktopCameraInput(controller) { focus.requestFocus() },
                     )
                 }
             }
@@ -69,7 +82,7 @@ class DesktopDiorama {
 
     fun foreground(visible: Boolean) { controller.foreground.value = visible }
 
-    fun cameraKey(event: KeyEvent): Boolean {
+    private fun cameraKey(event: KeyEvent): Boolean {
         if (!controller.active || event.type != KeyEventType.KeyDown) return false
         val direction = when (event.key) {
             Key.DirectionLeft -> Offset(-0.08f, 0f)

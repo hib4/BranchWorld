@@ -14,7 +14,7 @@ import kotlin.math.exp
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifier {
+internal fun Modifier.desktopCameraInput(controller: PreviewController, focus: () -> Unit = {}): Modifier {
     val drag = remember(controller) { ViewportDrag(controller) }
     return onPointerEvent(PointerEventType.Scroll) { event ->
         val delta = event.changes.first().scrollDelta.y
@@ -22,6 +22,7 @@ internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifie
         event.changes.forEach { it.consume() }
     }.onPointerEvent(PointerEventType.Press) { event ->
         if (event.buttons.isPrimaryPressed || event.buttons.isSecondaryPressed) {
+            focus()
             val change = event.changes.first()
             drag.start(change.position, event.buttons.isSecondaryPressed || event.keyboardModifiers.isShiftPressed)
             change.consume()

@@ -27,12 +27,36 @@ Run the Desktop app in a graphical session.
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
 
+### Local release builds
+
+```sh
+./gradlew :androidApp:assembleRelease :androidApp:lintRelease :desktopApp:packageDmg
+```
+
+On Apple Silicon, mount `desktopApp/build/compose/binaries/main/dmg/id.branchworld.game-1.0.0.dmg`, copy the app out of the image, and open it. The DMG is built for local review and is not notarized.
+
+The Android release task produces an unsigned APK. Use Android Build Tools 36.1.0 and a local signing keystore outside the repository. A fresh emulator or a device with the same signing certificate can install the result.
+
+```sh
+keytool -genkeypair -keystore "$BRANCHWORLD_LOCAL_KEYSTORE" -storetype PKCS12 \
+  -alias branchworld-local -keyalg RSA -keysize 3072 -validity 3650
+tools="$ANDROID_HOME/build-tools/36.1.0"
+mkdir -p build/release
+"$tools/zipalign" -P 16 -f 4 androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk build/release/aligned.apk
+"$tools/apksigner" sign --ks "$BRANCHWORLD_LOCAL_KEYSTORE" --ks-key-alias branchworld-local \
+  --out build/release/BranchWorld-android-local.apk build/release/aligned.apk
+"$tools/apksigner" verify --verbose build/release/BranchWorld-android-local.apk
+adb install build/release/BranchWorld-android-local.apk
+```
+
+### Play and compare
+
 Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. A new island starts paused at tick 0 with four rabbits and three deer. Select **Play** and watch the forage total as they eat and the patches regrow. The blue markers show freshwater springs. **Send bunny left** and **Send bunny right** queue a waypoint for the lead rabbit, which tends to urgent needs first. Use **1×**, **2×**, or **4×** to change playback speed and **Pause** to hold the tick. **Focus island** resets the camera.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
-| Orbit | Drag one finger | Drag the primary mouse button or use the arrow keys |
-| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or use Shift and the arrow keys |
+| Orbit | Drag one finger | Drag the primary mouse button or focus the viewport and use the arrow keys |
+| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
 | Zoom | Pinch | Scroll |
 
 To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the same seed to retain the current tick. Opening a different seed replaces the in-memory session and starts at tick 0.
@@ -41,9 +65,11 @@ For an intervention demo, open seed `104729`, play until shortly after rain begi
 
 **Save world** captures the current tick and any queued interventions in one local slot. After closing and reopening BranchWorld, choose **Load saved world** from Home. The island opens paused at the saved tick. Press **Play** to resume and apply any queued interventions.
 
-Start a new island with seed `104729` and use **Timeline** → **Play to tick** to reach `300`. Select the founding milestone to see the settlement in C2 at tick `60`. Return to `300`, select **Fork here**, and name the branch **Restored Forest**. In **Inspect world**, choose **C2** and select **Reforest region**. Play the child to `900`, select **Main** in the timeline tree, and play it to the same tick.
+Start a new island with seed `104729` and use **Timeline** → **Play to tick** to reach `600`. Use **Go to tick** to rewind to `300`. Select **Fork here** and name the branch **Restored Forest**. In **Inspect world**, choose **C2** and select **Reforest region**. Play the child to `900`, select **Main** in the timeline tree, and play it to the same tick.
 
 Choose **Compare branches** to see both histories at tick `900`. **Show left** and **Show right** switch the island at the same camera position. Main has 76 stored wood and Restored Forest has 124. Select **Reforest C2 at tick 301** to see the six saplings the command planted. Close comparison, choose **Save world**, then quit and relaunch. Use **Load saved world** and reopen comparison. Older saves retain their original rules. An existing single-island save opens as **Main** at its saved tick.
+
+**How to branch** on Home summarizes the walkthrough. **World sounds** turns on short cues for successful forks and saves for the current session.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -68,6 +94,6 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 | KayKit Medieval (`buildings/kaykit-medieval`) | 221 glTF/BIN models plus FBX, OBJ/MTL, and PNG textures. | Static buildings and props for settlements. |
 | KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future inhabitants. |
 | KayKit Character Animations (`characters/kaykit-character-animations`) | 14 GLB and 14 FBX animation files plus two mannequin variants in each format. | Separate Rig Medium and Rig Large motion clips. Candidate motion library for compatible characters. |
-| Kenney Interface Sounds (`audio/kenney-interface-sounds`) | 100 OGG audio files. | Interface feedback for future audio integration. |
+| Kenney Interface Sounds (`audio/kenney-interface-sounds`) | 100 OGG audio files. | Two clips are bundled as small mono WAVs for fork and save feedback. |
 
 Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on Android and Desktop.

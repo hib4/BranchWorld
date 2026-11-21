@@ -96,6 +96,26 @@ class SettlementTest {
     }
 
     @Test
+    fun releaseCheckpointsAgreeAfterRewindAndRestore() = runBlocking {
+        val ticks = listOf(0L, 300L, 600L, 900L)
+        val timeline = Timeline.start(terrain(), CivilizationRulesVersion)
+        val originals = ticks.associateWith {
+            timeline.advanceTo(it)
+            timeline.state.canonicalHash()
+        }
+        val restored = TimelineSaveCodec.restore(TimelineSaveCodec.encode(timeline.checkpoint())).timeline
+        for ((tick, hash) in originals) {
+            assertEquals(hash, assertNotNull(timeline.seek(1, tick)).replay().engine.state.canonicalHash())
+            assertEquals(hash, assertNotNull(restored.seek(1, tick)).replay().engine.state.canonicalHash())
+        }
+        restored.show(assertNotNull(restored.seek(1, 300)).replay())
+        restored.advanceTo(600)
+        assertEquals(originals[600], restored.state.canonicalHash())
+        assertEquals(timeline.checkpoint().branches, restored.checkpoint().branches)
+        println("RELEASE_CHECKPOINTS," + originals.entries.joinToString(",") { "${it.key}:${it.value}" })
+    }
+
+    @Test
     fun tenThousandTicksKeepCohortsAndStocksBounded() = runBlocking {
         for (seed in listOf(104729L, 271828L, 424242L)) {
             val terrain = terrain(seed)

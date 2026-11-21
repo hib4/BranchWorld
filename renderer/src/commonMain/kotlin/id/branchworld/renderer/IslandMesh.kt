@@ -6,6 +6,9 @@ import de.fabmax.kool.modules.ksl.KslBlinnPhongShader
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.scene.addColorMesh
 import de.fabmax.kool.util.Color
+import kotlin.math.cos
+import kotlin.math.sin
+import kotlin.math.PI
 import id.branchworld.game.terrain.Biome
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.TerrainMap.Companion.MaxCell
@@ -66,12 +69,35 @@ internal fun Scene.addIsland(terrain: TerrainMap) {
     }
     addColorMesh("Sea") {
         generate {
-            color = Color(0.12f, 0.46f, 0.53f)
-            cylinder {
-                radius = 5.6f
-                height = WaterDepth
-                steps = 48
-                origin.y = SeaLevel - WaterDepth / 2
+            val surfaceNormal = Vec3f.Y_AXIS
+            val steps = 48
+            color = Color(0.20f, 0.55f, 0.57f)
+            val center = vertex(Vec3f(0f, SeaLevel, 0f), surfaceNormal)
+            fun point(radius: Float, angle: Double, y: Float = SeaLevel) =
+                Vec3f(radius * cos(angle).toFloat(), y, radius * sin(angle).toFloat())
+            for (step in 0 until steps) {
+                val angle = step * 2 * PI / steps
+                val next = (step + 1) * 2 * PI / steps
+                color = Color(0.18f, 0.52f, 0.55f)
+                val near = vertex(point(3.2f, angle), surfaceNormal)
+                val nearNext = vertex(point(3.2f, next), surfaceNormal)
+                color = Color(0.08f, 0.31f, 0.39f)
+                val rim = point(5.6f, angle)
+                val rimNext = point(5.6f, next)
+                val far = vertex(rim, surfaceNormal)
+                val farNext = vertex(rimNext, surfaceNormal)
+                addTriIndices(center, nearNext, near)
+                addTriIndices(near, nearNext, far)
+                addTriIndices(nearNext, farNext, far)
+
+                color = Color(0.05f, 0.20f, 0.27f)
+                val wall = Vec3f(cos(angle).toFloat(), 0f, sin(angle).toFloat())
+                val wallTop = vertex(rim, wall)
+                val wallNext = vertex(rimNext, wall)
+                val bottom = vertex(point(5.6f, angle, SeaLevel - WaterDepth), wall)
+                val bottomNext = vertex(point(5.6f, next, SeaLevel - WaterDepth), wall)
+                addTriIndices(wallTop, wallNext, bottom)
+                addTriIndices(wallNext, bottomNext, bottom)
             }
         }
         shader = KslBlinnPhongShader {
@@ -83,8 +109,8 @@ internal fun Scene.addIsland(terrain: TerrainMap) {
 
 private fun Biome.palette() = when (this) {
     Biome.Water -> Color(0.12f, 0.46f, 0.53f)
-    Biome.Beach -> Color(0.67f, 0.53f, 0.30f)
-    Biome.Meadow -> Color(0.36f, 0.54f, 0.23f)
-    Biome.PineForest -> Color(0.24f, 0.42f, 0.24f)
-    Biome.RockyUpland -> Color(0.43f, 0.43f, 0.36f)
+    Biome.Beach -> Color(0.72f, 0.58f, 0.36f)
+    Biome.Meadow -> Color(0.40f, 0.56f, 0.27f)
+    Biome.PineForest -> Color(0.21f, 0.39f, 0.24f)
+    Biome.RockyUpland -> Color(0.46f, 0.45f, 0.40f)
 }

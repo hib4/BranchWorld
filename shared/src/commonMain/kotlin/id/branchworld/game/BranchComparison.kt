@@ -3,11 +3,13 @@ package id.branchworld.game
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -29,7 +31,10 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.Res
@@ -151,6 +156,12 @@ internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView) {
     val tick = view.tick ?: return
     var input by remember(view.left.id, view.right.id, tick) { mutableStateOf(tick.toString()) }
     val pending = input.toLongOrNull()
+    val focus = LocalFocusManager.current
+    val target = pending?.takeIf { it in view.range && it != tick }
+    fun seek() {
+        focus.clearFocus()
+        target?.let(island::compareAt)
+    }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(stringResource(Res.string.comparison_ticks, view.range.first.toString(), view.range.last.toString()))
         TimelineScrubber(view.range, tick, enabled = true, onSeek = island::compareAt)
@@ -158,14 +169,20 @@ internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView) {
             OutlinedTextField(
                 value = input,
                 onValueChange = { if (it.length <= 19 && it.all { char -> char in '0'..'9' }) input = it },
-                modifier = Modifier.widthIn(max = 175.dp),
+                modifier = Modifier.widthIn(max = 175.dp).submitTickOnEnter {
+                    if (target == null) false else {
+                        seek()
+                        true
+                    }
+                },
                 label = { Text(stringResource(Res.string.timeline_tick_entry)) },
                 singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Go),
+                keyboardActions = KeyboardActions(onGo = { if (target != null) seek() }),
             )
             OutlinedButton(
-                enabled = pending != null && pending in view.range && pending != tick,
-                onClick = { pending?.let(island::compareAt) },
+                enabled = target != null,
+                onClick = ::seek,
             ) { Text(stringResource(Res.string.timeline_seek)) }
         }
         val pair = view.pair ?: return@Column
@@ -188,27 +205,30 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            MetricRow("", view.left.name, view.right.name, stringResource(Res.string.comparison_delta), header = true)
-            HorizontalDivider()
-            for (index in labels.indices) {
-                val a = leftValues[index]
-                val b = rightValues[index]
-                val change = b - a
-                val delta = if (change > 0) "+$change" else change.toString()
-                MetricRow(stringResource(labels[index]), a.toString(), b.toString(), delta)
-            }
-            val a = left.settlement
-            val b = right.settlement
-            if (a != null && b != null) {
-                for ((label, first, second) in listOf(
-                    Triple(Res.string.comparison_residents, a.residents, b.residents),
-                    Triple(Res.string.comparison_stored_food, a.food, b.food),
-                    Triple(Res.string.comparison_stored_wood, a.wood, b.wood),
-                    Triple(Res.string.comparison_homes, a.homes, b.homes),
-                )) {
-                    val change = second - first
-                    MetricRow(stringResource(label), first.toString(), second.toString(), if (change > 0) "+$change" else change.toString())
+        BoxWithConstraints(Modifier.padding(12.dp)) {
+            val compact = maxWidth < 420.dp || LocalDensity.current.fontScale >= 1.3f
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                MetricRow("", view.left.name, view.right.name, stringResource(Res.string.comparison_delta), compact, header = true)
+                HorizontalDivider()
+                for (index in labels.indices) {
+                    val a = leftValues[index]
+                    val b = rightValues[index]
+                    val change = b - a
+                    val delta = if (change > 0) "+$change" else change.toString()
+                    MetricRow(stringResource(labels[index]), a.toString(), b.toString(), delta, compact)
+                }
+                val a = left.settlement
+                val b = right.settlement
+                if (a != null && b != null) {
+                    for ((label, first, second) in listOf(
+                        Triple(Res.string.comparison_residents, a.residents, b.residents),
+                        Triple(Res.string.comparison_stored_food, a.food, b.food),
+                        Triple(Res.string.comparison_stored_wood, a.wood, b.wood),
+                        Triple(Res.string.comparison_homes, a.homes, b.homes),
+                    )) {
+                        val change = second - first
+                        MetricRow(stringResource(label), first.toString(), second.toString(), if (change > 0) "+$change" else change.toString(), compact)
+                    }
                 }
             }
         }
@@ -216,13 +236,16 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
 }
 
 @Composable
-private fun MetricRow(label: String, left: String, right: String, delta: String, header: Boolean = false) {
+private fun MetricRow(label: String, left: String, right: String, delta: String, compact: Boolean, header: Boolean = false) {
     val style = if (header) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, Modifier.weight(1.35f), style = style)
-        Text(left, Modifier.weight(1f), textAlign = TextAlign.End, style = style)
-        Text(right, Modifier.weight(1f), textAlign = TextAlign.End, style = style)
-        Text(delta, Modifier.weight(0.85f), textAlign = TextAlign.End, style = style)
+    Column {
+        if (compact && label.isNotEmpty()) Text(label, style = style)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (!compact) Text(label, Modifier.weight(1.35f), style = style)
+            Text(left, Modifier.weight(1f), textAlign = TextAlign.End, style = style)
+            Text(right, Modifier.weight(1f), textAlign = TextAlign.End, style = style)
+            Text(delta, Modifier.weight(if (compact) 1f else 0.85f), textAlign = TextAlign.End, style = style)
+        }
     }
 }
 

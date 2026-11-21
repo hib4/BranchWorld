@@ -66,9 +66,10 @@ internal class IslandSession {
         }
     }
 
-    suspend fun save(store: WorldSaveStore, replace: Boolean = false) {
-        if (storage.value == SaveStatus.Busy) return
-        val island = load.value as? IslandLoad.Ready ?: return
+    suspend fun save(store: WorldSaveStore, replace: Boolean = false): Boolean {
+        if (storage.value == SaveStatus.Busy) return false
+        val island = load.value as? IslandLoad.Ready ?: return false
+        val started = TimeSource.Monotonic.markNow()
         // Only the UI owner can capture the committed tick and pending queue together.
         val checkpoint = island.checkpoint()
         val world = island.clock.state
@@ -76,7 +77,7 @@ internal class IslandSession {
         try {
             val bytes = withContext(Dispatchers.Default) { TimelineSaveCodec.encode(checkpoint) }
             storage.value = if (store.write(bytes, replace)) {
-                println("BranchWorldSave saved seed=${world.terrain.key.seed} branch=${checkpoint.activeBranchId} tick=${world.tick} hash=${world.canonicalHash()} branches=${checkpoint.branches.size} bytes=${bytes.size}")
+                println("BranchWorldSave saved seed=${world.terrain.key.seed} branch=${checkpoint.activeBranchId} tick=${world.tick} hash=${world.canonicalHash()} branches=${checkpoint.branches.size} bytes=${bytes.size} saveMs=${started.elapsedNow().inWholeMilliseconds}")
                 SaveStatus.Saved(world.tick)
             } else SaveStatus.ConfirmReplace
         } catch (error: CancellationException) {
@@ -86,6 +87,7 @@ internal class IslandSession {
             println("BranchWorldSave write failed: ${error::class.simpleName}")
             storage.value = SaveStatus.Unwritable
         }
+        return storage.value is SaveStatus.Saved
     }
 
     suspend fun restore(store: WorldSaveStore) {
@@ -141,6 +143,7 @@ internal sealed interface IslandLoad {
         val comparison = comparisonState.asStateFlow()
         private val navigationAvailable get() = !timelineState.value.seeking && comparisonState.value == null
         private val display = MutableStateFlow(timeline.state.renderProjection(terrain).copy(branchId = timeline.branchId))
+        private var liveFrame = false
         val clock = WorldClock(object : ClockSimulation<EcologyState> {
             override val state get() = timeline.state
             override val tick get() = state.tick
@@ -150,9 +153,10 @@ internal sealed interface IslandLoad {
                 if (navigationAvailable) timeline.steer(left)
                 updateTimeline()
             }
-            override fun advance() = advanceTimeline()
+            override fun advance() { liveFrame = advanceTimeline() }
             override fun project(previous: WorldRenderProjection?) =
-                state.renderProjection(terrain).copy(branchId = timeline.branchId).also {
+                state.renderProjection(terrain).copy(branchId = timeline.branchId, interpolateCreatures = liveFrame).also {
+                    liveFrame = false
                     if (comparisonState.value == null) display.value = it
                 }
         })
@@ -197,12 +201,12 @@ internal sealed interface IslandLoad {
             return true
         }
 
-        private fun advanceTimeline() {
+        private fun advanceTimeline(): Boolean {
             if (!timeline.advance()) {
                 clock.pause()
                 timelineState.value = timelineStatus(failed = true)
                 feedback.value = InterventionFeedback(timeline.queuedInterventions)
-                return
+                return false
             }
             val queued = timeline.queuedInterventions
             val applied = timeline.interventionResults
@@ -210,6 +214,7 @@ internal sealed interface IslandLoad {
                 feedback.value = InterventionFeedback(queued, applied.ifEmpty { feedback.value.applied })
             }
             updateTimeline()
+            return true
         }
 
         private suspend fun navigate(branch: Int, tick: Long, inspectEvent: Boolean = false) {

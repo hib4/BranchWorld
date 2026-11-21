@@ -46,7 +46,7 @@ internal class DioramaSession(
     private var settlements: SettlementModels? = null
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
-    private val timing = FrameTiming("renderer")
+    private val timing = FrameTiming("renderer", measureDraws = true)
 
     init {
         context.onRender += { update() }
@@ -149,8 +149,8 @@ internal class DioramaSession(
         val rain = climate.weather == Weather.Rain
         val key = if (rain) Color(0.75f, 0.85f, 1f) else Color(1f, 0.98f, 0.90f)
         val ambient = Color(0.60f, 0.78f, 1f)
-        lighting.lights[0].setColor(key, 0.06f + climate.daylight * if (rain) 0.70f else 1.18f)
-        lighting.lights[1].setColor(ambient, 0.26f + climate.daylight * if (rain) 0.32f else 0.22f)
+        lighting.lights[0].setColor(key, 0.13f + climate.daylight * if (rain) 0.63f else 1.08f)
+        lighting.lights[1].setColor(ambient, 0.38f + climate.daylight * if (rain) 0.20f else 0.10f)
     }
 
     private suspend fun loadModels(target: Scene, world: WorldRenderSource) {
@@ -169,7 +169,7 @@ internal class DioramaSession(
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
-            if (scene === target) controller.status.value = "Could not load the island assets"
+            if (scene === target) controller.status.value = "Island assets could not load. Go home and reopen the island to retry."
             println("BranchWorldRenderer assetsFailed: ${error.stackTraceToString()}")
         }
     }
@@ -227,17 +227,21 @@ internal interface DioramaOutput {
     fun detach()
 }
 
-internal class FrameTiming(private val kind: String) {
+internal class FrameTiming(private val kind: String, private val measureDraws: Boolean = false) {
     private var start: TimeMark? = null
     private var previous: TimeMark? = null
     private val samples = ArrayList<Double>()
     private var reported = false
+    private var minimumDraws = Int.MAX_VALUE
+    private var maximumDraws = 0
 
     fun reset() {
         start = null
         previous = null
         samples.clear()
         reported = false
+        minimumDraws = Int.MAX_VALUE
+        maximumDraws = 0
     }
 
     fun frame() {
@@ -248,9 +252,16 @@ internal class FrameTiming(private val kind: String) {
         val elapsed = first.elapsedNow().inWholeMilliseconds
         if (prior == null || elapsed < 2_000) return
         samples += prior.elapsedNow().inWholeMicroseconds / 1000.0
+        if (measureDraws) {
+            minimumDraws = minOf(minimumDraws, BackendStats.numDrawCommands)
+            maximumDraws = maxOf(maximumDraws, BackendStats.numDrawCommands)
+        }
         if (elapsed < 12_000) return
         samples.sort()
         println("BranchWorldRenderer $kind frames=${samples.size} p50Ms=${samples[samples.lastIndex / 2]} p95Ms=${samples[(samples.lastIndex * 95) / 100]}")
+        if (measureDraws) {
+            println("BranchWorldRenderer drawCommands=$minimumDraws..$maximumDraws buffers=${BackendStats.totalBufferSize} textures=${BackendStats.totalTextureSize}")
+        }
         reported = true
     }
 }

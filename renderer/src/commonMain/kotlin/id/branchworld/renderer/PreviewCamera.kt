@@ -10,6 +10,18 @@ internal data class PreviewCamera(
     val targetX: Float = 0f,
     val targetZ: Float = 0f,
 ) {
+    fun toward(target: PreviewCamera, fraction: Float): PreviewCamera {
+        fun mix(start: Float, end: Float) = start + (end - start) * fraction
+        val turn = (((target.yaw - yaw + Tau / 2f) % Tau + Tau) % Tau) - Tau / 2f
+        return PreviewCamera(
+            yaw = yaw + turn * fraction,
+            pitch = mix(pitch, target.pitch),
+            distance = mix(distance, target.distance),
+            targetX = mix(targetX, target.targetX),
+            targetZ = mix(targetZ, target.targetZ),
+        )
+    }
+
     fun orbit(dx: Float, dy: Float): PreviewCamera = copy(
         yaw = (yaw - dx * 4f) % Tau,
         pitch = (pitch + dy * 3f).coerceIn(0.17f, 1.35f),

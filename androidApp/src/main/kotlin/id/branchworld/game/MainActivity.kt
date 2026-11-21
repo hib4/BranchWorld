@@ -11,6 +11,7 @@ import id.branchworld.renderer.AndroidDiorama
 
 class MainActivity : ComponentActivity() {
     private val renderer by lazy { AndroidDiorama(applicationContext) }
+    private val sounds = AndroidWorldSounds(this)
     private val saveStore by lazy { AndroidWorldSaveStore(filesDir) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
                 viewportHud = { renderer.Hud() },
                 registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
                 saveStore = saveStore,
+                playSound = sounds::play,
             )
         }
     }
@@ -33,6 +35,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        sounds.close()
         renderer.pause()
         super.onPause()
     }
