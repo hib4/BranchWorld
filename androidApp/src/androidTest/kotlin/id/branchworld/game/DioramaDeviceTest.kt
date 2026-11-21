@@ -30,7 +30,7 @@ class DioramaDeviceTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         try {
-            tap(bounds("Begin story", enabled = true))
+            openStory()
             tap(bounds("Pause"))
             bounds("Play")
             bounds("Focus island")
@@ -107,7 +107,7 @@ class DioramaDeviceTest {
             tap(bounds("Close"))
             tap(bounds("Menu"))
             tap(bounds("Back to home"))
-            bounds("Begin story")
+            bounds("Return to this history")
         } finally {
             if (!activity.isDestroyed) instrumentation.runOnMainSync { activity.finish() }
         }
@@ -228,6 +228,15 @@ class DioramaDeviceTest {
             result != null
         }
         return requireNotNull(result)
+    }
+
+    private fun openStory() {
+        waitUntil("enabled Begin story button") {
+            val label = findVisible { it.text?.toString()?.trim() == "Begin story" }
+            val button = generateSequence(label) { it.parent }.firstOrNull { it.isClickable && it.isEnabled }
+            button?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        }
+        bounds("Focus island")
     }
 
     private fun currentTick(): Long =

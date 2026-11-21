@@ -93,6 +93,8 @@ import branchworld.shared.generated.resources.restore_grove
 import branchworld.shared.generated.resources.retry_island
 import branchworld.shared.generated.resources.save_world
 import branchworld.shared.generated.resources.show_diagnostics
+import branchworld.shared.generated.resources.resume_island
+import branchworld.shared.generated.resources.animal_needs
 import branchworld.shared.generated.resources.world_dry_note
 import branchworld.shared.generated.resources.world_journal
 import branchworld.shared.generated.resources.world_menu
@@ -169,8 +171,9 @@ fun App(
     val load by islands.state.collectAsStateWithLifecycle()
     val seed = state.seed
     val terrain = state.terrain
+    val islandKey = state.island
     var comparisonDetailsOpen by rememberSaveable(terrain) { mutableStateOf(false) }
-    val session = (load as? IslandLoad.Ready)?.takeIf { it.world.terrain.key == terrain }
+    val session = (load as? IslandLoad.Ready)?.takeIf { it.key == islandKey }
     val comparison = session?.comparison?.collectAsStateWithLifecycle()?.value
     val pose = session?.world?.poses?.collectAsStateWithLifecycle()?.value
     val clock = session?.clock
@@ -194,10 +197,10 @@ fun App(
     }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
-    LaunchedEffect(islands, terrain) { islands.open(terrain) }
+    LaunchedEffect(islands, islandKey) { islands.open(islandKey) }
     LaunchedEffect(storage) {
         val restored = storage as? SaveStatus.Restored ?: return@LaunchedEffect
-        state = state.copy(terrain = restored.terrain).openWorld()
+        state = state.copy(terrain = restored.key.terrain, rules = restored.key.rules).openWorld()
         panel = null
         focus = null
         islands.acknowledgeRestore(restored.tick)
@@ -214,7 +217,7 @@ fun App(
         if (clock != null && isWorld && foreground) {
             lifecycle.repeatOnLifecycle(playbackState) {
                 clock.run(isActive = {
-                    state.route == ShellRoute.World && state.terrain == terrain &&
+                    state.route == ShellRoute.World && state.island == islandKey &&
                         lifecycle.currentState.isAtLeast(playbackState)
                 })
             }
@@ -233,7 +236,8 @@ fun App(
 
     val showPanel: (WorldPanel?) -> Unit = { destination ->
         if (destination != panel || destination == null) {
-            focus = null
+            val keepFollowing = panel == WorldPanel.Inspect && destination == null && focus is WorldCamera.Focus.Creature
+            if (!keepFollowing) focus = null
             if (panel == WorldPanel.Save) islands.dismissSaveStatus()
             panel = destination
         }
@@ -268,7 +272,7 @@ fun App(
                 viewport?.invoke(Modifier.matchParentSize(), session?.world)
             }
             val chapter = stringResource(islandTitle(terrain))
-            val failed = (load as? IslandLoad.Failed)?.key == terrain
+            val failed = (load as? IslandLoad.Failed)?.key == islandKey
             if (!isWorld) {
                 val veil = listOf(NightGreen.copy(alpha = 0.94f), NightGreen.copy(alpha = 0.52f), Color.Transparent)
                 Box(Modifier.matchParentSize().background(if (sideIntroduction) {
@@ -297,7 +301,7 @@ fun App(
                     }
                     if (failed) {
                         Text(stringResource(Res.string.island_generation_failed), color = Parchment)
-                        Button(onClick = { operations.launch { islands.open(terrain) } }) { Text(stringResource(Res.string.retry_island)) }
+                        Button(onClick = { operations.launch { islands.open(islandKey) } }) { Text(stringResource(Res.string.retry_island)) }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
@@ -309,7 +313,13 @@ fun App(
                                 if (clock != null && clock.state.tick == 0L && !clock.playback.value.playing) clock.togglePlaying()
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD89C), contentColor = NightGreen),
-                        ) { Text(stringResource(if (seed == IslandSeeds.first()) Res.string.begin_story else Res.string.explore_island)) }
+                        ) {
+                            Text(stringResource(when {
+                                session?.clock?.state?.tick?.let { it > 0 } == true -> Res.string.resume_island
+                                seed == IslandSeeds.first() -> Res.string.begin_story
+                                else -> Res.string.explore_island
+                            }))
+                        }
                         if (saveStore != null) {
                             TextButton(
                                 onClick = { operations.launch { islands.restore(saveStore) } },
@@ -383,7 +393,7 @@ fun App(
                 Box(Modifier.align(Alignment.Center).padding(16.dp)) {
                     Readout {
                         Text(stringResource(if (failed) Res.string.island_generation_failed else Res.string.island_generating))
-                        if (failed) TextButton(onClick = { operations.launch { islands.open(terrain) } }) { Text(stringResource(Res.string.retry_island)) }
+                        if (failed) TextButton(onClick = { operations.launch { islands.open(islandKey) } }) { Text(stringResource(Res.string.retry_island)) }
                     }
                 }
             }
@@ -422,7 +432,7 @@ fun App(
                                     ToggleSetting(Res.string.reduced_camera_motion, reducedMotion) { reducedMotion = it }
                                 }
                                 WorldPanel.Islands -> {
-                                    IslandPicker(terrain, enabled = storage != SaveStatus.Busy) { candidate ->
+                                    IslandPicker(islandKey, enabled = storage != SaveStatus.Busy) { candidate ->
                                         state = state.selectIsland(candidate)
                                         showPanel(null)
                                     }
@@ -432,6 +442,8 @@ fun App(
                                         it, compact = !wide,
                                         onCreatureFocus = { id -> requestFocus(WorldCamera.Focus.Creature(id)) },
                                         onLandmarkFocus = { kind -> requestFocus(WorldCamera.Focus.Landmark(kind)) },
+                                        onWildlifeLocation = { ground -> requestFocus(WorldCamera.Focus.WildlifeLocation(ground)) },
+                                        playback = { PlaybackButton(it) },
                                     )
                                 }
                                 WorldPanel.Grove -> session?.let {
@@ -466,6 +478,11 @@ fun App(
                                     WorldControls(session.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
                                     Text(stringResource(Res.string.diagnostics_platform, remember { getPlatform().name }))
                                     Text(stringResource(Res.string.diagnostics_seed, seed.toString()))
+                                    pose?.let {
+                                        session.clock.state.creatures.firstOrNull()?.let { lead ->
+                                            Text(stringResource(Res.string.animal_needs, "${lead.food / 10}%", "${lead.water / 10}%", "${lead.energy / 10}%"))
+                                        }
+                                    }
                                 }
                             }
                         }

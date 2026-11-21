@@ -13,5 +13,6 @@ data class WorldCamera(
         data class Region(val index: Int) : Focus
         data class Creature(val id: Long) : Focus
         data class Landmark(val kind: LandmarkKind) : Focus
+        data class WildlifeLocation(val ground: GroundPoint) : Focus
     }
 }

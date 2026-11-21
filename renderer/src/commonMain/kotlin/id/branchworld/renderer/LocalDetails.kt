@@ -45,7 +45,8 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
         }
         ring.indices.forEach { i -> addTriIndices(center, ring[(i + 1) % ring.size], ring[i]) }
     }
-    private var previousCreatures: List<Pair<GroundPoint, Species>>? = null
+    private data class Contact(val ground: GroundPoint, val species: Species, val juvenile: Boolean)
+    private var previousCreatures: List<Contact>? = null
     private var previousSites: List<SettlementPose>? = null
     private var previousProjection: WorldRenderProjection? = null
     private var homes = emptyList<GroundPoint>()
@@ -54,7 +55,7 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
     fun show(world: WorldRenderProjection, light: CoastalLight, seconds: Float, reducedMotion: Boolean) {
         if (world !== previousProjection) {
             previousProjection = world
-            val creatures = world.creatures.map { it.ground to it.species }
+            val creatures = world.creatures.map { Contact(it.ground, it.species, it.juvenile) }
             val sites = world.settlements.orEmpty()
             val sitesChanged = sites != previousSites
             if (sitesChanged || creatures != previousCreatures) {
@@ -63,7 +64,15 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
                 homes = sites.flatMap { it.homes }
                 val fields = sites.map { it.field }
                 shadow.populate(creatures.size + homes.size + fields.size) { instance ->
-                    for ((ground, species) in creatures) instance(onGround(ground, if (species == Species.Deer) 0.21f else 0.16f))
+                    for ((ground, species, juvenile) in creatures) {
+                        val radius = when (species) {
+                            Species.Rabbit -> 0.16f
+                            Species.Deer -> 0.21f
+                            Species.Fox -> 0.19f
+                        }
+                        val bodyScale = if (world.wildlife != null) WildlifeBodyScale else 1f
+                        instance(onGround(ground, radius * bodyScale * if (juvenile) 0.73f else 1f))
+                    }
                     for (ground in homes) instance(onGround(ground, 0.23f))
                     for (ground in fields) instance(onGround(ground, 0.18f))
                 }

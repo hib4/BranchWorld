@@ -133,7 +133,7 @@ class EnvironmentalRulesTest {
             repeat(10_000) {
                 val state = engine.advance()
                 assertTrue(state.patches.all { it.biomass in 0..it.capacity })
-                for (species in Species.entries) assertTrue(state.creatures.count { it.species == species } in 1..MaxPerSpecies)
+                for (species in LegacySpecies) assertTrue(state.creatures.count { it.species == species } in 1..MaxPerSpecies)
                 assertEquals(start + state.ledger.introduced + state.ledger.regrown - state.ledger.consumed,
                     state.patches.sumOf { it.biomass }.toLong())
             }

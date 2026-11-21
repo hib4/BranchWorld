@@ -78,10 +78,11 @@ class DesktopEcologyUiTest {
             override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
         }
         var viewport: WorldRenderSource? = null
+        var camera = WorldCamera()
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 Box(Modifier.requiredSize(390.dp, 720.dp)) {
-                    App(viewport = { _, world -> SideEffect { viewport = world } })
+                    App(viewport = { _, world -> SideEffect { viewport = world } }, viewportCamera = { camera = it })
                 }
             }
         }
@@ -89,6 +90,14 @@ class DesktopEcologyUiTest {
         onNodeWithText("Begin story").performScrollTo().performClick()
         onNodeWithText("Pause").performClick()
         onNodeWithText("Inspect").performClick()
+        onNodeWithText("Select a creature").performScrollTo().performClick()
+        onNodeWithText("Russet · Fox").performClick()
+        onNodeWithText("Russet · Fox").assertExists()
+        onNodeWithText("Play").assertExists()
+        waitUntil { camera.focus == WorldCamera.Focus.Creature(8) }
+        onNodeWithText("Wildlife history").performScrollTo().performClick()
+        onNodeWithText("Births, changes of range, and losses will appear here as this history unfolds.").assertExists()
+        onNodeWithText("Wildlife history").performClick()
         val settlement = onNodeWithText("Settlements")
         val searching = onNodeWithText("Settlers are looking for a site near freshwater and forage.")
         searching.assertDoesNotExist()
@@ -96,6 +105,8 @@ class DesktopEcologyUiTest {
         searching.assertExists()
         settlement.performClick()
         searching.assertDoesNotExist()
+        onNodeWithText("Close").performClick()
+        waitUntil { camera.focus == WorldCamera.Focus.Creature(8) }
     }
 
     @Test
@@ -114,7 +125,8 @@ class DesktopEcologyUiTest {
         val world = checkNotNull(viewport)
         val opening = world.poses.value
         assertEquals(0L, opening.tick)
-        assertEquals(7, opening.creatures.size)
+        assertEquals(9, opening.creatures.size)
+        assertEquals(2, opening.wildlife?.foxes)
         onNodeWithText("The Fading Grove").assertExists()
         onNodeWithText("Begin story").performScrollTo().performClick()
         onNodeWithText("Pause").performClick()
@@ -136,7 +148,7 @@ class DesktopEcologyUiTest {
 
         onNodeWithText("Menu").performClick()
         onNodeWithText("Back to home").performScrollTo().performClick()
-        onNodeWithText("Begin story").performScrollTo().performClick()
+        onNodeWithText("Return to this history").performScrollTo().performClick()
         onNodeWithText("Play").assertExists()
         assertSame(world, viewport)
     }

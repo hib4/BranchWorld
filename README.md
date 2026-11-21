@@ -59,11 +59,13 @@ BranchWorld opens on **The Fading Grove**, a river valley entering its dry seaso
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
 | Zoom | Pinch | Scroll or press `+` and `-` in the focused viewport |
 
-Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. **Inspect** lets you follow a creature, check on a settlement, or open **Landmarks** and see what nearby soil conditions mean for growth. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
+Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. In **Inspect**, select Thistle the rabbit, Alder the deer, or Russet the fox to follow them. Their behavior changes with the available forage, water, and cover. **Wildlife history** records births, new feeding grounds, and losses. Select an event to go to the animal or the place it happened. **Landmarks** describes local soil conditions, and **Settlements** shows how nearby communities are doing.
+
+**Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
 
 **Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** restores the world in a paused state. Older saves retain their original rules and geography, and an existing single-island save opens as **Main** at its saved tick.
 
-For the branching walkthrough, begin a new Fading Grove story. Pause, then use **Timeline** → **Play to tick** to reach `900`. Rewind to `260` with **Go to tick** and choose **Fork here**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings. Play the child to `900`. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On a narrow screen, **Compare details** reveals the branch picker, time controls, and recorded changes. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
+For the wildlife walkthrough, begin a new Fading Grove story. Pause, then use **Timeline** → **Play to tick** to reach `900`. Rewind to `260` with **Go to tick** and choose **Fork here**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings once. Play the child to `900`. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On a narrow screen, **Compare details** reveals the branch picker and recorded changes. With these inputs, Main has six rabbits and the planted history has eight. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -71,9 +73,9 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
-- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny and deer GLBs use the bundled Kenney texture.
+- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny, deer, and fox GLBs are from Kenney Cube Pets.
 - Shared Kotlin generates terrain, drainage, soils, props, and traversability from the seed and worldgen version. Kool builds chunk meshes, fills the generated channels and basins, and instances the bundled trees from a read-only terrain projection.
-- Rules v6 links seasonal rain and soil moisture to forage and farms. Recharge is recorded in each history and drives the displayed water level. Rules v5 and earlier use their original terrain and replay fixtures.
+- Rules v7 adds local habitat, competition for forage, and fox pursuits. Each history records wildlife milestones alongside its commands and snapshots. Rules v6 introduced seasonal recharge and soil moisture. Saved histories retain their original rules and terrain.
 
 ## Source asset inventory
 
@@ -83,7 +85,7 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 | --- | --- | --- |
 | KayKit Forest (`environment/kaykit-forest`) | 105 glTF models with BIN and PNG dependencies. FBX and OBJ/MTL variants. | Static trees, rocks, and vegetation for the diorama and island. |
 | Kenney Nature (`environment/kenney-nature`) | 329 GLB models. FBX, OBJ/MTL, DAE, STL, and PNG previews. | Static rocks, ground props, and vegetation for the diorama and terrain. |
-| Kenney Cube Pets (`animals/kenney-cube-pets`) | 24 GLB models plus FBX and OBJ/MTL. | Each GLB has node animation clips such as idle, walk, run, and eat. Candidate for the first animal integration and wildlife. |
+| Kenney Cube Pets (`animals/kenney-cube-pets`) | 24 GLB models plus FBX and OBJ/MTL. | Runtime rabbit, deer, and fox use the CC0 models and their idle, walk, run, and eat clips. |
 | Vuena Pets (`animals/vuena-pets`) | Three GLB and FBX models with PNG textures. | Skinned cat, fox, and owl with embedded clips including idle, walk, eat, and sleep. Candidates for additional wildlife. |
 | KayKit Medieval (`buildings/kaykit-medieval`) | 221 glTF/BIN models plus FBX, OBJ/MTL, and PNG textures. | Static buildings and props for settlements. |
 | KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future inhabitants. |

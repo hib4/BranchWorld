@@ -16,7 +16,7 @@ import id.branchworld.game.terrain.TerrainMap
 import kotlin.math.cos
 import kotlin.math.sin
 
-internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<GroundPoint>) {
+internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<GroundPoint>, wildlife: Boolean) {
     private val meshes = ForageKind.entries.associateWith { kind ->
         scene.addColorMesh("$kind forage", instances = MeshInstanceList(InstanceLayouts.ModelMat)) {
             generate {
@@ -28,6 +28,18 @@ internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<Gro
                     height = if (grass) 0.17f else 0.11f
                     origin.y = height / 2
                     steps = 4
+                }
+                if (!grass && wildlife) {
+                    for (stem in 0..2) {
+                        val angle = stem * 2.4f
+                        val x = cos(angle) * 0.056f
+                        val z = sin(angle) * 0.056f
+                        val y = 0.070f + stem * 0.028f
+                        color = if (stem == 1) Color(0.33f, 0.48f, 0.24f) else Color(0.23f, 0.43f, 0.24f)
+                        icoSphere { radius = 0.045f; center.set(x, y, z); steps = 0 }
+                        color = Color(0.56f, 0.20f, 0.25f)
+                        icoSphere { radius = 0.014f; center.set(x, y + 0.038f, z); steps = 0 }
+                    }
                 }
                 color = if (grass) Color(0.42f, 0.60f, 0.16f) else Color(0.32f, 0.55f, 0.17f)
                 cylinder {

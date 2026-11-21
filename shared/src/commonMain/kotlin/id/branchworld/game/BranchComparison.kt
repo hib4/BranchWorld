@@ -38,6 +38,8 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.comparison_catches
+import branchworld.shared.generated.resources.comparison_foxes
 import branchworld.shared.generated.resources.comparison_births
 import branchworld.shared.generated.resources.comparison_browse
 import branchworld.shared.generated.resources.comparison_close
@@ -224,6 +226,16 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
                     val delta = if (change > 0) "+$change" else change.toString()
                     MetricRow(stringResource(labels[index]), a.toString(), b.toString(), delta, compact)
                 }
+                val leftWildlife = left.projection.wildlife
+                val rightWildlife = right.projection.wildlife
+                if (leftWildlife != null && rightWildlife != null) {
+                    val foxDelta = rightWildlife.foxes - leftWildlife.foxes
+                    val catchDelta = rightWildlife.catches - leftWildlife.catches
+                    MetricRow(stringResource(Res.string.comparison_foxes), leftWildlife.foxes.toString(),
+                        rightWildlife.foxes.toString(), if (foxDelta > 0) "+$foxDelta" else foxDelta.toString(), compact)
+                    MetricRow(stringResource(Res.string.comparison_catches), leftWildlife.catches.toString(),
+                        rightWildlife.catches.toString(), if (catchDelta > 0) "+$catchDelta" else catchDelta.toString(), compact)
+                }
                 val a = left.settlement
                 val b = right.settlement
                 if (a != null && b != null) {
@@ -260,8 +272,10 @@ private fun MetricRow(label: String, left: String, right: String, delta: String,
 private fun ComparisonEvents(island: IslandLoad.Ready, branch: BranchSummary, side: ComparedBranch, view: ComparisonView) {
     Text(stringResource(Res.string.comparison_events, branch.name), style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.semantics { heading() })
-    if (side.events.isEmpty()) Text(stringResource(Res.string.comparison_no_events))
+    val wildlifeMoments = side.projection.wildlife?.moments.orEmpty().filter { it.tick > branch.start }.takeLast(3)
+    if (side.events.isEmpty() && wildlifeMoments.isEmpty()) Text(stringResource(Res.string.comparison_no_events))
     for (milestone in side.settlementEvents) Text(milestone.label(), style = MaterialTheme.typography.bodySmall)
+    for (moment in wildlifeMoments) Text(moment.description(), style = MaterialTheme.typography.bodySmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (marker in side.events) {
             OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label()) }

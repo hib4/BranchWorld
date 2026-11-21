@@ -8,25 +8,29 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 
 @Serializable
-enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2) }
+enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2), Fox(3) }
 @Serializable
 enum class ForageKind(internal val canonicalId: Int) { Meadow(1), Browse(2) }
 @Serializable
 enum class CreatureAction(internal val canonicalId: Int) {
     Idle(0), Walking(1), Eating(2), Drinking(3), Resting(4),
+    Fleeing(5), Stalking(6), Chasing(7),
 }
 
 @Serializable
 internal enum class Need(internal val canonicalId: Int) {
     Food(1), Water(2), Rest(3), Waypoint(4), Roam(5),
+    Flee(6), Hunt(7), Meet(8),
 }
 
 internal const val EcologyRulesVersion = 3
 internal const val EnvironmentalRulesVersion = 4
 internal const val WatershedRulesVersion = 6
+internal const val WildlifeRulesVersion = 7
 internal const val MaxReserve = 1000
 internal const val MaxPerSpecies = 8
 internal const val MaturityTicks = 240L
+internal val LegacySpecies = listOf(Species.Rabbit, Species.Deer)
 
 @Serializable
 internal data class ForagePatch(
@@ -43,6 +47,7 @@ internal data class ForagePatch(
 internal data class Goal(val need: Need, val cell: GridCell)
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class Creature(
     val id: Long,
     val species: Species,
@@ -57,6 +62,8 @@ internal data class Creature(
     val action: CreatureAction = CreatureAction.Idle,
     val goal: Goal? = null,
     val waypoint: GridCell? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val wildlife: WildlifeLife? = null,
 )
 
 @Serializable
@@ -83,8 +90,11 @@ internal data class EcologyState(
     // Omit the new field in old rules so checksum re-encoding stays byte-for-byte compatible.
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val settlements: SettlementWorld? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val wildlife: WildlifeHistory? = null,
 ) {
     val rulesVersion: Int get() = when {
+        wildlife != null -> WildlifeRulesVersion
         environment?.recharge != null -> WatershedRulesVersion
         settlements != null -> CivilizationRulesVersion
         environment != null -> EnvironmentalRulesVersion

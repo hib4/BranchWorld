@@ -24,7 +24,7 @@ internal class IslandEcology(val terrain: TerrainMap) {
         val patches = (patches(meadow, Biome.Meadow, ForageKind.Meadow, 32, springs, placement) +
             patches(forest, Biome.PineForest, ForageKind.Browse, 24, springs, placement)).sortedBy { it.id }
         val animals = mutableListOf<Creature>()
-        for (species in Species.entries) {
+        for (species in LegacySpecies) {
             val count = if (species == Species.Rabbit) 4 else 3
             val habitat = roamCells(species)
             val nearSpawn = terrainDistance(navigation.spawn)

@@ -92,7 +92,8 @@ internal class DioramaSession(
         val current = scene ?: buildScene(world.terrain).also {
             scene = it
             renderedWorld = world
-            forage = ForageMeshes(it, world.terrain, world.poses.value.springs)
+            val opening = world.poses.value
+            forage = ForageMeshes(it, world.terrain, opening.springs, opening.wildlife != null)
             localDetails = LocalDetails(it, world.terrain)
             controller.status.value = "Loading island…"
             output?.attach(it)
@@ -130,9 +131,12 @@ internal class DioramaSession(
                     } else if (creatureFocusOrbit != orbit) creatureFocusYaw = null
                     val ground = animal.ground
                     val center = cellPosition(ground.x, ground.z, ground.elevationTwice)
+                    val distance = if (animal.intent != null) {
+                        if (narrow) 4.1f else 3.15f
+                    } else if (narrow) 4.4f else 3.4f
                     previous.copy(yaw = creatureFocusYaw ?: previous.yaw,
                         targetX = center.x, targetY = center.y + if (narrow) -0.65f else 0.19f,
-                        targetZ = center.z, distance = if (narrow) 4.4f else 3.4f)
+                        targetZ = center.z, distance = distance)
                 }
                 is WorldCamera.Focus.Region -> region?.let {
                     val x = TerrainMap.MinCell + it % 4 * 16 + 8
@@ -149,6 +153,12 @@ internal class DioramaSession(
                             targetY = center.y + if (narrow) -0.65f else 0.12f,
                             distance = if (narrow) 5.3f else 4.6f)
                     }
+                }
+                is WorldCamera.Focus.WildlifeLocation -> {
+                    val ground = focus.ground
+                    val center = cellPosition(ground.x, ground.z, ground.elevationTwice)
+                    previous.copy(targetX = center.x, targetZ = center.z,
+                        targetY = center.y + if (narrow) -0.65f else 0.15f, distance = if (narrow) 4.7f else 3.9f)
                 }
                 null -> null
             }
@@ -321,7 +331,7 @@ internal class DioramaSession(
             propModels = PineVariants.mapNotNull { variant -> target.placePines(world.terrain, variant) }
             canopy = propModels.flatMap { model -> model.meshes.values.mapNotNull { it.shader as? KslPbrShader } }
             updateLandHaze(light)
-            val assets = loadCreatureAssets()
+            val assets = loadCreatureAssets(world.poses.value.wildlife != null)
             val towns = if (world.poses.value.settlements != null) SettlementModels.load(target) else null
             if (scene !== target || !currentCoroutineContext().isActive) {
                 throw CancellationException("The island scene was replaced while loading wildlife")

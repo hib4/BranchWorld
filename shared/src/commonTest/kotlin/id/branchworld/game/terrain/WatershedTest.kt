@@ -97,7 +97,7 @@ class WatershedTest {
     @Test
     fun saveAndReplayPreserveBothHistoriesAcrossRain(): Unit = runBlocking {
         val terrain = IslandGenerator.generate(TerrainKey(104729, 2))
-        val timeline = Timeline.start(terrain)
+        val timeline = Timeline.start(terrain, WatershedRulesVersion)
         repeat(900) { timeline.advance() }
         val untouched = timeline.state.canonicalHash()
         timeline.show(assertNotNull(timeline.seek(1, 260)).replay())

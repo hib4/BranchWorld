@@ -102,8 +102,9 @@ internal fun creatureViewYaw(terrain: TerrainMap, animal: CreaturePose, camera: 
             val cross = abs((x - point.x) * dz - (z - point.z) * dx)
             val scale = prop.scalePercent / 100f
             val height = eyeLine + along * incline - terrain.heightAt(x, z)
-            if (height in 0f..(1.03f * scale) && cross < 0.25f * scale) {
-                weight += 1.5f + (1f - cross / (0.25f * scale))
+            val crown = (if (animal.intent == null) 0.25f else 0.34f) * scale
+            if (height in 0f..(1.03f * scale) && cross < crown) {
+                weight += 1.5f + (1f - cross / crown)
             }
         }
         for (step in 1..6) {

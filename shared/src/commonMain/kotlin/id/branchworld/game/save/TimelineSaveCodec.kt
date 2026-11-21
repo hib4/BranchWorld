@@ -4,6 +4,7 @@ import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.WatershedRulesVersion
+import id.branchworld.game.ecology.WildlifeRulesVersion
 import id.branchworld.game.simulation.canonicalHash
 import id.branchworld.game.simulation.commandOrder
 import id.branchworld.game.terrain.IslandGenerator
@@ -28,6 +29,7 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
+    private const val WildlifeSchema = 5
     private const val WatershedSchema = 4
     private const val CivilizationSchema = 3
     private val json = Json { encodeDefaults = true }
@@ -45,7 +47,11 @@ internal object TimelineSaveCodec {
         val root = timeline.branches.first().start
         val rules = root.rulesVersion
         val worldgen = root.terrain.key.worldgenVersion
-        val schema = if (rules == WatershedRulesVersion) WatershedSchema else CivilizationSchema
+        val schema = when (rules) {
+            WildlifeRulesVersion -> WildlifeSchema
+            WatershedRulesVersion -> WatershedSchema
+            else -> CivilizationSchema
+        }
         require(isSupported(schema, rules, worldgen))
         val envelope = Envelope(schema, rules, worldgen, integrity(timeline), timeline)
         return json.encodeToString(envelope).encodeToByteArray().also { require(it.size <= MaxBytes) }
@@ -63,7 +69,7 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            2, CivilizationSchema, WatershedSchema -> Unit
+            2, CivilizationSchema, WatershedSchema, WildlifeSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
@@ -85,6 +91,7 @@ internal object TimelineSaveCodec {
         2 -> worldgen == 1 && rules == EnvironmentalRulesVersion
         CivilizationSchema -> worldgen == 1 && (rules == EnvironmentalRulesVersion || rules == CivilizationRulesVersion)
         WatershedSchema -> worldgen == WatershedWorldgenVersion && rules == WatershedRulesVersion
+        WildlifeSchema -> worldgen == WatershedWorldgenVersion && rules == WildlifeRulesVersion
         else -> false
     }
 

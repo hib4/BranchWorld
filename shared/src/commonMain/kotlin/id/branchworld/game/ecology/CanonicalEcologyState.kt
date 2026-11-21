@@ -45,6 +45,12 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         writeInt(goal?.need?.canonicalId ?: 0)
         if (goal != null) writeCell(goal.cell)
         writeOptionalCell(animal.waypoint)
+        animal.wildlife?.let {
+            writeLong(it.bornAt)
+            writeCell(it.home)
+            writeLong(it.prey ?: 0L)
+            writeLong(it.huntUntil)
+        }
     }
     environment?.let {
         writeInt(if (it.weather == Weather.Dry) 0 else 1)
@@ -84,6 +90,17 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(event.siteId)
             writeInt(event.kind.code)
             writeInt(event.amount)
+        }
+    }
+    wildlife?.let { history ->
+        writeLong(history.catches)
+        writeInt(history.events.size)
+        for (event in history.events) {
+            writeLong(event.tick)
+            writeLong(event.id)
+            writeInt(event.species.canonicalId)
+            writeInt(event.kind.canonicalId)
+            writeCell(event.cell)
         }
     }
     bytes()

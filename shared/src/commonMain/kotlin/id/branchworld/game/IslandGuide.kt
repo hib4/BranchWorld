@@ -65,12 +65,12 @@ internal fun islandDescription(key: TerrainKey) = when (key) {
 }
 
 @Composable
-internal fun IslandPicker(selected: TerrainKey, enabled: Boolean, onSelect: (TerrainKey) -> Unit) {
+internal fun IslandPicker(selected: IslandSessionKey, enabled: Boolean, onSelect: (TerrainKey) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (island in IslandGallery) {
             OutlinedCard(
                 onClick = { onSelect(island) }, enabled = enabled, modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.outlinedCardColors(containerColor = if (island == selected) {
+                colors = CardDefaults.outlinedCardColors(containerColor = if (IslandSessionKey(island) == selected) {
                     MaterialTheme.colorScheme.secondaryContainer
                 } else MaterialTheme.colorScheme.surface),
             ) {

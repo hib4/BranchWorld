@@ -1,7 +1,6 @@
 package id.branchworld.game
 
 import id.branchworld.game.ecology.EcologyState
-import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.canonicalHash
@@ -35,7 +34,7 @@ internal class IslandSession {
     val state = load.asStateFlow()
     private val storage = MutableStateFlow<SaveStatus?>(null)
     val saveStatus = storage.asStateFlow()
-    private val recent = linkedMapOf<TerrainKey, IslandLoad.Ready>()
+    private val recent = linkedMapOf<IslandSessionKey, IslandLoad.Ready>()
 
     fun dismissSaveStatus() {
         if (storage.value != SaveStatus.Busy) storage.value = null
@@ -45,9 +44,11 @@ internal class IslandSession {
         storage.value = SaveStatus.Loaded(tick)
     }
 
-    suspend fun open(key: TerrainKey) {
+    suspend fun open(key: TerrainKey) = open(IslandSessionKey(key))
+
+    suspend fun open(key: IslandSessionKey) {
         val previous = load.value
-        if ((previous as? IslandLoad.Ready)?.world?.terrain?.key == key) return
+        if ((previous as? IslandLoad.Ready)?.key == key) return
         recent[key]?.let {
             publish(it)
             return
@@ -58,11 +59,10 @@ internal class IslandSession {
         try {
             val ready = withContext(Dispatchers.Default) {
                 val started = TimeSource.Monotonic.markNow()
-                val terrain = IslandGenerator.generate(key)
+                val terrain = IslandGenerator.generate(key.terrain)
                 val generationUs = started.elapsedNow().inWholeMicroseconds
-                val timeline = if (terrain.watershed == null) Timeline.start(terrain, rulesVersion = CivilizationRulesVersion)
-                else Timeline.start(terrain)
-                println("BranchWorldTerrain seed=${key.seed} version=${key.worldgenVersion} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=$generationUs readyUs=${started.elapsedNow().inWholeMicroseconds}")
+                val timeline = Timeline.start(terrain, rulesVersion = key.rules)
+                println("BranchWorldTerrain seed=${key.terrain.seed} version=${key.terrain.worldgenVersion} rules=${key.rules} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=$generationUs readyUs=${started.elapsedNow().inWholeMicroseconds}")
                 IslandLoad.Ready(terrain, timeline)
             }
             if (load.value === loading) publish(ready)
@@ -76,10 +76,10 @@ internal class IslandSession {
     }
 
     private fun publish(island: IslandLoad.Ready) {
-        val key = island.world.terrain.key
+        val key = island.key
         recent.remove(key)
         recent[key] = island
-        if (recent.size > IslandGallery.size + 1) recent.remove(recent.keys.first())
+        if (recent.size > IslandGallery.size * 2 + 1) recent.remove(recent.keys.first())
         load.value = island
     }
 
@@ -131,7 +131,7 @@ internal class IslandSession {
             val island = IslandLoad.Ready(world.terrain, world.timeline)
             publish(island)
             println("BranchWorldSave restored seed=${island.clock.seed} branch=${world.timeline.branchId} tick=${island.clock.state.tick} hash=${island.clock.state.canonicalHash()} restoreMs=${started.elapsedNow().inWholeMilliseconds}")
-            storage.value = SaveStatus.Restored(world.terrain.key, island.clock.state.tick)
+            storage.value = SaveStatus.Restored(island.key, island.clock.state.tick)
         } catch (error: CancellationException) {
             storage.value = null
             throw error
@@ -150,8 +150,9 @@ internal class IslandSession {
 
 internal sealed interface IslandLoad {
     data object Empty : IslandLoad
-    data class Loading(val key: TerrainKey) : IslandLoad
+    data class Loading(val key: IslandSessionKey) : IslandLoad
     class Ready(terrain: TerrainMap, private val timeline: Timeline) : IslandLoad {
+        val key = IslandSessionKey(terrain.key, timeline.state.rulesVersion)
         private val feedback = MutableStateFlow(InterventionFeedback(queued = timeline.queuedInterventions))
         val interventions = feedback.asStateFlow()
         private val timelineState = MutableStateFlow(timelineStatus())
@@ -360,7 +361,7 @@ internal sealed interface IslandLoad {
             }
         }
     }
-    data class Failed(val key: TerrainKey) : IslandLoad
+    data class Failed(val key: IslandSessionKey) : IslandLoad
 }
 
 internal data class TimelineView(
@@ -406,7 +407,7 @@ internal sealed interface SaveStatus {
     data object Unwritable : SaveStatus
     data class Saved(val tick: Long) : SaveStatus
     data class Loaded(val tick: Long) : SaveStatus
-    data class Restored(val terrain: TerrainKey, val tick: Long) : SaveStatus
+    data class Restored(val key: IslandSessionKey, val tick: Long) : SaveStatus
 }
 
 private class InvalidSave(cause: Exception) : Exception(cause)

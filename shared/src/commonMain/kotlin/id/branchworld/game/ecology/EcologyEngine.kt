@@ -19,13 +19,17 @@ internal class EcologyEngine(
     recordHistory: Boolean = true,
 ) {
     private val island = IslandEcology(terrain)
+    private val wildlife by lazy { Wildlife(island) }
     private val regional by lazy { RegionalEcology(island) }
     private val economy by lazy { SettlementEconomy(island) }
     private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
-            WatershedRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed, watershed = true), settlements = SettlementWorld())
+            WildlifeRulesVersion, WatershedRulesVersion -> {
+                val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true), settlements = SettlementWorld())
+                if (rulesVersion == WildlifeRulesVersion) wildlife.populate(opening) else opening
+            }
             CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
             EnvironmentalRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed))
             else -> it
@@ -40,9 +44,10 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
-        require((rulesVersion == WatershedRulesVersion) == (terrain.watershed != null))
+        require((rulesVersion in WatershedRulesVersion..WildlifeRulesVersion) == (terrain.watershed != null))
         require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
         require(state.settlements == null || state.environment != null)
+        require(state.wildlife == null || state.environment?.recharge != null)
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
         require(state.patches.zipWithNext().all { (first, next) -> first.id < next.id })
@@ -57,7 +62,23 @@ internal class EcologyEngine(
                 (it.goal == null || island.navigation.contains(it.goal.cell)) &&
                 (it.waypoint == null || island.navigation.contains(it.waypoint))
         })
-        require(Species.entries.all { species -> state.creatures.count { it.species == species } <= MaxPerSpecies })
+        require(Species.entries.all { species -> state.creatures.count { it.species == species } <= species.populationLimit() })
+        if (state.wildlife == null) {
+            require(state.creatures.all { it.species in LegacySpecies && it.wildlife == null &&
+                it.action.canonicalId <= CreatureAction.Resting.canonicalId &&
+                (it.goal?.need?.canonicalId ?: 0) <= Need.Roam.canonicalId })
+        } else {
+            val rabbits = state.creatures.filter { it.species == Species.Rabbit }.mapTo(mutableSetOf()) { it.id }
+            require(state.creatures.all { creature ->
+                val life = checkNotNull(creature.wildlife)
+                life.bornAt in 0..state.tick && island.navigation.contains(life.home) &&
+                    (if (creature.id <= WildlifeFounderCount) life.bornAt == 0L && creature.matureAt == 0L
+                        else life.bornAt > 0 && creature.matureAt == later(life.bornAt, creature.species.maturityTicks())) &&
+                    (if (creature.species == Species.Fox) life.huntUntil in 0..later(state.tick, HuntRecovery) &&
+                        (life.prey == null || life.prey in rabbits && life.huntUntil > state.tick)
+                    else life.huntUntil == 0L && life.prey == null)
+            })
+        }
         require(state.environment?.let { it.nextChange > state.tick || state.tick == Long.MAX_VALUE } != false)
         for (command in replayInputs) {
             require(validTarget(command) && inputs.submit(state.tick, command))
@@ -84,10 +105,12 @@ internal class EcologyEngine(
         val baseline = island.initialState()
         val ledger = state.ledger
         require(state.springs == baseline.springs)
-        require(state.nextEntityId >= baseline.nextEntityId)
-        require(ledger.births == state.nextEntityId - baseline.nextEntityId)
+        val initialNextId = if (state.wildlife == null) baseline.nextEntityId else WildlifeFounderCount + 1L
+        require(state.nextEntityId >= initialNextId)
+        require(ledger.births == state.nextEntityId - initialNextId)
         require(ledger.deaths == state.nextEntityId - 1 - state.creatures.size && ledger.deaths >= 0)
         require(ledger.consumed >= 0 && ledger.regrown >= 0 && ledger.introduced >= 0)
+        state.wildlife?.validate(state, island)
         require(state.creatures.all { it.matureAt >= 0 && it.breedAfter >= 0 && it.depletedTicks in 0 until SurvivalTicks })
         val natural = state.patches.filterNot { it.planted }
         require(natural.map { it.copy(biomass = it.capacity) } == baseline.patches)
@@ -186,24 +209,13 @@ internal class EcologyEngine(
             }
         }
         val afterGrowth = patches.sumOf { it.biomass }
-        val animals = ArrayList<Creature>(previous.creatures.size)
-        for (creature in previous.creatures) {
-            val waypoint = waypoints[creature.id]
-            val commanded = if (waypoint != null && creature.species == Species.Rabbit) {
-                creature.copy(waypoint = waypoint)
-            } else {
-                creature
-            }
-            val animal = act(commanded, tick, patches, previous.springs, random)
-            if (animal.depletedTicks < SurvivalTicks) animals.add(animal)
+        val (animals, nextId, history) = if (previous.wildlife == null) {
+            advanceLegacy(previous, tick, patches, waypoints, random)
+        } else {
+            wildlife.advance(previous, tick, checkNotNull(environment?.recharge), patches, waypoints, random)
         }
-        val deaths = previous.creatures.size - animals.size
-        var nextId = previous.nextEntityId
-        if (tick % 120L == 0L) {
-            for (species in Species.entries) {
-                if (nextId < Long.MAX_VALUE && breed(animals, species, tick, nextId)) nextId++
-            }
-        }
+        val births = nextId - previous.nextEntityId
+        val deaths = previous.creatures.size - animals.size + births
         val ledger = previous.ledger
         val settlements = previous.settlements?.let {
             if (tick % SettlementTurn == 0L) economy.advance(
@@ -219,14 +231,40 @@ internal class EcologyEngine(
             nextEntityId = nextId,
             environment = environment,
             settlements = settlements,
+            wildlife = history,
             ledger = EcologyLedger(
                 consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass },
                 regrown = ledger.regrown + afterGrowth - before,
-                births = ledger.births + (nextId - previous.nextEntityId),
+                births = ledger.births + births,
                 deaths = ledger.deaths + deaths,
                 introduced = ledger.introduced + introduced,
             ),
         ).also { state = it }
+    }
+
+    private fun advanceLegacy(
+        previous: EcologyState,
+        tick: Long,
+        patches: MutableList<ForagePatch>,
+        waypoints: Map<Long, GridCell>,
+        random: SplitMix64,
+    ): CreatureTurn {
+        val animals = ArrayList<Creature>(previous.creatures.size)
+        for (creature in previous.creatures) {
+            val waypoint = waypoints[creature.id]
+            val commanded = if (waypoint != null && creature.species == Species.Rabbit) {
+                creature.copy(waypoint = waypoint)
+            } else creature
+            val animal = act(commanded, tick, patches, previous.springs, random)
+            if (animal.depletedTicks < SurvivalTicks) animals.add(animal)
+        }
+        var nextId = previous.nextEntityId
+        if (tick % 120L == 0L) {
+            for (species in LegacySpecies) {
+                if (nextId < Long.MAX_VALUE && breed(animals, species, tick, nextId)) nextId++
+            }
+        }
+        return CreatureTurn(animals, nextId)
     }
 
     private fun act(
@@ -387,8 +425,6 @@ internal class EcologyEngine(
         return false
     }
 
-    private fun later(tick: Long, interval: Long) = minOf(tick, Long.MAX_VALUE - interval) + interval
-
     private fun heading(from: GridCell, to: GridCell) = when {
         to.x > from.x -> CreatureHeading.PositiveX
         to.x < from.x -> CreatureHeading.NegativeX
@@ -398,6 +434,11 @@ internal class EcologyEngine(
 
     private companion object {
         const val Bite = 10
-        const val SurvivalTicks = 100
     }
 }
+
+internal data class CreatureTurn(
+    val animals: List<Creature>,
+    val nextId: Long,
+    val history: WildlifeHistory? = null,
+)

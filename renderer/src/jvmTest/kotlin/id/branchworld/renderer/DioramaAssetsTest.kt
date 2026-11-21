@@ -17,7 +17,7 @@ class DioramaAssetsTest {
                 val path = "${asset.path.substringBeforeLast('/')}/${reference.groupValues[1]}"
                 assertTrue(resource(path).isNotEmpty(), path)
             }
-            if (asset == DioramaAsset.Bunny || asset == DioramaAsset.Deer) {
+            if (asset in setOf(DioramaAsset.Bunny, DioramaAsset.Deer, DioramaAsset.Fox)) {
                 for (clip in CreatureClips) {
                     assertTrue(Regex(""""name"\s*:\s*"$clip"""").containsMatchIn(metadata), "$asset $clip")
                 }

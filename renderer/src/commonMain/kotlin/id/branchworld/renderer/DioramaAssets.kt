@@ -7,6 +7,7 @@ internal enum class DioramaAsset(val file: String) {
     Rock("rock_smallH.glb"),
     Bunny("animal-bunny.glb"),
     Deer("animal-deer.glb"),
+    Fox("animal-fox.glb"),
     SettlementHome("building_home_A_green.gltf"),
     SettlementFarm("building_windmill_green.gltf"),
     Settler("Ranger.glb"),
@@ -15,4 +16,4 @@ internal enum class DioramaAsset(val file: String) {
     val path: String get() = "diorama/$file"
 }
 
-internal val CreatureClips = listOf("idle", "walk", "eat")
+internal val CreatureClips = listOf("idle", "walk", "run", "eat")

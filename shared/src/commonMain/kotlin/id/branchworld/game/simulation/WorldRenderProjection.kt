@@ -4,9 +4,11 @@ import id.branchworld.game.ecology.CreatureAction
 import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.ForageKind
+import id.branchworld.game.ecology.Need
 import id.branchworld.game.ecology.Species
 import id.branchworld.game.ecology.Season
 import id.branchworld.game.ecology.Weather
+import id.branchworld.game.ecology.WildlifeMilestone
 import id.branchworld.game.ecology.cropPerWorker
 import id.branchworld.game.ecology.seasonAt
 import id.branchworld.game.ecology.soilMoisture
@@ -31,6 +33,7 @@ data class WorldRenderProjection(
     val branchId: Int? = null,
     val settlements: List<SettlementPose>? = null,
     val interpolateCreatures: Boolean = false,
+    val wildlife: WildlifeReadout? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
@@ -47,7 +50,22 @@ data class CreaturePose(
     val ground: GroundPoint,
     val heading: CreatureHeading,
     val action: CreatureAction,
+    val juvenile: Boolean = false,
+    val intent: WildlifeIntent? = null,
+    val destination: GroundPoint? = null,
 )
+
+enum class WildlifeIntent { Forage, Browse, Berries, Water, Shelter, Range, Refuge, Prey, Meet, Roam }
+
+data class WildlifeMoment(
+    val tick: Long,
+    val id: Long,
+    val species: Species,
+    val kind: WildlifeMilestone,
+    val ground: GroundPoint,
+)
+
+data class WildlifeReadout(val foxes: Int, val catches: Long, val moments: List<WildlifeMoment>)
 
 data class ForagePose(
     val id: Int,
@@ -110,7 +128,28 @@ internal fun WorldState.renderProjection(
 
 internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderProjection(
     tick = tick,
-    creatures = creatures.map { CreaturePose(it.id, it.species, it.cell.project(terrain), it.heading, it.action) },
+    creatures = creatures.map { animal ->
+        CreaturePose(animal.id, animal.species, animal.cell.project(terrain), animal.heading, animal.action,
+            juvenile = animal.wildlife != null && tick < animal.matureAt,
+            intent = animal.wildlife?.let {
+                when (animal.goal?.need) {
+                    Need.Food -> when (animal.species) {
+                        Species.Fox -> WildlifeIntent.Berries
+                        Species.Deer, Species.Rabbit -> if (patches.any { patch -> patch.cell == animal.goal.cell && patch.kind == ForageKind.Browse })
+                            WildlifeIntent.Browse else WildlifeIntent.Forage
+                    }
+                    Need.Water -> WildlifeIntent.Water
+                    Need.Rest -> WildlifeIntent.Shelter
+                    Need.Flee -> WildlifeIntent.Refuge
+                    Need.Hunt -> WildlifeIntent.Prey
+                    Need.Meet -> WildlifeIntent.Meet
+                    Need.Roam -> WildlifeIntent.Range
+                    else -> WildlifeIntent.Roam
+                }
+            },
+            destination = animal.goal?.cell?.takeIf { animal.wildlife != null }?.project(terrain),
+        )
+    },
     forage = patches.map {
         ForagePose(it.id, it.kind, it.cell.project(terrain), (it.biomass * 4 + it.capacity - 1) / it.capacity, it.planted)
     },
@@ -152,6 +191,11 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
             site.field.project(terrain),
             site.center.takeIf { site.residents > 0 }?.project(terrain),
         )
+    },
+    wildlife = wildlife?.let { history ->
+        WildlifeReadout(creatures.count { it.species == Species.Fox }, history.catches, history.events.map {
+            WildlifeMoment(it.tick, it.id, it.species, it.kind, it.cell.project(terrain))
+        })
     },
 )
 

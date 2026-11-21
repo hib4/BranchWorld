@@ -1,15 +1,12 @@
 package id.branchworld.game
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -28,44 +25,29 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
-import branchworld.shared.generated.resources.animal_drinking
-import branchworld.shared.generated.resources.animal_eating
-import branchworld.shared.generated.resources.animal_idle
-import branchworld.shared.generated.resources.animal_label
-import branchworld.shared.generated.resources.animal_needs
-import branchworld.shared.generated.resources.animal_resting
-import branchworld.shared.generated.resources.animal_walking
 import branchworld.shared.generated.resources.commands_queued
-import branchworld.shared.generated.resources.creature_story_activity
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.grove_choose_region
-import branchworld.shared.generated.resources.grove_focus_creature
 import branchworld.shared.generated.resources.grove_forage_grazed
 import branchworld.shared.generated.resources.grove_forage_holding
 import branchworld.shared.generated.resources.grove_forage_absent
 import branchworld.shared.generated.resources.grove_fork_to_plant
 import branchworld.shared.generated.resources.grove_pending
 import branchworld.shared.generated.resources.grove_target_help
-import branchworld.shared.generated.resources.inspect_animal
 import branchworld.shared.generated.resources.landmarks
 import branchworld.shared.generated.resources.no_forage_deficit
 import branchworld.shared.generated.resources.no_planting_sites
-import branchworld.shared.generated.resources.no_wildlife
 import branchworld.shared.generated.resources.plants_applied
 import branchworld.shared.generated.resources.reforest_region
 import branchworld.shared.generated.resources.regional_ecology
 import branchworld.shared.generated.resources.region_details
 import branchworld.shared.generated.resources.region_instructions
 import branchworld.shared.generated.resources.settlement_inspector
-import branchworld.shared.generated.resources.species_deer
-import branchworld.shared.generated.resources.species_rabbit
 import branchworld.shared.generated.resources.supplement_applied
 import branchworld.shared.generated.resources.supplement_forage
-import id.branchworld.game.ecology.Creature
-import id.branchworld.game.ecology.CreatureAction
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.RegionWidth
-import id.branchworld.game.ecology.Species
+import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.terrain.LandmarkKind
 import org.jetbrains.compose.resources.stringResource
 
@@ -75,16 +57,17 @@ internal fun WorldInspector(
     compact: Boolean,
     onCreatureFocus: (Long) -> Unit,
     onLandmarkFocus: (LandmarkKind) -> Unit,
+    onWildlifeLocation: (GroundPoint) -> Unit,
+    playback: @Composable () -> Unit,
 ) {
     var regionsOpen by rememberSaveable { mutableStateOf(false) }
     var settlementsOpen by rememberSaveable { mutableStateOf(false) }
     var landmarksOpen by rememberSaveable { mutableStateOf(false) }
     val pose by island.clock.render.collectAsStateWithLifecycle()
-    val creatures = remember(island, pose.branchId, pose.tick) { island.clock.state.creatures }
     val settlements = island.clock.state.settlements
     val watershed = island.world.terrain.watershed
     val water = pose.climate?.watershed
-    key(pose.branchId) { CreatureInspector(creatures, onCreatureFocus) }
+    key(island.key, pose.branchId) { WildlifeInspector(pose, onCreatureFocus, onWildlifeLocation, playback) }
     HorizontalDivider()
     if (!compact && settlements != null) SettlementInspector(settlements)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -197,52 +180,4 @@ private fun RegionPicker(selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-@Composable
-private fun CreatureInspector(creatures: List<Creature>, onCreatureFocus: (Long) -> Unit) {
-    if (creatures.isEmpty()) {
-        Text(stringResource(Res.string.no_wildlife))
-        return
-    }
-    var expanded by remember { mutableStateOf(false) }
-    var selected by remember { mutableStateOf<Long?>(null) }
-    val creature = creatures.firstOrNull { it.id == selected }
-    Box {
-        OutlinedButton(onClick = { expanded = true }) {
-            Text(if (creature == null) stringResource(Res.string.inspect_animal) else creature.label())
-        }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            for (option in creatures) {
-                DropdownMenuItem(
-                    text = { Text(option.label()) },
-                    onClick = {
-                        selected = option.id
-                        expanded = false
-                        onCreatureFocus(option.id)
-                    },
-                )
-            }
-        }
-    }
-    if (creature != null) {
-        val activity = stringResource(when (creature.action) {
-            CreatureAction.Idle -> Res.string.animal_idle
-            CreatureAction.Walking -> Res.string.animal_walking
-            CreatureAction.Eating -> Res.string.animal_eating
-            CreatureAction.Drinking -> Res.string.animal_drinking
-            CreatureAction.Resting -> Res.string.animal_resting
-        })
-        Text(stringResource(Res.string.creature_story_activity, activity))
-        OutlinedButton(onClick = { onCreatureFocus(creature.id) }) { Text(stringResource(Res.string.grove_focus_creature)) }
-        Text(stringResource(Res.string.animal_needs, reserve(creature.food), reserve(creature.water), reserve(creature.energy)))
-    }
-}
-
-@Composable
-private fun Creature.label(): String {
-    val name = stringResource(if (species == Species.Rabbit) Res.string.species_rabbit else Res.string.species_deer)
-    return stringResource(Res.string.animal_label, name, id.toString())
-}
-
 internal fun regionName(region: Int) = "${'A' + region / RegionWidth}${region % RegionWidth + 1}"
-
-private fun reserve(value: Int) = "${value / 10}%"
