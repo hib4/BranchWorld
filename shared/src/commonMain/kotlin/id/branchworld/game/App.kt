@@ -67,6 +67,12 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import branchworld.shared.generated.resources.shape_world
+import branchworld.shared.generated.resources.shape_tick_tools
+import branchworld.shared.generated.resources.shape_warning
+import branchworld.shared.generated.resources.shape_shortage
+import branchworld.shared.generated.resources.shape_recovered
+import branchworld.shared.generated.resources.shape_rain_arrived
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.back_to_home
 import branchworld.shared.generated.resources.begin_story
@@ -106,6 +112,8 @@ import branchworld.shared.generated.resources.valley_refill_note
 import branchworld.shared.generated.resources.valley_low_note
 import branchworld.shared.generated.resources.valley_clear_note
 import id.branchworld.game.ecology.Intervention
+import id.branchworld.game.ecology.ShapingRulesVersion
+import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.ecology.Weather
 import id.branchworld.game.ecology.Season
 import id.branchworld.game.save.WorldSaveStore
@@ -157,6 +165,7 @@ fun App(
     var panel by rememberSaveable { mutableStateOf<WorldPanel?>(null) }
     var focus by remember { mutableStateOf<WorldCamera.Focus?>(null) }
     var focusRequest by remember { mutableIntStateOf(0) }
+    var shapeSites by remember { mutableStateOf<List<GroundPoint>>(emptyList()) }
     val requestFocus: (WorldCamera.Focus) -> Unit = {
         focus = it
         focusRequest++
@@ -178,7 +187,7 @@ fun App(
     val pose = session?.world?.poses?.collectAsStateWithLifecycle()?.value
     val clock = session?.clock
     val interventions = session?.interventions?.collectAsStateWithLifecycle()?.value
-    val planting = interventions?.applied?.firstOrNull { it.kind == Intervention.Reforest }
+    val planting = interventions?.applied?.firstOrNull { it.kind == Intervention.Reforest && it.amount > 0 }
     var plantingNotice by remember(session) { mutableStateOf<Int?>(null) }
     var announcedPlanting by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(session, planting) {
@@ -195,6 +204,11 @@ fun App(
         delay(5_000)
         plantingNotice = null
     }
+    val shower = pose?.shaping?.shower
+    val liveRain = interventions?.applied?.firstOrNull { it.kind == Intervention.Rain && it.amount > 0 }
+    LaunchedEffect(session, liveRain) {
+        if (soundEnabled && comparison == null && liveRain != null) playSound?.invoke(WorldSound.RainChime)
+    }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     LaunchedEffect(islands, islandKey) { islands.open(islandKey) }
@@ -209,7 +223,8 @@ fun App(
     if (setAmbience != null) {
         val lifecycleState by lifecycle.currentStateAsState()
         val sink by rememberUpdatedState(setAmbience)
-        val mix = worldAmbience(soundEnabled, foreground && lifecycleState.isAtLeast(playbackState), pose?.climate)
+        val mix = worldAmbience(soundEnabled, foreground && lifecycleState.isAtLeast(playbackState), pose?.climate,
+            calledRain = shower != null)
         LaunchedEffect(mix) { sink(mix) }
         DisposableEffect(Unit) { onDispose { sink(WorldAmbience.Silent) } }
     }
@@ -231,13 +246,14 @@ fun App(
     if (creatureFocus != null && pose?.creatures?.none { it.id == creatureFocus.id } == true) {
         LaunchedEffect(creatureFocus) { focus = null }
     }
-    val cameraRequest = WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest)
+    val cameraRequest = WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest, targetSites = shapeSites)
     SideEffect { viewportCamera(cameraRequest) }
 
     val showPanel: (WorldPanel?) -> Unit = { destination ->
         if (destination != panel || destination == null) {
             val keepFollowing = panel == WorldPanel.Inspect && destination == null && focus is WorldCamera.Focus.Creature
             if (!keepFollowing) focus = null
+            shapeSites = emptyList()
             if (panel == WorldPanel.Save) islands.dismissSaveStatus()
             panel = destination
         }
@@ -264,6 +280,8 @@ fun App(
         }) {
             val wide = maxWidth >= 760.dp && maxHeight >= 420.dp
             val sideIntroduction = maxWidth >= 760.dp && maxWidth > maxHeight * 1.3f
+            val shortLandscape = !wide && maxWidth >= 640.dp && maxWidth > maxHeight * 1.45f
+            val sidePanel = wide || shortLandscape
             val short = maxHeight < 540.dp
             val height = maxHeight
             if (viewport == null && session != null) {
@@ -310,7 +328,10 @@ fun App(
                                 islands.dismissSaveStatus()
                                 state = state.openWorld()
                                 showPanel(null)
-                                if (clock != null && clock.state.tick == 0L && !clock.playback.value.playing) clock.togglePlaying()
+                                if (clock != null && clock.state.tick == 0L && !clock.playback.value.playing) {
+                                    if (state.rules == ShapingRulesVersion && state.seed == IslandSeeds.first()) clock.playTo(240)
+                                    else clock.togglePlaying()
+                                }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD89C), contentColor = NightGreen),
                         ) {
@@ -328,7 +349,7 @@ fun App(
                             ) { Text(stringResource(Res.string.continue_story)) }
                         }
                     }
-                    if (storage != null) CompositionLocalProvider(LocalContentColor provides Parchment) { SaveMessage(storage) }
+                    if (storage != null) CompositionLocalProvider(LocalContentColor provides Parchment) { SaveMessage(storage, state.diagnosticsVisible || state.rules != ShapingRulesVersion) }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         TextButton(
                             onClick = { showPanel(WorldPanel.Islands) }, enabled = storage != SaveStatus.Busy,
@@ -342,7 +363,8 @@ fun App(
                 }
             }
             if (isWorld && session != null) {
-                Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeContentPadding().padding(12.dp),
+                val compactTargeting = !wide && panel == WorldPanel.Grove && pose?.shaping != null
+                if (!compactTargeting) Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeContentPadding().padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
                         Column(Modifier.widthIn(max = 310.dp)) {
@@ -351,7 +373,13 @@ fun App(
                                 val climate = pose?.climate
                                 val watershed = climate?.watershed
                                 val isHollowmere = seed == IslandSeeds.first()
+                                val shaping = pose?.shaping
+                                val village = shaping?.welfare
                                 val concern = when {
+                                    isHollowmere && village != null && village.unmet > 0 -> Res.string.shape_shortage
+                                    isHollowmere && village?.firstRecovery != null && pose.tick - village.firstRecovery <= 90 -> Res.string.shape_recovered
+                                    shaping?.shower != null -> Res.string.shape_rain_arrived
+                                    isHollowmere && shaping?.warningAt != null && pose.tick - shaping.warningAt <= 60 -> Res.string.shape_warning
                                     watershed?.season == Season.Wet && climate.weather == Weather.Rain -> Res.string.valley_storm_note
                                     watershed != null && climate.weather == Weather.Rain -> Res.string.valley_refill_note
                                     watershed != null && watershed.recharge < 52 -> Res.string.valley_low_note
@@ -371,7 +399,7 @@ fun App(
                             }
                         }
                     }
-                    if (viewportHud != null && (!wide || (panel == null && comparison == null))) {
+                    if (viewportHud != null && (!sidePanel || (panel == null && comparison == null))) {
                         Box(Modifier.widthIn(max = if (wide) 265.dp else 124.dp)) { viewportHud() }
                     }
                 }
@@ -379,12 +407,16 @@ fun App(
                     Surface(Modifier.align(Alignment.BottomStart).safeContentPadding().padding(10.dp),
                         color = NightGreen.copy(alpha = 0.96f), contentColor = Parchment, shape = MaterialTheme.shapes.large) {
                         FlowRow(Modifier.padding(horizontal = 8.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            StoryActions(session, { showPanel(WorldPanel.Grove) }, { showPanel(WorldPanel.Inspect) },
+                            StoryActions(session, {
+                                if (pose?.shaping != null) session.clock.pause()
+                                showPanel(WorldPanel.Grove)
+                            }, { showPanel(WorldPanel.Inspect) },
                                 { showPanel(WorldPanel.Timeline) }, { showPanel(WorldPanel.Menu) })
                         }
                     }
                 }
-                if (comparison != null) ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp))
+                if (comparison != null) ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp),
+                    diagnostics = state.diagnosticsVisible || session.key.rules != ShapingRulesVersion)
             }
             if (!isWorld && viewportHud != null && session != null) {
                 Box(Modifier.align(Alignment.TopEnd).safeContentPadding().padding(10.dp)) { viewportHud() }
@@ -400,15 +432,16 @@ fun App(
 
             val activePanel = if (comparison != null) WorldPanel.Timeline else panel
             if (activePanel != null) {
-                val panelSize = if (wide) Modifier.widthIn(max = 370.dp).fillMaxWidth().heightIn(max = height - 32.dp)
-                else Modifier.fillMaxWidth().heightIn(max = height * 0.65f)
-                Surface(Modifier.align(if (wide) Alignment.CenterEnd else Alignment.BottomCenter)
+                val panelSize = if (sidePanel) {
+                    Modifier.widthIn(max = if (shortLandscape) 310.dp else 370.dp).fillMaxWidth().heightIn(max = height - 32.dp)
+                } else Modifier.fillMaxWidth().heightIn(max = height * 0.65f)
+                Surface(Modifier.align(if (sidePanel) Alignment.CenterEnd else Alignment.BottomCenter)
                     .safeContentPadding().padding(10.dp).then(panelSize),
                     shape = MaterialTheme.shapes.large, shadowElevation = 8.dp) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         if (comparison == null) {
                             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                Text(stringResource(activePanel.title()), Modifier.weight(1f).semantics { heading() },
+                                Text(stringResource(activePanel.title(session?.key?.rules == ShapingRulesVersion)), Modifier.weight(1f).semantics { heading() },
                                     style = MaterialTheme.typography.headlineSmall)
                                 TextButton(onClick = { showPanel(null) }) { Text(stringResource(Res.string.close_panel)) }
                             }
@@ -447,15 +480,22 @@ fun App(
                                     )
                                 }
                                 WorldPanel.Grove -> session?.let {
-                                    GroveControls(it, onRegionFocus = { region -> requestFocus(WorldCamera.Focus.Region(region)) })
-                                    PlaybackButton(it)
+                                    if (it.key.rules == ShapingRulesVersion) {
+                                        ShapeControls(it, onTarget = { region, rain, sites ->
+                                            shapeSites = sites
+                                            requestFocus(WorldCamera.Focus.Region(region, rain))
+                                        }, onObserve = { showPanel(null) })
+                                    } else {
+                                        GroveControls(it, onRegionFocus = { region -> requestFocus(WorldCamera.Focus.Region(region)) })
+                                        PlaybackButton(it)
+                                    }
                                 }
                                 WorldPanel.Timeline -> if (session != null) {
-                                    if (comparison == null) TimelineControls(session) { if (soundEnabled) playSound?.invoke(WorldSound.Fork) }
+                                    if (comparison == null) TimelineControls(session, state.diagnosticsVisible) { if (soundEnabled) playSound?.invoke(WorldSound.Fork) }
                                     else {
                                         val timeline by session.timelineView.collectAsStateWithLifecycle()
                                         val showDetails = wide || comparisonDetailsOpen
-                                        ComparisonHeader(session, comparison, timeline.branches, showBranchPickers = showDetails)
+                                        ComparisonHeader(session, comparison, timeline.branches, showBranchPickers = showDetails, diagnostics = state.diagnosticsVisible)
                                         if (!wide) {
                                             TextButton(onClick = { comparisonDetailsOpen = !comparisonDetailsOpen }) {
                                                 val label = if (comparisonDetailsOpen) Res.string.hide_comparison_details
@@ -463,11 +503,11 @@ fun App(
                                                 Text(stringResource(label))
                                             }
                                         }
-                                        if (showDetails) ComparisonDetails(session, comparison)
+                                        if (showDetails) ComparisonDetails(session, comparison, state.diagnosticsVisible)
                                     }
                                 }
                                 WorldPanel.Save -> saveStore?.let { store ->
-                                    SaveControls(storage, onSave = { replace ->
+                                    SaveControls(storage, showTicks = state.diagnosticsVisible || state.rules != ShapingRulesVersion, onSave = { replace ->
                                         operations.launch {
                                             if (islands.save(store, replace) && soundEnabled) playSound?.invoke(WorldSound.Save)
                                         }
@@ -475,6 +515,7 @@ fun App(
                                 }
                                 WorldPanel.Diagnostics -> if (session != null) {
                                     val timeline by session.timelineView.collectAsStateWithLifecycle()
+                                    ToggleSetting(Res.string.shape_tick_tools, state.diagnosticsVisible) { state = state.toggleDiagnostics() }
                                     WorldControls(session.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
                                     Text(stringResource(Res.string.diagnostics_platform, remember { getPlatform().name }))
                                     Text(stringResource(Res.string.diagnostics_seed, seed.toString()))
@@ -505,7 +546,7 @@ private fun StoryActions(session: IslandLoad.Ready, grove: () -> Unit, inspect: 
     val colors = ButtonDefaults.textButtonColors(contentColor = Parchment)
     PlaybackButton(session, colors)
     Button(onClick = grove, colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD89C), contentColor = NightGreen)) {
-        Text(stringResource(Res.string.restore_grove))
+        Text(stringResource(if (session.key.rules == ShapingRulesVersion) Res.string.shape_world else Res.string.restore_grove))
     }
     TextButton(onClick = inspect, colors = colors) { Text(stringResource(Res.string.inspect_story)) }
     TextButton(onClick = timeline, colors = colors) { Text(stringResource(Res.string.open_timeline)) }
@@ -531,10 +572,10 @@ private fun ToggleSetting(label: org.jetbrains.compose.resources.StringResource,
     FilterChip(selected = enabled, onClick = { update(!enabled) }, label = { Text(stringResource(label)) })
 }
 
-private fun WorldPanel.title() = when (this) {
+private fun WorldPanel.title(shaping: Boolean) = when (this) {
     WorldPanel.Menu -> Res.string.world_menu
     WorldPanel.Inspect -> Res.string.inspect_story
-    WorldPanel.Grove -> Res.string.restore_grove
+    WorldPanel.Grove -> if (shaping) Res.string.shape_world else Res.string.restore_grove
     WorldPanel.Timeline -> Res.string.open_timeline
     WorldPanel.Save -> Res.string.world_journal
     WorldPanel.Diagnostics -> Res.string.diagnostics_title

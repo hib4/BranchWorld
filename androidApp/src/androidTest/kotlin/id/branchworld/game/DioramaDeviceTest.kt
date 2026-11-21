@@ -45,6 +45,9 @@ class DioramaDeviceTest {
             val start = point(viewport.centerX(), viewport.centerY())
             val span = viewport.width() / 7
 
+            waitUntil("terrain assets to load") {
+                findVisible { it.text in listOf("Starting renderer…", "Loading island…") } == null
+            }
             waitUntil("paused viewport pixels to settle") { difference(viewport, action = {}) < 0.002 }
             val orbit = firstVisibleOrbit(viewport, start, span)
             println("BranchWorldInput orbitToVisibleMs=$orbit surface=${viewport.width()}x${viewport.height()}")
@@ -64,13 +67,16 @@ class DioramaDeviceTest {
             } > 0.01)
             resetCamera()
 
+            tap(bounds("Shape"))
+            tap(bounds("Watch Hollowmere"))
+            bounds("Play")
+            tap(bounds("Shape"))
             tap(bounds("Restore grove"))
             tap(bounds("Plant saplings"))
-            bounds("Saplings will be planted when time moves forward.")
-            tap(bounds("Play"))
-            waitUntil("planting feedback") { findVisible { it.text?.endsWith("saplings have taken root.") == true } != null }
-            tap(bounds("Pause"))
-            tap(bounds("Close"))
+            bounds("Queued. Watch the next harvest to see it take effect.")
+            tap(bounds("Watch the next harvest"))
+            waitUntil("planting feedback") { findVisible { it.text?.endsWith("saplings are in the ground.") == true } != null }
+            bounds("Play")
 
             tap(bounds("Menu"))
             tap(bounds("Show diagnostics"))
@@ -124,10 +130,11 @@ class DioramaDeviceTest {
             val end = start.copy(x = start.x + span)
             val timestamp = SystemClock.uptimeMillis()
             send(timestamp, MotionEvent.ACTION_DOWN, start)
+            send(timestamp, MotionEvent.ACTION_MOVE, start.lerp(end, 0.25f))
             val movement = SystemClock.uptimeMillis()
             send(timestamp, MotionEvent.ACTION_MOVE, end)
             send(timestamp, MotionEvent.ACTION_UP, end)
-            repeat(25) {
+            repeat(45) {
                 val after = requireNotNull(input.takeScreenshot())
                 try {
                     if (changedFraction(region, before, after) > 0.01) return SystemClock.uptimeMillis() - movement

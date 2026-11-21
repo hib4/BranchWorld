@@ -43,6 +43,20 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.grove_applied
+import branchworld.shared.generated.resources.shape_timeline_position_percent
+import branchworld.shared.generated.resources.shape_return_warning
+import branchworld.shared.generated.resources.shape_rain_marker
+import branchworld.shared.generated.resources.shape_grove_marker
+import branchworld.shared.generated.resources.shape_rain_arrived
+import branchworld.shared.generated.resources.shape_did_not_apply
+import branchworld.shared.generated.resources.shape_watch_warning
+import branchworld.shared.generated.resources.shape_watch_recovery
+import branchworld.shared.generated.resources.shape_fork_here
+import branchworld.shared.generated.resources.shape_next_harvest
+import id.branchworld.game.ecology.SettlementTurn
+import id.branchworld.game.ecology.ShapingRulesVersion
+import id.branchworld.game.ecology.FadingGroveSeed
 import branchworld.shared.generated.resources.comparison_open
 import branchworld.shared.generated.resources.comparison_needs_fork
 import branchworld.shared.generated.resources.save_cancel
@@ -86,7 +100,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun TimelineControls(island: IslandLoad.Ready, onForked: () -> Unit) {
+internal fun TimelineControls(island: IslandLoad.Ready, diagnostics: Boolean = false, onForked: () -> Unit) {
     val view by island.timelineView.collectAsStateWithLifecycle()
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -94,13 +108,13 @@ internal fun TimelineControls(island: IslandLoad.Ready, onForked: () -> Unit) {
         shape = MaterialTheme.shapes.large,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TimelinePanel(island, view, onForked)
+            TimelinePanel(island, view, diagnostics || island.key.rules != ShapingRulesVersion, onForked)
         }
     }
 }
 
 @Composable
-private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked: () -> Unit) {
+private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTicks: Boolean, onForked: () -> Unit) {
     val operations = rememberCoroutineScope()
     var input by rememberSaveable(view.branchId) { mutableStateOf("") }
     var forkDialog by remember { mutableStateOf(false) }
@@ -135,7 +149,10 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
     val markers = remember(island, branch.id, branch.interventionCount, feedback.queued) { island.markers(branch.id) }
     val executed = remember(markers) { markers.filterNot { it.queued } }
     val milestones = remember(island, branch.id, branch.milestoneCount) { island.settlementEvents(branch.id) }
-    val markedTicks = remember(executed, milestones) { (executed.map { it.tick } + milestones.map { it.tick }).distinct() }
+    val warning = island.warningTick
+    val markedTicks = remember(executed, milestones, warning) {
+        (executed.map { it.tick } + milestones.map { it.tick } + listOfNotNull(warning)).distinct()
+    }
     val tree = remember(view.branches) { view.branches.inTreeOrder() }
 
     Text(stringResource(Res.string.timeline_branch, branch.name), style = MaterialTheme.typography.titleMedium)
@@ -153,7 +170,7 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
                     } else {
                         stringResource(Res.string.timeline_forked_at, entry.start.toString(), entry.head.toString())
                     }
-                    Text(detail, style = MaterialTheme.typography.bodySmall)
+                    if (showTicks) Text(detail, style = MaterialTheme.typography.bodySmall)
                 }
             },
         )
@@ -167,14 +184,18 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
         }
     }
     if (tree.size == 1) Text(stringResource(Res.string.comparison_needs_fork))
-    Text(stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()))
+    if (showTicks) Text(stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()))
+    if (warning != null) {
+        OutlinedButton(onClick = { operations.launch { island.returnToWarning() } },
+            enabled = island.canReturnToWarning) { Text(stringResource(Res.string.shape_return_warning)) }
+    }
     TimelineScrubber(
         branch.start..branch.head, view.tick, !view.seeking,
-        markers = markedTicks, onStart = island.clock::pause,
+        markers = markedTicks, onStart = island.clock::pause, showTicks = showTicks,
     ) { requested ->
         if (requested != view.tick) operations.launch { island.seek(requested) }
     }
-    OutlinedTextField(
+    if (showTicks) OutlinedTextField(
         value = input,
         onValueChange = { if (it.length <= 19 && it.all { char -> char in '0'..'9' }) input = it },
         modifier = Modifier.widthIn(max = 220.dp).submitTickOnEnter(submitTick),
@@ -185,14 +206,22 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
         singleLine = true,
     )
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedButton(
-            onClick = ::seek,
-            enabled = canSeek,
-        ) { Text(stringResource(Res.string.timeline_seek)) }
-        OutlinedButton(
-            onClick = ::playTo,
-            enabled = canPlay,
-        ) { Text(stringResource(Res.string.timeline_play_to)) }
+        if (showTicks) {
+            OutlinedButton(onClick = ::seek, enabled = canSeek) { Text(stringResource(Res.string.timeline_seek)) }
+            OutlinedButton(onClick = ::playTo, enabled = canPlay) { Text(stringResource(Res.string.timeline_play_to)) }
+        } else if (view.tick < Long.MAX_VALUE - SettlementTurn) {
+            val chapter = island.key.terrain.seed == FadingGroveSeed
+            val watchWarning = chapter && view.tick < 240
+            val nextHarvest = (view.tick / SettlementTurn + 1) * SettlementTurn
+            OutlinedButton(onClick = { island.playTo(if (watchWarning) 240L else nextHarvest) }, enabled = !view.seeking) {
+                Text(stringResource(if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest))
+            }
+            if (chapter && warning != null && view.tick < 900) {
+                OutlinedButton(onClick = { island.playTo(900L) }, enabled = !view.seeking) {
+                    Text(stringResource(Res.string.shape_watch_recovery))
+                }
+            }
+        }
         OutlinedButton(
             onClick = {
                 island.clock.pause()
@@ -216,17 +245,17 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
                 OutlinedButton(
                     onClick = { operations.launch { island.seekEvent(marker.tick) } },
                     enabled = !view.seeking,
-                ) { Text(marker.label()) }
+                ) { Text(marker.label(showTicks)) }
             }
         }
         for (marker in markers.asSequence().filter { it.queued }.take(RecentInterventions)) {
-            Text(stringResource(Res.string.timeline_queued_event, marker.label()))
+            Text(stringResource(Res.string.timeline_queued_event, marker.label(showTicks)))
         }
         if (previousEvents > RecentInterventions) {
             Text(stringResource(Res.string.timeline_earlier_events))
         }
     }
-    for (result in feedback.applied) Text(result.label(), live)
+    for (result in feedback.applied) Text(result.label(showTicks), live)
     if (milestones.isNotEmpty()) {
         Text(stringResource(Res.string.settlement_inspector), style = MaterialTheme.typography.titleSmall)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -234,13 +263,13 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, onForked
                 OutlinedButton(
                     onClick = { operations.launch { island.seek(milestone.tick) } },
                     enabled = !view.seeking && milestone.tick != view.tick,
-                ) { Text(milestone.label()) }
+                ) { Text(milestone.label(showTicks)) }
             }
         }
     }
     if (forkDialog) {
         BranchNameDialog(
-            title = stringResource(Res.string.timeline_fork_at, view.tick.toString()),
+            title = if (showTicks) stringResource(Res.string.timeline_fork_at, view.tick.toString()) else stringResource(Res.string.shape_fork_here),
             action = stringResource(Res.string.timeline_create),
             suggestedName = stringResource(Res.string.timeline_default_name, view.branches.size + 1),
             onDismiss = { forkDialog = false },
@@ -295,12 +324,14 @@ internal fun TimelineScrubber(
     enabled: Boolean,
     markers: List<Long> = emptyList(),
     onStart: () -> Unit = {},
+    showTicks: Boolean = true,
     onSeek: (Long) -> Unit,
 ) {
     var drag by remember(range.first, range.last) { mutableStateOf<Float?>(null) }
     val value = drag ?: range.fractionAt(tick)
     val label = stringResource(Res.string.timeline_scrubber)
-    val position = stringResource(Res.string.world_tick, range.tickAt(value).toString())
+    val position = if (showTicks) stringResource(Res.string.world_tick, range.tickAt(value).toString())
+        else stringResource(Res.string.shape_timeline_position_percent, (value * 100).toInt())
     Slider(
         value = value,
         onValueChange = {
@@ -329,13 +360,20 @@ internal fun TimelineScrubber(
 }
 
 @Composable
-internal fun InterventionMarker.label(): String {
+internal fun InterventionMarker.label(showTicks: Boolean = true): String {
+    if (kind == Intervention.Rain) return stringResource(Res.string.shape_rain_marker, regionName(region))
+    if (!showTicks && kind == Intervention.Reforest) return stringResource(Res.string.shape_grove_marker, regionName(region))
     val resource = if (kind == Intervention.Reforest) Res.string.timeline_reforest_event else Res.string.timeline_supplement_event
     return stringResource(resource, regionName(region), tick.toString())
 }
 
 @Composable
-internal fun InterventionResult.label(): String {
+internal fun InterventionResult.label(showTicks: Boolean = false): String {
+    if (amount == 0 && (!showTicks || kind == Intervention.Rain)) return stringResource(Res.string.shape_did_not_apply)
+    if (kind == Intervention.Rain) return stringResource(Res.string.shape_rain_arrived)
+    if (!showTicks && kind == Intervention.Reforest) {
+        return stringResource(branchworld.shared.generated.resources.Res.string.grove_applied, amount)
+    }
     val resource = if (kind == Intervention.Reforest) Res.string.plants_applied else Res.string.supplement_applied
     return stringResource(resource, tick.toString(), regionName(region), amount)
 }

@@ -25,6 +25,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.shape_rain_arrived
 import branchworld.shared.generated.resources.commands_queued
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.grove_choose_region
@@ -79,12 +80,12 @@ internal fun WorldInspector(
             FilterChip(selected = settlementsOpen, onClick = { settlementsOpen = !settlementsOpen },
                 label = { Text(stringResource(Res.string.settlement_inspector)) })
         }
-        FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
+        if (pose.shaping == null) FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
             label = { Text(stringResource(Res.string.regional_ecology)) })
     }
     if (landmarksOpen && watershed != null && water != null) LandscapeGuide(watershed, water, onLandmarkFocus)
     if (compact && settlements != null && settlementsOpen) SettlementInspector(settlements, showHeading = false)
-    if (regionsOpen) RegionalControls(island)
+    if (regionsOpen && pose.shaping == null) RegionalControls(island)
 }
 
 @Composable
@@ -118,6 +119,7 @@ private fun RegionalControls(island: IslandLoad.Ready) {
         val message = when (result.kind) {
             Intervention.Reforest -> Res.string.plants_applied
             Intervention.Supplement -> Res.string.supplement_applied
+            Intervention.Rain -> Res.string.shape_rain_arrived
         }
         Text(stringResource(message, result.tick.toString(), regionName(result.region), result.amount), live)
     }
@@ -161,7 +163,7 @@ internal fun GroveControls(island: IslandLoad.Ready, onRegionFocus: (Int) -> Uni
 }
 
 @Composable
-private fun RegionPicker(selected: Int, onSelect: (Int) -> Unit) {
+internal fun RegionPicker(selected: Int, onSelect: (Int) -> Unit) {
     Text(stringResource(Res.string.region_instructions))
     Column(Modifier.widthIn(max = 360.dp)) {
         repeat(RegionWidth) { row ->

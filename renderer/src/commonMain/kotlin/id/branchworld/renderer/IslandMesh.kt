@@ -122,23 +122,42 @@ private fun Scene.addWater(terrain: TerrainMap, water: CoastalWater) {
     }
 }
 
-internal fun Scene.addRegionHighlight(terrain: TerrainMap, region: Int) =
-    addColorMesh("Grove preview") {
-        val x0 = MinCell + region % 4 * 16
-        val z0 = MinCell + region / 4 * 16
+internal fun Scene.addRegionHighlight(terrain: TerrainMap, region: Int, rain: Boolean = false, subtle: Boolean = false) =
+    addColorMesh("Intervention preview") {
+        val x0 = MinCell + region % 4 * ChunkSize
+        val z0 = MinCell + region / 4 * ChunkSize
         generate {
-            terrain.facets(x0, z0).forEach { face ->
-                val centerX = (face.a.x + face.b.x + face.c.x) / 3f
-                val centerZ = (face.a.z + face.b.z + face.c.z) / 3f
-                val edge = centerX < (x0 + 1) * CellSize || centerX > (x0 + 15) * CellSize ||
-                    centerZ < (z0 + 1) * CellSize || centerZ > (z0 + 15) * CellSize
-                color = Color(1f, 0.80f, 0.29f, if (edge) 0.58f else 0.15f)
-                val normal = face.normal()
-                fun raised(p: Vec3f) = Vec3f(p.x, max(p.y, SeaLevel) + 0.016f, p.z)
-                val a = vertex(raised(face.a), normal)
-                val b = vertex(raised(face.b), normal)
-                val c = vertex(raised(face.c), normal)
-                addTriIndices(a, b, c)
+            if (rain) {
+                for (z in maxOf(MinCell, z0 - 2)..minOf(MaxCell, z0 + 17)) {
+                    for (x in maxOf(MinCell, x0 - 2)..minOf(MaxCell, x0 + 17)) {
+                        val cell = checkNotNull(terrain.cellAt(x, z))
+                        if (cell.biome == Biome.Water) continue
+                        val edge = x == x0 - 2 || x == x0 + 17 || z == z0 - 2 || z == z0 + 17
+                        color = Color(0.48f, 0.87f, 0.88f, if (edge) 0.28f else 0.11f)
+                        fun point(cx: Int, cz: Int) = vertex(
+                            Vec3f(cx * CellSize, max(terrain.cornerElevation(cx, cz) * ElevationScale, SeaLevel) + 0.016f,
+                                cz * CellSize), Vec3f.Y_AXIS,
+                        )
+                        val a = point(x, z)
+                        val b = point(x + 1, z)
+                        val c = point(x, z + 1)
+                        val d = point(x + 1, z + 1)
+                        addTriIndices(a, c, d)
+                        addTriIndices(a, d, b)
+                    }
+                }
+            } else {
+                terrain.facets(x0, z0).forEach { face ->
+                    val centerX = (face.a.x + face.b.x + face.c.x) / 3f
+                    val centerZ = (face.a.z + face.b.z + face.c.z) / 3f
+                    val edge = centerX < (x0 + 1) * CellSize || centerX > (x0 + 15) * CellSize ||
+                        centerZ < (z0 + 1) * CellSize || centerZ > (z0 + 15) * CellSize
+                    color = if (subtle) Color(0.95f, 0.83f, 0.44f, if (edge) 0.27f else 0.085f)
+                        else Color(1f, 0.80f, 0.29f, if (edge) 0.58f else 0.15f)
+                    val normal = face.normal()
+                    fun raised(p: Vec3f) = Vec3f(p.x, max(p.y, SeaLevel) + 0.016f, p.z)
+                    addTriIndices(vertex(raised(face.a), normal), vertex(raised(face.b), normal), vertex(raised(face.c), normal))
+                }
             }
         }
         shader = translucentSurface()

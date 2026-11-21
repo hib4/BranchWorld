@@ -13,6 +13,8 @@ import id.branchworld.game.simulation.WorldClock
 import id.branchworld.game.simulation.WorldRenderProjection
 import id.branchworld.game.simulation.WorldRenderSource
 import id.branchworld.game.simulation.renderProjection
+import id.branchworld.game.simulation.project
+import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
@@ -182,6 +184,32 @@ internal sealed interface IslandLoad {
 
         fun inspectRegions() = timeline.inspectRegions()
         fun checkpoint() = timeline.checkpoint()
+
+        fun recommendedRainRegion() = timeline.recommendedRainRegion().coerceAtLeast(0)
+
+        fun recommendedGroveRegion() = timeline.recommendedGroveRegion()
+
+        fun shapePreview(kind: Intervention, region: Int): ShapeTarget? = timeline.preview(kind, region)?.let {
+            ShapeTarget(it.sites.map { site -> site.project(world.terrain) },
+                it.field?.project(world.terrain), it.bank?.project(world.terrain), it.blocked)
+        }
+
+        val warningTick get() = timeline.warningLocation()?.second
+        val canReturnToWarning get() = timeline.warningLocation()?.let { (branch, tick) ->
+            navigationAvailable && (branch != timeline.branchId || tick != timeline.state.tick)
+        } == true
+
+        suspend fun returnToWarning() {
+            val (branch, tick) = timeline.warningLocation() ?: return
+            navigate(branch, tick)
+        }
+
+        fun cancelShape() {
+            if (navigationAvailable && timeline.cancelShape()) {
+                feedback.value = feedback.value.copy(queued = timeline.queuedInterventions)
+                updateTimeline()
+            }
+        }
 
         fun intervene(kind: Intervention, region: Int) {
             if (navigationAvailable && timeline.intervene(kind, region)) {
@@ -375,6 +403,13 @@ internal data class TimelineView(
     val failed: Boolean,
 ) {
     val active get() = branches.first { it.id == branchId }
+}
+
+internal data class ShapeTarget(
+    val sites: List<GroundPoint>, val field: GroundPoint?, val bank: GroundPoint?,
+    val blocked: id.branchworld.game.ecology.ShapeBlock?,
+) {
+    val highlights get() = sites + listOfNotNull(field, bank)
 }
 
 internal data class InterventionFeedback(val queued: Int, val applied: List<InterventionResult> = emptyList())

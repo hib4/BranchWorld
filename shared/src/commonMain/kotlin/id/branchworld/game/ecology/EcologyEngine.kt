@@ -1,5 +1,6 @@
 package id.branchworld.game.ecology
 
+import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.ReforestRegion
@@ -22,13 +23,17 @@ internal class EcologyEngine(
     private val wildlife by lazy { Wildlife(island) }
     private val regional by lazy { RegionalEcology(island) }
     private val economy by lazy { SettlementEconomy(island) }
+    private val chapter = rulesVersion == ShapingRulesVersion && terrain.key.seed == FadingGroveSeed
+    private val openingRain = if (chapter) OpeningDryEnd else 300L
+    private val rainSoils by lazy { List(RegionCount) { rainGround(terrain, it) } }
     private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
-            WildlifeRulesVersion, WatershedRulesVersion -> {
-                val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true), settlements = SettlementWorld())
-                if (rulesVersion == WildlifeRulesVersion) wildlife.populate(opening) else opening
+            ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
+                val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain),
+                    settlements = SettlementWorld(), shaping = if (rulesVersion == ShapingRulesVersion) ShapingState() else null)
+                if (rulesVersion >= WildlifeRulesVersion) wildlife.populate(opening) else opening
             }
             CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
             EnvironmentalRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed))
@@ -44,10 +49,11 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
-        require((rulesVersion in WatershedRulesVersion..WildlifeRulesVersion) == (terrain.watershed != null))
+        require((rulesVersion in WatershedRulesVersion..ShapingRulesVersion) == (terrain.watershed != null))
         require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
         require(state.settlements == null || state.environment != null)
         require(state.wildlife == null || state.environment?.recharge != null)
+        require(state.shaping == null || state.wildlife != null && state.settlements != null)
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
         require(state.patches.zipWithNext().all { (first, next) -> first.id < next.id })
@@ -93,7 +99,8 @@ internal class EcologyEngine(
     private fun validTarget(command: WorldCommand) = when (command) {
         is SetDestination -> command.entityId > 0 && island.navigation.contains(command.cell)
         is ReforestRegion -> state.environment != null && command.region in 0 until RegionCount
-        is SupplementForage -> state.environment != null && command.region in 0 until RegionCount
+        is SupplementForage -> state.environment != null && state.shaping == null && command.region in 0 until RegionCount
+        is CallRainRegion -> state.shaping != null && command.region in 0 until RegionCount
     }
 
     fun acceptedCommands(): List<WorldCommand> = inputs.accepted()
@@ -122,34 +129,76 @@ internal class EcologyEngine(
         val initial = baseline.patches.sumOf { it.biomass }.toULong()
         require(required >= initial && required - initial == supply)
         val environment = requireNotNull(state.environment)
-        if (state.tick < 300) {
-            val opening = Environment.start(state.terrain.key.seed, terrain.watershed != null)
+        state.shaping?.validate(state.tick, chapter)
+        if (state.tick < openingRain) {
+            val opening = Environment.start(state.terrain.key.seed, terrain.watershed != null, openingRain)
             val recharge = opening.recharge?.let { (it - 2 * (state.tick / 10).toInt()).coerceAtLeast(0) }
             require(environment == opening.copy(recharge = recharge))
         } else require(environment.nextChange - state.tick in 0..360)
         state.settlements?.let {
-            economy.validate(it, state.tick, state.patches, state.springs)
+            economy.validate(it, state.tick, state.patches, state.springs, state.shaping != null)
             require(it.gatheredFood.toULong() + it.gatheredWood.toULong() <= ledger.consumed.toULong())
         }
     }
 
+    private fun shapingBlock(kind: Intervention, region: Int, shaping: ShapingState, weather: Weather, sites: List<GridCell>): ShapeBlock? = when {
+        chapter && shaping.warningAt == null -> ShapeBlock.AwaitWarning
+        shaping.spent -> ShapeBlock.Spent
+        kind == Intervention.Rain && weather == Weather.Rain -> ShapeBlock.AlreadyRaining
+        kind == Intervention.Rain && !rainSoils[region].available -> ShapeBlock.NoGround
+        kind == Intervention.Reforest && sites.isEmpty() -> ShapeBlock.NoSites
+        else -> null
+    }
+
+    fun preview(kind: Intervention, region: Int): ShapePreview? {
+        val shaping = state.shaping ?: return null
+        if (region !in 0 until RegionCount || kind == Intervention.Supplement) return null
+        val village = state.settlements?.sites?.lastOrNull { it.residents > 0 }
+        val sites = if (kind == Intervention.Reforest) regional.plantingSites(region, state.patches, state.springs,
+            state.settlements?.reservedCells().orEmpty()) else emptyList()
+        val field = village?.field?.takeIf { kind == Intervention.Rain && rainCovers(region, it) }
+        val bank = village?.let { island.drinkingBank(it.center, state.springs) }
+            ?.takeIf { kind == Intervention.Rain && rainCovers(region, it) }
+        val blocker = shapingBlock(kind, region, shaping, checkNotNull(state.environment).weather, sites)
+        val booked = pendingShape() != null
+        return ShapePreview(sites, field, bank, if (booked) ShapeBlock.Reserved else blocker)
+    }
+
+    fun recommendedRainRegion(): Int {
+        val village = state.settlements?.sites?.lastOrNull { it.residents > 0 }
+        return village?.field?.region() ?: rainSoils.indexOfFirst { it.available }
+    }
+
+    fun recommendedGroveRegion(): Int =
+        if (chapter) 9 else inspectRegions().indexOfFirst { it.canPlant }.coerceAtLeast(0)
+
+    fun pendingShape(): WorldCommand? = if (state.shaping == null) null else
+        inputs.pending().firstOrNull { it is CallRainRegion || it is ReforestRegion }
+
+    fun cancelShape(): Boolean = pendingShape()?.let(inputs::cancel) ?: false
+
     fun intervene(kind: Intervention, region: Int): Boolean {
-        val availability = inspectRegions().getOrNull(region) ?: return false
-        if (kind == Intervention.Reforest && !availability.canPlant ||
-            kind == Intervention.Supplement && !availability.canSupplement
-        ) return false
-        val nextTick = state.tick + 1
-        if (inputs.pending().any { command ->
-            command.tick == nextTick && when (command) {
-                is ReforestRegion -> kind == Intervention.Reforest && command.region == region
-                is SupplementForage -> kind == Intervention.Supplement && command.region == region
-                is SetDestination -> false
-            }
-        }) return false
+        if (state.shaping != null) {
+            if (preview(kind, region)?.let { it.blocked == null } != true) return false
+        } else {
+            val availability = inspectRegions().getOrNull(region) ?: return false
+            if (kind == Intervention.Rain || kind == Intervention.Reforest && !availability.canPlant ||
+                kind == Intervention.Supplement && !availability.canSupplement
+            ) return false
+            val nextTick = state.tick + 1
+            if (inputs.pending().any { command ->
+                command.tick == nextTick && when (command) {
+                    is ReforestRegion -> kind == Intervention.Reforest && command.region == region
+                    is SupplementForage -> kind == Intervention.Supplement && command.region == region
+                    is CallRainRegion, is SetDestination -> false
+                }
+            }) return false
+        }
         return inputs.submitNext(state.tick) { tick, sequence ->
             when (kind) {
                 Intervention.Reforest -> ReforestRegion(tick, sequence, region)
                 Intervention.Supplement -> SupplementForage(tick, sequence, region)
+                Intervention.Rain -> CallRainRegion(tick, sequence, region)
             }
         }
     }
@@ -171,6 +220,8 @@ internal class EcologyEngine(
         check(previous.tick < Long.MAX_VALUE) { "World tick limit reached" }
         val tick = previous.tick + 1
         val environment = previous.environment?.at(tick)
+        var shaping = previous.shaping?.advance(tick, checkNotNull(environment), rainSoils)
+        val reserved = previous.settlements?.reservedCells().orEmpty()
         val waypoints = mutableMapOf<Long, GridCell>()
         val random = SplitMix64(previous.randomState)
         val patches = previous.patches.toMutableList()
@@ -181,11 +232,21 @@ internal class EcologyEngine(
                 when (command) {
                     is SetDestination -> waypoints[command.entityId] = command.cell
                     is ReforestRegion -> {
-                        val count = regional.plant(
-                            command.region, patches, previous.springs, previous.settlements?.reservedCells().orEmpty(),
-                        )
+                        val current = shaping
+                        val count = if (current == null || shapingBlock(Intervention.Reforest, command.region, current,
+                                checkNotNull(environment).weather,
+                                regional.plantingSites(command.region, patches, previous.springs, reserved)) == null
+                        ) regional.plant(command.region, patches, previous.springs, reserved) else 0
+                        if (count > 0 && current != null) shaping = current.copy(spent = true)
                         introduced += count * RegionalEcology.SaplingBiomass
                         add(InterventionResult(Intervention.Reforest, command.region, tick, count))
+                    }
+                    is CallRainRegion -> {
+                        val current = checkNotNull(shaping)
+                        val applied = shapingBlock(Intervention.Rain, command.region, current,
+                            checkNotNull(environment).weather, emptyList()) == null
+                        if (applied) shaping = current.copy(spent = true, shower = CalledShower(command.region, tick))
+                        add(InterventionResult(Intervention.Rain, command.region, tick, if (applied) 1 else 0))
                     }
                     is SupplementForage -> {
                         val amount = regional.supplement(command.region, patches)
@@ -196,14 +257,18 @@ internal class EcologyEngine(
             }
         }
         interventionResults = results
+        val conditions = shaping?.let { GrowingConditions(terrain, checkNotNull(environment?.recharge), it.pools, patches) }
         val before = patches.sumOf { it.biomass }
         if (tick % 10L == 0L) {
             val multiplier = if (environment?.weather == Weather.Rain) 2 else 1
             for ((index, patch) in patches.withIndex()) {
                 if (patch.biomass < patch.capacity) {
                     val recharge = environment?.recharge
-                    val growth = if (recharge == null) patch.regrowth * multiplier
-                    else growthForSoil(terrain.soilMoisture(patch.cell, recharge), patch.regrowth)
+                    val growth = if (recharge == null) patch.regrowth * multiplier else {
+                        val soil = conditions?.moisture(patch.cell) ?: terrain.soilMoisture(patch.cell, recharge)
+                        val establishment = if (conditions != null && patch.planted && !patch.rooted() && soil >= 100) 2 else 0
+                        growthForSoil(soil, patch.regrowth) + establishment
+                    }
                     patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + growth))
                 }
             }
@@ -212,17 +277,21 @@ internal class EcologyEngine(
         val (animals, nextId, history) = if (previous.wildlife == null) {
             advanceLegacy(previous, tick, patches, waypoints, random)
         } else {
-            wildlife.advance(previous, tick, checkNotNull(environment?.recharge), patches, waypoints, random)
+            wildlife.advance(previous, tick, checkNotNull(environment?.recharge), patches, waypoints, random, conditions)
         }
         val births = nextId - previous.nextEntityId
         val deaths = previous.creatures.size - animals.size + births
         val ledger = previous.ledger
         val settlements = previous.settlements?.let {
             if (tick % SettlementTurn == 0L) economy.advance(
-                it, tick, requireNotNull(environment).weather, patches, previous.springs, environment.recharge,
+                it, tick, requireNotNull(environment).weather, patches, previous.springs, environment.recharge, conditions,
             )
             else it
         }
+        val current = shaping
+        if (chapter && current?.warningAt == null && tick % SettlementTurn == 0L &&
+            checkNotNull(environment?.recharge) <= 16 && settlements?.sites?.firstOrNull()?.residents?.let { it > 0 } == true
+        ) shaping = checkNotNull(current).copy(warningAt = tick)
         return previous.copy(
             tick = tick,
             randomState = random.state,
@@ -232,6 +301,7 @@ internal class EcologyEngine(
             environment = environment,
             settlements = settlements,
             wildlife = history,
+            shaping = shaping,
             ledger = EcologyLedger(
                 consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass },
                 regrown = ledger.regrown + afterGrowth - before,

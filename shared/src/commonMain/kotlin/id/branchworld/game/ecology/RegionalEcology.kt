@@ -11,7 +11,7 @@ internal const val RegionCount = RegionWidth * RegionWidth
 internal fun GridCell.region(): Int =
     (z - TerrainMap.MinCell) / 16 * RegionWidth + (x - TerrainMap.MinCell) / 16
 
-internal enum class Intervention { Reforest, Supplement }
+internal enum class Intervention { Reforest, Supplement, Rain }
 
 internal data class InterventionResult(val kind: Intervention, val region: Int, val tick: Long, val amount: Int)
 
@@ -37,21 +37,28 @@ internal class RegionalEcology(private val island: IslandEcology) {
         }
     }
 
-    fun plant(region: Int, patches: MutableList<ForagePatch>, springs: List<GridCell>, reserved: List<GridCell> = emptyList()): Int {
+    fun plantingSites(region: Int, patches: List<ForagePatch>, springs: List<GridCell>, reserved: List<GridCell>): List<GridCell> {
         val occupied = patches.mapTo(springs.toMutableSet()) { it.cell }
         occupied.addAll(reserved)
-        var planted = 0
-        for (cell in sites[region].orEmpty()) {
-            if (planted == PlantingLimit) break
-            if (!eligible(cell, occupied)) continue
+        return buildList {
+            for (cell in sites[region].orEmpty()) {
+                if (size == PlantingLimit) break
+                if (!eligible(cell, occupied)) continue
+                add(cell)
+                occupied.add(cell)
+            }
+        }
+    }
+
+    fun plant(region: Int, patches: MutableList<ForagePatch>, springs: List<GridCell>, reserved: List<GridCell> = emptyList()): Int {
+        val sites = plantingSites(region, patches, springs, reserved)
+        for (cell in sites) {
             val moisture = island.terrain.terrainCell(cell).moisture
             patches.add(ForagePatch(cellId(cell), cell, ForageKind.Browse, 160 + moisture / 3,
                 1 + moisture / 96, SaplingBiomass, planted = true))
-            occupied.add(cell)
-            planted++
         }
-        if (planted > 0) patches.sortBy(ForagePatch::id)
-        return planted
+        if (sites.isNotEmpty()) patches.sortBy(ForagePatch::id)
+        return sites.size
     }
 
     fun supplement(region: Int, patches: MutableList<ForagePatch>): Int {

@@ -79,19 +79,36 @@ def birds(rng, count):
     return result
 
 
+def shower(rng, count):
+    """An ascending wash with three quiet water-drop notes."""
+    result = [0.0] * count
+    for i, (low, middle, high) in enumerate(noise_bands(rng, count, (90, 400, 3400))):
+        progress = i / count
+        result[i] = (low + (middle - low) * 0.55 + (high - middle) * 0.15) * (
+            math.sin(math.pi * progress) ** 2
+        )
+        seconds = i / RATE
+        for offset, pitch in ((0.12, 572), (0.22, 708), (0.38, 827)):
+            age = seconds - offset
+            if age > 0:
+                result[i] += 0.36 * min(age * 200, 1) * math.exp(-age * 15) * math.sin(TAU * pitch * age)
+    return result
+
+
 def write_layer(name, generator, seconds, peak, seed):
     values = list(generator(random.Random(seed), round(seconds * RATE)))
     scale = peak * 32767 / max(abs(value) for value in values)
     pcm = array.array('h', (round(value * scale) for value in values))
     if sys.byteorder != 'little':
         pcm.byteswap()
-    with wave.open(str(DESTINATION / f'coastal-{name}.wav'), 'wb') as output:
+    with wave.open(str(DESTINATION / f'{name}.wav'), 'wb') as output:
         output.setparams((1, 2, RATE, len(pcm), 'NONE', 'not compressed'))
         output.writeframes(pcm.tobytes())
 
 
 if __name__ == '__main__':
-    write_layer('surf', surf, 16, 0.58, 104729)
-    write_layer('wind', wind, 18, 0.39, 104759)
-    write_layer('rain', rain, 14, 0.54, 104761)
-    write_layer('birds', birds, 17, 0.22, 104773)
+    write_layer('coastal-surf', surf, 16, 0.58, 104729)
+    write_layer('coastal-wind', wind, 18, 0.39, 104759)
+    write_layer('coastal-rain', rain, 14, 0.54, 104761)
+    write_layer('coastal-birds', birds, 17, 0.22, 104773)
+    write_layer('spring-shower', shower, 0.85, 0.44, 104779)

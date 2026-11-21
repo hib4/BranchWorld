@@ -12,11 +12,18 @@ import de.fabmax.kool.util.Color
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.simulation.ForagePose
 import id.branchworld.game.simulation.GroundPoint
+import id.branchworld.game.simulation.WorldRenderProjection
 import id.branchworld.game.terrain.TerrainMap
 import kotlin.math.cos
 import kotlin.math.sin
 
-internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<GroundPoint>, wildlife: Boolean) {
+internal class ForageMeshes(
+    scene: Scene,
+    terrain: TerrainMap,
+    springs: List<GroundPoint>,
+    wildlife: Boolean,
+    private val shaping: Boolean,
+) {
     private val meshes = ForageKind.entries.associateWith { kind ->
         scene.addColorMesh("$kind forage", instances = MeshInstanceList(InstanceLayouts.ModelMat)) {
             generate {
@@ -88,6 +95,10 @@ internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<Gro
         }
     }
     private var previous: List<ForagePose>? = null
+    private var previousTick: Long? = null
+    private var previousBranch: Int? = null
+    private var sprouting = emptySet<Int>()
+    private var plantedAt = 0f
     private val previousGroups = mutableMapOf<Mesh<*>, List<ForagePose>>()
 
     init {
@@ -121,17 +132,39 @@ internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<Gro
         }
     }
 
-    fun show(patches: List<ForagePose>) {
-        if (patches == previous) return
-        previous = patches
-        for ((kind, mesh) in meshes) {
-            mesh.show(patches.filter { it.kind == kind && !it.planted && it.biomassTier > 0 })
+    fun show(world: WorldRenderProjection, seconds: Float, reducedMotion: Boolean) {
+        val patches = world.forage
+        val update = patches != previous
+        val movedHistory = previousBranch != world.branchId || world.tick < (previousTick ?: 0L)
+        if (movedHistory || reducedMotion) sprouting = emptySet()
+        if (update) {
+            val prior = previous
+            if (shaping && !reducedMotion && !movedHistory && world.interpolateCreatures && prior != null) {
+                val found = patches.filter { patch -> patch.planted && prior.none { it.id == patch.id } }
+                if (found.isNotEmpty()) {
+                    sprouting = found.mapTo(mutableSetOf(), ForagePose::id)
+                    plantedAt = seconds
+                }
+            }
+            for ((kind, mesh) in meshes) {
+                mesh.show(patches.filter { it.kind == kind && !it.planted && it.biomassTier > 0 })
+            }
         }
-        saplings.show(patches.filter { it.planted })
+        if (update || sprouting.isNotEmpty() || previousGrowth < 1f) {
+            val progress = if (sprouting.isEmpty()) 1f else ((seconds - plantedAt) / 0.35f).coerceIn(0f, 1f)
+            saplings.show(patches.filter { it.planted }, progress)
+            previousGrowth = progress
+            if (progress == 1f) sprouting = emptySet()
+        }
+        previous = patches
+        previousTick = world.tick
+        previousBranch = world.branchId
     }
 
-    private fun Mesh<*>.show(visible: List<ForagePose>) {
-        if (previousGroups.put(this, visible) == visible) return
+    private var previousGrowth = 1f
+
+    private fun Mesh<*>.show(visible: List<ForagePose>, growth: Float = 1f) {
+        if (previousGroups.put(this, visible) == visible && (this != saplings || growth == 1f && previousGrowth == 1f)) return
         isVisible = visible.isNotEmpty()
         if (visible.isEmpty()) return
         val transform = MutableMat4f()
@@ -139,8 +172,13 @@ internal class ForageMeshes(scene: Scene, terrain: TerrainMap, springs: List<Gro
             for (patch in visible) {
                 val location = patch.ground
                 val point = cellPosition(location.x, location.z, location.elevationTwice)
-                val height = if (patch.planted) 0.6f + patch.biomassTier * 0.13f else patch.biomassTier / 4f
-                transform.setIdentity().translate(point).scale(Vec3f(1f, height, 1f))
+                val height = when {
+                    !patch.planted -> patch.biomassTier / 4f
+                    shaping -> 0.22f + patch.biomassTier * 0.25f
+                    else -> 0.6f + patch.biomassTier * 0.13f
+                }
+                val rise = if (patch.id in sprouting) 1f - 0.70f * (1f - growth) * (1f - growth) else 1f
+                transform.setIdentity().translate(point).scale(Vec3f(1f, height * rise, 1f))
                 buffer.put { set(it.modelMat, transform) }
             }
         }

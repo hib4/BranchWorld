@@ -117,6 +117,7 @@ internal fun Scene.addReedBanks(terrain: TerrainMap, wind: MeadowWind, compact: 
 
 internal class InlandWater : KslShader("Inland water") {
     var time by uniform1f("uRiverTime")
+    var localShower by uniform4f("uRiverShower", Vec4f.ZERO)
     var recharge by uniform1f("uRiverRecharge", 0.25f)
     var atmosphere by uniform4f("uRiverAtmosphere", Vec4f(0.96f, 0f, 0f, 0f))
     var haze by uniformColor("uRiverHaze", Color(0.31f, 0.53f, 0.58f))
@@ -131,6 +132,7 @@ internal class InlandWater : KslShader("Inland water") {
             val level = uniformFloat1("uRiverRecharge")
             val air = uniformFloat4("uRiverAtmosphere")
             val mist = uniformFloat4("uRiverHaze")
+            val shower = uniformFloat4("uRiverShower")
             vertexStage {
                 main {
                     val position = vertexAttrib(VertexLayouts.Position.position)
@@ -168,6 +170,15 @@ internal class InlandWater : KslShader("Inland water") {
                     val reflection = float1Var(sheen * 0.075f.const + wetEdge * 0.055f.const + longWave * 0.012f.const, "reflection")
                     val water = float3Var(base * light * (1f.const - air.z * 0.15f.const), "paintedWater")
                     water += float3Value(0.70f, 0.89f, 0.82f) * reflection
+                    val local = p.xz - shower.xy
+                    val rainEdge = float1Var(max(abs(local.x), abs(local.y)), "showerEdge")
+                    val showerMask = float1Var((1f.const - smoothStep(1.05f.const, 1.57f.const, rainEdge)) * shower.z, "rainingHere")
+                    val dropCell = p.xz * 5.3f.const
+                    val dropCenter = fract(dropCell) - float2Value(0.5f, 0.5f)
+                    val fallPhase = fract(clock * 1.8f.const + sin(dot(floor(dropCell), float2Value(2.31f, 6.51f))) * 8f.const)
+                    val ring = (1f.const - smoothStep(0.008f.const, 0.066f.const, abs(length(dropCenter) - fallPhase * 0.42f.const))) *
+                        (1f.const - fallPhase)
+                    water += float3Value(0.63f, 0.90f, 0.92f) * (ring * showerMask * 0.21f.const)
                     water += float3Value(0.99f, 0.55f, 0.32f) * air.y * (sheen * 0.075f.const + 0.018f.const)
                     val coastDepth = float1Var(clamp((bed * 32f.const + 18f.const) / 18f.const, 0f.const, 1f.const), "tideDepth")
                     val coastBase = float3Var(float3Value(0.081f, 0.31f, 0.39f) +

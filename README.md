@@ -61,11 +61,15 @@ BranchWorld opens on **The Fading Grove**, a river valley entering its dry seaso
 
 Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. In **Inspect**, select Thistle the rabbit, Alder the deer, or Russet the fox to follow them. Their behavior changes with the available forage, water, and cover. **Wildlife history** records births, new feeding grounds, and losses. Select an event to go to the animal or the place it happened. **Landmarks** describes local soil conditions, and **Settlements** shows how nearby communities are doing.
 
-**Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
+**Shape** opens a paused preview. **Call rain** can replenish Hollowmere’s drinking bank and help its next harvest. **Restore grove** marks the individual planting sites. Groves need time to root in suitable soil, then hold moisture and provide forage and shelter. Each history has one intervention before natural rain replenishes the watershed. Choose a power and confirm it, or use **Cancel intervention** before playback applies it.
+
+**Menu** → **Show diagnostics** exposes the seed, playback speeds, and wildlife counters. Enable **Timeline tick tools** there to enter an exact point for replay or comparison.
 
 **Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** restores the world in a paused state. Older saves retain their original rules and geography, and an existing single-island save opens as **Main** at its saved tick.
 
-For the wildlife walkthrough, begin a new Fading Grove story. Pause, then use **Timeline** → **Play to tick** to reach `900`. Rewind to `260` with **Go to tick** and choose **Fork here**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings once. Play the child to `900`. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On a narrow screen, **Compare details** reveals the branch picker and recorded changes. With these inputs, Main has six rabbits and the planted history has eight. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
+For the drought walkthrough, select **Begin story** and let Hollowmere reach its warning. Use **Timeline** → **Watch the river recover** to see how the untreated village fares. Then choose **Return to the drought warning** → **Fork here**. Through **Shape**, call a shower over the suggested field and drinking bank and watch the next two harvests. **Compare branches** matches that history to Main. **Show left** and **Show right** keep the camera aligned, and **Compare details** reveals harvest and reserve differences on narrow screens. Return to the warning again and fork a third history. Restore the grove at C2, then watch through the recovery. Save and relaunch with **Continue** to revisit all three histories.
+
+The shared fixture starts each fork at tick `240`. It compares water and crops at `360`, then rooted habitat and wildlife use at `900`.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 
@@ -75,7 +79,7 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
 - `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny, deer, and fox GLBs are from Kenney Cube Pets.
 - Shared Kotlin generates terrain, drainage, soils, props, and traversability from the seed and worldgen version. Kool builds chunk meshes, fills the generated channels and basins, and instances the bundled trees from a read-only terrain projection.
-- Rules v7 adds local habitat, competition for forage, and fox pursuits. Each history records wildlife milestones alongside its commands and snapshots. Rules v6 introduced seasonal recharge and soil moisture. Saved histories retain their original rules and terrain.
+- Rules v8 adds branch-local interventions, soil retention, and settlement water welfare. Rules v7 introduced local habitat, competition for forage, and fox pursuits. Each history records wildlife milestones alongside its commands and snapshots. Rules v6 introduced seasonal recharge and soil moisture. Saved histories retain their original rules and terrain.
 
 ## Source asset inventory
 

@@ -49,7 +49,7 @@ internal class DioramaSession(
     private var load: Job? = null
     private var creatures: CreatureModels? = null
     private var forage: ForageMeshes? = null
-    private var previousRegion: Int? = null
+    private var previousRegion: WorldCamera.Focus.Region? = null
     private var highlight: Node? = null
     private var water: CoastalWater? = null
     private var inland: InlandWater? = null
@@ -58,6 +58,7 @@ internal class DioramaSession(
     private var canopy = emptyList<KslPbrShader>()
     private var fineGrass: Node? = null
     private var rain: Node? = null
+    private var shapingDetails: ShapingDetails? = null
     private var localDetails: LocalDetails? = null
     private var light = coastalLight(null, false)
     private var previousClimate: ClimatePose? = null
@@ -93,8 +94,9 @@ internal class DioramaSession(
             scene = it
             renderedWorld = world
             val opening = world.poses.value
-            forage = ForageMeshes(it, world.terrain, opening.springs, opening.wildlife != null)
+            forage = ForageMeshes(it, world.terrain, opening.springs, opening.wildlife != null, opening.shaping != null)
             localDetails = LocalDetails(it, world.terrain)
+            if (opening.shaping != null) shapingDetails = ShapingDetails(it, world.terrain, compact = output == null)
             controller.status.value = "Loading island…"
             output?.attach(it)
             context.addScene(it)
@@ -109,13 +111,13 @@ internal class DioramaSession(
             creatureFocusRevision = null
             creatureFocusYaw = null
         }
-        val region = (focus as? WorldCamera.Focus.Region)?.index?.takeIf { it in 0..15 }
+        val region = (focus as? WorldCamera.Focus.Region)?.takeIf { it.index in 0..15 }
         if (region != previousRegion) {
             highlight?.let {
                 current.removeNode(it)
                 it.releaseDelayed(2)
             }
-            highlight = region?.let { current.addRegionHighlight(world.terrain, it) }
+            highlight = region?.let { current.addRegionHighlight(world.terrain, it.index, rain = it.rain, subtle = snapshot.shaping != null) }
             previousRegion = region
         }
         if (controller.tracking) {
@@ -139,11 +141,22 @@ internal class DioramaSession(
                         targetZ = center.z, distance = distance)
                 }
                 is WorldCamera.Focus.Region -> region?.let {
-                    val x = TerrainMap.MinCell + it % 4 * 16 + 8
-                    val z = TerrainMap.MinCell + it / 4 * 16 + 8
+                    val x = TerrainMap.MinCell + it.index % 4 * 16 + 8
+                    val z = TerrainMap.MinCell + it.index / 4 * 16 + 8
                     val center = cellPosition(x, z, world.terrain.cellAt(x, z)?.elevationTwice ?: 0)
-                    previous.copy(targetX = center.x, targetY = center.y.coerceAtLeast(0f) + if (narrow) -0.78f else 0.25f,
-                        targetZ = center.z, distance = if (narrow) 6.1f else 5.5f)
+                    val sites = request.targetSites
+                    if (snapshot.shaping == null) {
+                        previous.copy(targetX = center.x, targetY = center.y.coerceAtLeast(0f) + if (narrow) -0.78f else 0.25f,
+                            targetZ = center.z, distance = if (narrow) 6.1f else 5.5f)
+                    } else {
+                        val centerX = if (sites.isEmpty()) center.x else (sites.map { point -> point.x }.average().toFloat() + 0.5f) * CellSize
+                        val centerZ = if (sites.isEmpty()) center.z else (sites.map { point -> point.z }.average().toFloat() + 0.5f) * CellSize
+                        val elevation = world.terrain.heightAt(centerX, centerZ).coerceAtLeast(0f)
+                        val offsetX = if (narrow) sin(previous.yaw) * 0.72f else cos(previous.yaw) * 0.62f
+                        val offsetZ = if (narrow) cos(previous.yaw) * 0.72f else -sin(previous.yaw) * 0.62f
+                        previous.copy(targetX = centerX + offsetX, targetZ = centerZ + offsetZ,
+                            targetY = elevation + if (narrow) -0.62f else 0.27f, distance = if (narrow) 5.9f else 5.1f)
+                    }
                 }
                 is WorldCamera.Focus.Landmark -> world.terrain.watershed?.let { watershed ->
                     watershed.landmarks.firstOrNull { it.kind == focus.kind }?.let { landmark ->
@@ -186,10 +199,12 @@ internal class DioramaSession(
             previousClimate = snapshot.climate
             previousOpening = request.opening
         }
+        val shower = shapingDetails?.show(snapshot.shaping, request.targetSites, time, request.reducedMotion)
         water?.time = time
         inland?.apply {
             this.time = time
             recharge = (snapshot.climate?.watershed?.recharge ?: 64) / 255f
+            localShower = shower ?: Vec4f.ZERO
         }
         wind?.apply {
             this.time = time
@@ -204,8 +219,8 @@ internal class DioramaSession(
             if (isVisible) transform.setIdentity().translate(0f, -(time * if (light.storm) 5.6f else 3.6f) % 1.7f, 0f)
         }
         wildlife?.show(snapshot, request.reducedMotion)
-        settlements?.show(snapshot.settlements.orEmpty())
-        forage?.show(snapshot.forage)
+        settlements?.show(snapshot.settlements.orEmpty(), snapshot.tick, world.terrain, request.reducedMotion)
+        forage?.show(snapshot, time, request.reducedMotion)
         localDetails?.show(snapshot, light, time, request.reducedMotion)
         output?.update()
         if (wildlife != null && wildlife.ready && settlements?.ready != false &&
@@ -243,6 +258,7 @@ internal class DioramaSession(
         canopy = emptyList()
         fineGrass = null
         rain = null
+        shapingDetails = null
         localDetails = null
         propModels = emptyList()
         settlements = null

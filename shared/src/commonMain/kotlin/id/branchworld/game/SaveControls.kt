@@ -10,6 +10,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.shape_saved_history
+import branchworld.shared.generated.resources.shape_loaded_history
 import branchworld.shared.generated.resources.save_busy
 import branchworld.shared.generated.resources.save_cancel
 import branchworld.shared.generated.resources.save_corrupt
@@ -25,11 +27,11 @@ import branchworld.shared.generated.resources.save_world
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun SaveControls(status: SaveStatus?, onSave: (Boolean) -> Unit, onDismiss: () -> Unit) {
+internal fun SaveControls(status: SaveStatus?, showTicks: Boolean = true, onSave: (Boolean) -> Unit, onDismiss: () -> Unit) {
     OutlinedButton(onClick = { onSave(false) }, enabled = status != SaveStatus.Busy) {
         Text(stringResource(Res.string.save_world))
     }
-    SaveMessage(status)
+    SaveMessage(status, showTicks)
     if (status == SaveStatus.ConfirmReplace) {
         AlertDialog(
             onDismissRequest = onDismiss,
@@ -46,7 +48,7 @@ internal fun SaveControls(status: SaveStatus?, onSave: (Boolean) -> Unit, onDism
 }
 
 @Composable
-internal fun SaveMessage(status: SaveStatus?) {
+internal fun SaveMessage(status: SaveStatus?, showTicks: Boolean = true) {
     val message = when (status) {
         SaveStatus.Busy -> stringResource(Res.string.save_busy)
         SaveStatus.Missing -> stringResource(Res.string.save_missing)
@@ -54,8 +56,8 @@ internal fun SaveMessage(status: SaveStatus?) {
         SaveStatus.Incompatible -> stringResource(Res.string.save_incompatible)
         SaveStatus.Unreadable -> stringResource(Res.string.save_unreadable)
         SaveStatus.Unwritable -> stringResource(Res.string.save_unwritable)
-        is SaveStatus.Saved -> stringResource(Res.string.save_saved, status.tick.toString())
-        is SaveStatus.Loaded -> stringResource(Res.string.save_loaded, status.tick.toString())
+        is SaveStatus.Saved -> if (showTicks) stringResource(Res.string.save_saved, status.tick.toString()) else stringResource(Res.string.shape_saved_history)
+        is SaveStatus.Loaded -> if (showTicks) stringResource(Res.string.save_loaded, status.tick.toString()) else stringResource(Res.string.shape_loaded_history)
         else -> return
     }
     Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite })

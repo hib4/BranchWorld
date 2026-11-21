@@ -18,11 +18,13 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         patches: MutableList<ForagePatch>,
         springs: List<GridCell>,
         recharge: Int? = null,
+        conditions: GrowingConditions? = null,
     ): SettlementWorld {
         if (tick % SettlementTurn != 0L) return state
         if (state.sites.isEmpty()) {
             val site = found(1, tick, 4, patches, springs, emptyList()) ?: return state
-            return state.copy(sites = listOf(site), events = listOf(site.event(tick, SettlementEventKind.Founded, 4)))
+            val opening = site.withWater(springs, conditions)
+            return state.copy(sites = listOf(opening), events = listOf(opening.event(tick, SettlementEventKind.Founded, 4)))
         }
         val previous = state.sites.last()
         if (previous.residents == 0) return state
@@ -31,12 +33,15 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         val farmers = if (previous.food < demand) (previous.residents * 3 + 3) / 4 else (previous.residents + 1) / 2
         val lumberers = (previous.residents - farmers + 1) / 2
         val miners = previous.residents - farmers - lumberers
-        val labor = SettlementLabor(farmers, lumberers, miners)
+        val welfare = previous.welfare?.let { it.collect(tick, previous.residents, checkNotNull(conditions).stage(it.bank)) }
+        val fieldWorkers = if ((welfare?.unmet ?: 0) > 0) (farmers - 1).coerceAtLeast(0) else farmers
+        val labor = SettlementLabor(fieldWorkers, lumberers, miners)
         val harvest = harvest(patches, local, ForageKind.Meadow, farmers * 2, StockLimit - previous.food + demand)
         val woodland = local.count { patches[it].kind == ForageKind.Browse && patches[it].biomass > patches[it].capacity / 4 }
-        val gatheredWood = harvest(patches, local, ForageKind.Browse, lumberers * (2 + minOf(6, woodland / 2)), StockLimit - previous.wood)
+        val gatheredWood = harvest(patches, local, ForageKind.Browse, lumberers * (2 + minOf(6, woodland / 2)), StockLimit - previous.wood, protectRoots = conditions != null)
         val quarried = minOf(previous.stoneRemaining, miners * 4, StockLimit - previous.stone)
-        val produced = cropYield(previous.field, farmers, weather, recharge)
+        val produced = if (conditions == null) cropYield(previous.field, fieldWorkers, weather, recharge)
+            else fieldWorkers * cropPerWorker(conditions.moisture(previous.field))
         val availableFood = previous.food + produced + harvest
         val shortage = if (availableFood < demand) minOf(3, previous.shortage + 1) else 0
         val surplus = if (availableFood - demand >= demand * 2) minOf(3, previous.surplus + 1) else 0
@@ -49,6 +54,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
             surplus = surplus,
             labor = labor,
             foodBalance = produced + harvest - demand,
+            welfare = welfare?.copy(cropYield = produced),
         )
         val events = mutableListOf<SettlementEvent>()
         if (shortage > 0 && state.events.none { it.siteId == previous.id && it.kind == SettlementEventKind.Shortage }) {
@@ -70,7 +76,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
             } else null
             if (next != null) {
                 sites.add(updated.copy(residents = 0, food = 0, wood = 0, stone = 0, labor = SettlementLabor()))
-                sites.add(next.copy(food = updated.food, wood = updated.wood, stone = updated.stone))
+                sites.add(next.withWater(springs, conditions).copy(food = updated.food, wood = updated.wood, stone = updated.stone))
                 events.add(previous.event(tick, SettlementEventKind.Relocated, next.id))
                 events.add(previous.event(tick, SettlementEventKind.Abandoned))
                 events.add(next.event(tick, SettlementEventKind.Founded, next.residents))
@@ -91,6 +97,11 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         )
     }
 
+    private fun Settlement.withWater(springs: List<GridCell>, conditions: GrowingConditions?): Settlement =
+        if (conditions == null) this else copy(welfare = SettlementWelfare(
+            checkNotNull(island.drinkingBank(center, springs)), residents * 2,
+        ))
+
     internal fun cropYield(field: GridCell, workers: Int, weather: Weather, recharge: Int? = null): Int {
         if (recharge != null) return workers * cropPerWorker(terrain.soilMoisture(field, recharge))
         val soil = if (terrain.terrainCell(field).moisture >= 120) 2 else 1
@@ -99,6 +110,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
 
     private fun harvest(
         patches: MutableList<ForagePatch>, local: List<Int>, kind: ForageKind, capacity: Int, space: Int,
+        protectRoots: Boolean = false,
     ): Int {
         val budget = minOf(capacity, space).coerceAtLeast(0)
         var remaining = budget
@@ -106,7 +118,9 @@ internal class SettlementEconomy(private val island: IslandEcology) {
             if (remaining == 0) break
             val patch = patches[index]
             if (patch.kind != kind) continue
-            val taken = minOf(remaining, (patch.biomass - patch.capacity / 4).coerceAtLeast(0))
+            val available = if (protectRoots && patch.planted) patch.availableBrowse(true)
+                else (patch.biomass - patch.capacity / 4).coerceAtLeast(0)
+            val taken = minOf(remaining, available)
             if (taken == 0) continue
             patches[index] = patch.copy(biomass = patch.biomass - taken)
             remaining -= taken
@@ -151,7 +165,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         return null
     }
 
-    fun validate(state: SettlementWorld, tick: Long, patches: List<ForagePatch>, springs: List<GridCell>) {
+    fun validate(state: SettlementWorld, tick: Long, patches: List<ForagePatch>, springs: List<GridCell>, shaping: Boolean = false) {
         require(state.sites.size <= 2 && state.events.size <= 14)
         require(state.gatheredFood >= 0 && state.gatheredWood >= 0)
         val reserved = state.reservedCells()
@@ -165,6 +179,15 @@ internal class SettlementEconomy(private val island: IslandEcology) {
             require(site.shortage in 0..3 && site.surplus in 0..3)
             require(site.labor.farm in 0..16 && site.labor.wood in 0..16 && site.labor.stone in 0..16)
             require(site.foodBalance in -32..64)
+            require((site.welfare != null) == shaping)
+            site.welfare?.let {
+                require(it.bank == island.drinkingBank(site.center, springs) && it.water in 0..64 &&
+                    it.unmet in 0..16 && it.cropYield in 0..48)
+                require(it.firstShortage?.let { first -> first in site.foundedAt..tick && first % SettlementTurn == 0L } != false)
+                require(it.firstRecovery?.let { recovered ->
+                    it.firstShortage != null && recovered > it.firstShortage && recovered <= tick && recovered % SettlementTurn == 0L
+                } != false)
+            }
             require(index == state.sites.lastIndex || site.residents == 0)
             require(state.events.count { it.siteId == site.id && it.kind == SettlementEventKind.Founded && it.tick == site.foundedAt } == 1)
             require(state.events.count { it.siteId == site.id && it.kind == SettlementEventKind.Abandoned } == if (site.residents == 0) 1 else 0)

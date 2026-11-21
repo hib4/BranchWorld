@@ -5,6 +5,9 @@ import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.WatershedRulesVersion
 import id.branchworld.game.ecology.WildlifeRulesVersion
+import id.branchworld.game.ecology.ShapingRulesVersion
+import id.branchworld.game.simulation.CallRainRegion
+import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.canonicalHash
 import id.branchworld.game.simulation.commandOrder
 import id.branchworld.game.terrain.IslandGenerator
@@ -29,6 +32,7 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
+    private const val ShapingSchema = 6
     private const val WildlifeSchema = 5
     private const val WatershedSchema = 4
     private const val CivilizationSchema = 3
@@ -48,6 +52,7 @@ internal object TimelineSaveCodec {
         val rules = root.rulesVersion
         val worldgen = root.terrain.key.worldgenVersion
         val schema = when (rules) {
+            ShapingRulesVersion -> ShapingSchema
             WildlifeRulesVersion -> WildlifeSchema
             WatershedRulesVersion -> WatershedSchema
             else -> CivilizationSchema
@@ -69,7 +74,7 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            2, CivilizationSchema, WatershedSchema, WildlifeSchema -> Unit
+            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
@@ -91,6 +96,7 @@ internal object TimelineSaveCodec {
         2 -> worldgen == 1 && rules == EnvironmentalRulesVersion
         CivilizationSchema -> worldgen == 1 && (rules == EnvironmentalRulesVersion || rules == CivilizationRulesVersion)
         WatershedSchema -> worldgen == WatershedWorldgenVersion && rules == WatershedRulesVersion
+        ShapingSchema -> worldgen == WatershedWorldgenVersion && rules == ShapingRulesVersion
         WildlifeSchema -> worldgen == WatershedWorldgenVersion && rules == WildlifeRulesVersion
         else -> false
     }
@@ -129,6 +135,10 @@ internal object TimelineSaveCodec {
             require(branch.head.tick != branch.start.tick || branch.head == branch.start)
             require(branch.commands.all { it.tick > branch.start.tick && it.tick <= branch.head.tick })
             require(branch.pending.all { it.tick > branch.head.tick })
+            if (rules == ShapingRulesVersion) {
+                val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion }
+                require(queued.size <= 1 && queued.all { it.tick - branch.head.tick == 1L })
+            }
             val inputs = branch.commands + branch.pending
             require(inputs.zipWithNext().all { (a, b) -> commandOrder.compare(a, b) < 0 })
             for (state in (branch.snapshots + branch.start + branch.head).distinct()) {

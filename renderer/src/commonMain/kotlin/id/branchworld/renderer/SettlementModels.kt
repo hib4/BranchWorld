@@ -8,15 +8,21 @@ import de.fabmax.kool.scene.Model
 import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.releaseWith
 import id.branchworld.game.simulation.SettlementPose
+import id.branchworld.game.terrain.TerrainMap
+import kotlin.math.abs
+import kotlin.math.sin
 
 /** Bounded scene-owned models for the authority-projected lots and resident marker. */
 internal class SettlementModels private constructor(private val scene: Scene, private val assets: List<ModelFactory>) {
     private val textures = mutableSetOf<Texture2d>()
+    private var previousHaul = -1L
     private var previous: List<SettlementPose>? = null
     val ready: Boolean get() = textures.all { it.isLoaded }
 
-    fun show(sites: List<SettlementPose>) {
-        if (previous == sites) return
+    fun show(sites: List<SettlementPose>, tick: Long, terrain: TerrainMap, reducedMotion: Boolean) {
+        val haul = if (reducedMotion || sites.none { it.haulingWater }) -1L else tick
+        if (previous == sites && previousHaul == haul) return
+        previousHaul = haul
         previous = sites
         for ((index, points) in listOf(
             sites.flatMap { it.homes },
@@ -28,9 +34,20 @@ internal class SettlementModels private constructor(private val scene: Scene, pr
                 if (positionIndex == asset.models.size) asset.models.add(makeModel(asset))
                 val model = asset.models[positionIndex]
                 model.isVisible = true
+                val hauling = if (index == 2) sites.filter { it.resident != null }[positionIndex] else null
+                val bank = hauling?.waterBank?.takeIf { hauling.haulingWater }
+                val center = cellPosition(point.x, point.z, point.elevationTwice)
                 model.transform.setIdentity()
-                    .translate(cellPosition(point.x, point.z, point.elevationTwice))
-                    .scale(asset.scale)
+                if (bank == null) model.transform.translate(center)
+                else {
+                    val phase = if (reducedMotion) 1f else 1f - abs((tick % 60) / 30f - 1f)
+                    val destination = cellPosition(bank.x, bank.z, bank.elevationTwice)
+                    val x = center.x + (destination.x - center.x) * phase
+                    val z = center.z + (destination.z - center.z) * phase
+                    val step = if (reducedMotion) 0f else abs(sin(tick * 0.85f)) * 0.018f
+                    model.transform.translate(x, terrain.heightAt(x, z) + step, z)
+                }
+                model.transform.scale(asset.scale)
             }
             for (unused in points.size until asset.models.size) asset.models[unused].isVisible = false
         }

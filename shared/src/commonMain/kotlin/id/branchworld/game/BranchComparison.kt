@@ -37,6 +37,15 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import branchworld.shared.generated.resources.shape_compare_viewing
+import branchworld.shared.generated.resources.shape_compare_loading
+import branchworld.shared.generated.resources.shape_compare_disjoint
+import branchworld.shared.generated.resources.shape_water_reserve
+import branchworld.shared.generated.resources.shape_harvest
+import branchworld.shared.generated.resources.shape_rooted
+import branchworld.shared.generated.resources.shape_shortage_event
+import branchworld.shared.generated.resources.shape_recovered_event
+import id.branchworld.game.ecology.ShapingRulesVersion
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.comparison_catches
 import branchworld.shared.generated.resources.comparison_foxes
@@ -80,6 +89,7 @@ internal fun ComparisonHeader(
     view: ComparisonView,
     branches: List<BranchSummary>,
     showBranchPickers: Boolean,
+    diagnostics: Boolean = false,
 ) {
     val target = view.target
     val event = view.event
@@ -111,7 +121,9 @@ internal fun ComparisonHeader(
                     label = { Text(stringResource(Res.string.comparison_select_right)) })
             }
             val side = if (view.showRight) view.right else view.left
-            Text(stringResource(Res.string.comparison_viewing, side.name, view.pair.tick.toString()))
+            Text(if (diagnostics || island.key.rules != ShapingRulesVersion) {
+                stringResource(Res.string.comparison_viewing, side.name, view.pair.tick.toString())
+            } else stringResource(Res.string.shape_compare_viewing, side.name))
         }
     }
 }
@@ -145,14 +157,15 @@ private fun BranchPicker(label: String, branches: List<BranchSummary>, selected:
 }
 
 @Composable
-internal fun ComparisonOverlay(view: ComparisonView, modifier: Modifier = Modifier) {
+internal fun ComparisonOverlay(view: ComparisonView, modifier: Modifier = Modifier, diagnostics: Boolean = true) {
     val message = when {
         view.range.isEmpty() -> {
             val earlier = if (view.left.head < view.right.head) view.left else view.right
-            stringResource(Res.string.comparison_disjoint, earlier.name, view.range.first.toString())
+            if (diagnostics) stringResource(Res.string.comparison_disjoint, earlier.name, view.range.first.toString())
+            else stringResource(Res.string.shape_compare_disjoint, earlier.name)
         }
         view.failed -> stringResource(Res.string.timeline_seek_failed)
-        view.pair == null -> stringResource(Res.string.comparison_loading, view.tick.toString())
+        view.pair == null -> if (diagnostics) stringResource(Res.string.comparison_loading, view.tick.toString()) else stringResource(Res.string.shape_compare_loading)
         else -> return
     }
     Surface(modifier = modifier, shape = MaterialTheme.shapes.medium) {
@@ -161,7 +174,7 @@ internal fun ComparisonOverlay(view: ComparisonView, modifier: Modifier = Modifi
 }
 
 @Composable
-internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView) {
+internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView, diagnostics: Boolean = false) {
     val tick = view.tick ?: return
     var input by remember(view.left.id, view.right.id, tick) { mutableStateOf(tick.toString()) }
     val pending = input.toLongOrNull()
@@ -172,9 +185,10 @@ internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView) {
         target?.let(island::compareAt)
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(stringResource(Res.string.comparison_ticks, view.range.first.toString(), view.range.last.toString()))
-        TimelineScrubber(view.range, tick, enabled = true, onSeek = island::compareAt)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        val showTicks = diagnostics || island.key.rules != ShapingRulesVersion
+        if (showTicks) Text(stringResource(Res.string.comparison_ticks, view.range.first.toString(), view.range.last.toString()))
+        TimelineScrubber(view.range, tick, enabled = true, showTicks = showTicks, onSeek = island::compareAt)
+        if (showTicks) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedTextField(
                 value = input,
                 onValueChange = { if (it.length <= 19 && it.all { char -> char in '0'..'9' }) input = it },
@@ -219,6 +233,18 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 MetricRow("", view.left.name, view.right.name, stringResource(Res.string.comparison_delta), compact, header = true)
                 HorizontalDivider()
+                val firstShape = left.projection.shaping
+                val secondShape = right.projection.shaping
+                if (firstShape != null && secondShape != null) {
+                    val first = firstShape.welfare
+                    val second = secondShape.welfare
+                    if (first != null && second != null) {
+                        ComparisonValue(Res.string.shape_water_reserve, first.water, second.water, compact)
+                        ComparisonValue(Res.string.shape_harvest, first.harvest, second.harvest, compact)
+                    }
+                    ComparisonValue(Res.string.shape_rooted, firstShape.rootedGroves, secondShape.rootedGroves, compact)
+                    HorizontalDivider()
+                }
                 for (index in labels.indices) {
                     val a = leftValues[index]
                     val b = rightValues[index]
@@ -255,6 +281,13 @@ private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: C
 }
 
 @Composable
+private fun ComparisonValue(label: org.jetbrains.compose.resources.StringResource, left: Int, right: Int, compact: Boolean) {
+    val change = right - left
+    MetricRow(stringResource(label), left.toString(), right.toString(),
+        if (change > 0) "+$change" else change.toString(), compact)
+}
+
+@Composable
 private fun MetricRow(label: String, left: String, right: String, delta: String, compact: Boolean, header: Boolean = false) {
     val style = if (header) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodyMedium
     Column {
@@ -273,12 +306,17 @@ private fun ComparisonEvents(island: IslandLoad.Ready, branch: BranchSummary, si
     Text(stringResource(Res.string.comparison_events, branch.name), style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.semantics { heading() })
     val wildlifeMoments = side.projection.wildlife?.moments.orEmpty().filter { it.tick > branch.start }.takeLast(3)
-    if (side.events.isEmpty() && wildlifeMoments.isEmpty()) Text(stringResource(Res.string.comparison_no_events))
-    for (milestone in side.settlementEvents) Text(milestone.label(), style = MaterialTheme.typography.bodySmall)
+    val welfare = side.projection.shaping?.welfare
+    if (welfare?.firstShortage != null) Text(stringResource(Res.string.shape_shortage_event), style = MaterialTheme.typography.bodySmall)
+    if (welfare?.firstRecovery != null) Text(stringResource(Res.string.shape_recovered_event), style = MaterialTheme.typography.bodySmall)
+    if (side.events.isEmpty() && wildlifeMoments.isEmpty() && side.settlementEvents.isEmpty() && welfare?.firstShortage == null) {
+        Text(stringResource(Res.string.comparison_no_events))
+    }
+    for (milestone in side.settlementEvents) Text(milestone.label(island.key.rules != ShapingRulesVersion), style = MaterialTheme.typography.bodySmall)
     for (moment in wildlifeMoments) Text(moment.description(), style = MaterialTheme.typography.bodySmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (marker in side.events) {
-            OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label()) }
+            OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label(island.key.rules != ShapingRulesVersion)) }
         }
     }
     if (view.event?.branchId == branch.id) {

@@ -7,6 +7,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.shape_site_founded
+import branchworld.shared.generated.resources.shape_site_shortage
+import branchworld.shared.generated.resources.shape_site_expanded
+import branchworld.shared.generated.resources.shape_site_relocated
+import branchworld.shared.generated.resources.shape_site_abandoned
+import branchworld.shared.generated.resources.shape_welfare
+import branchworld.shared.generated.resources.shape_welfare_strain
 import branchworld.shared.generated.resources.settlement_abandoned
 import branchworld.shared.generated.resources.settlement_abandoned_now
 import branchworld.shared.generated.resources.settlement_balance
@@ -45,12 +52,23 @@ internal fun SettlementInspector(world: SettlementWorld, showHeading: Boolean = 
         Text(stringResource(Res.string.settlement_labor, site.labor.farm, site.labor.wood, site.labor.stone))
         val balance = if (site.foodBalance > 0) "+${site.foodBalance}" else site.foodBalance.toString()
         Text(stringResource(Res.string.settlement_balance, balance))
+        site.welfare?.let {
+            Text(stringResource(Res.string.shape_welfare, it.water, it.cropYield))
+            if (it.unmet > 0) Text(stringResource(Res.string.shape_welfare_strain))
+        }
         if (site.shortage > 0) Text(stringResource(Res.string.settlement_shortage_now))
     }
 }
 
 @Composable
-internal fun SettlementEvent.label(): String {
+internal fun SettlementEvent.label(showTick: Boolean = true): String {
+    if (!showTick) return when (kind) {
+        SettlementEventKind.Founded -> stringResource(Res.string.shape_site_founded)
+        SettlementEventKind.Shortage -> stringResource(Res.string.shape_site_shortage)
+        SettlementEventKind.Expanded -> stringResource(Res.string.shape_site_expanded, amount)
+        SettlementEventKind.Relocated -> stringResource(Res.string.shape_site_relocated)
+        SettlementEventKind.Abandoned -> stringResource(Res.string.shape_site_abandoned)
+    }
     val time = tick.toString()
     return when (kind) {
         SettlementEventKind.Founded -> stringResource(Res.string.settlement_founded, time, siteId, amount)

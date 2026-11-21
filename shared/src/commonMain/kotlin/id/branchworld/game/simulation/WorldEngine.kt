@@ -73,6 +73,14 @@ internal data class SupplementForage(
     val region: Int,
 ) : WorldCommand
 
+@Serializable
+@SerialName("call_rain")
+internal data class CallRainRegion(
+    override val tick: Long,
+    override val sequence: Long,
+    val region: Int,
+) : WorldCommand
+
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {
     private val inputs = WorldCommands<SetDestination>()

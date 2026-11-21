@@ -27,6 +27,7 @@ internal const val EcologyRulesVersion = 3
 internal const val EnvironmentalRulesVersion = 4
 internal const val WatershedRulesVersion = 6
 internal const val WildlifeRulesVersion = 7
+internal const val ShapingRulesVersion = 8
 internal const val MaxReserve = 1000
 internal const val MaxPerSpecies = 8
 internal const val MaturityTicks = 240L
@@ -92,8 +93,11 @@ internal data class EcologyState(
     val settlements: SettlementWorld? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val wildlife: WildlifeHistory? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val shaping: ShapingState? = null,
 ) {
     val rulesVersion: Int get() = when {
+        shaping != null -> ShapingRulesVersion
         wildlife != null -> WildlifeRulesVersion
         environment?.recharge != null -> WatershedRulesVersion
         settlements != null -> CivilizationRulesVersion

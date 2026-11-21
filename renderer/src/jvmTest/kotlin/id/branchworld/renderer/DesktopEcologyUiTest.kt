@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runComposeUiTest
+import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -24,6 +25,7 @@ import id.branchworld.game.terrain.LandmarkKind
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class DesktopEcologyUiTest {
@@ -133,17 +135,22 @@ class DesktopEcologyUiTest {
         assertSame(world, viewport)
         onNodeWithText("Send bunny left").assertDoesNotExist()
 
+        onNodeWithText("Shape").performClick()
+        onNodeWithText("Watch Hollowmere").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 16_000) { world.poses.value.tick == 240L }
         val parked = world.poses.value.tick
-        onNodeWithText("Restore grove").performClick()
-        waitUntil(timeoutMillis = 5_000) { camera.focus == WorldCamera.Focus.Region(6) }
+        onNodeWithText("Shape").performClick()
+        onNodeWithText("Restore grove").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 5_000) { camera.focus == WorldCamera.Focus.Region(9) && camera.targetSites.size == 6 }
         onNodeWithText("Plant saplings").performScrollTo().performClick()
-        onNodeWithText("Saplings will be planted when time moves forward.").assertExists()
+        onNodeWithText("Queued. Watch the next harvest to see it take effect.").assertExists()
+        onNodeWithText("Cancel intervention").performScrollTo().performClick()
+        onNodeWithText("Plant saplings").performScrollTo().performClick()
         assertEquals(parked, world.poses.value.tick)
         assertEquals(0, world.poses.value.forage.count { it.planted })
-        onNodeWithText("Play").performScrollTo().performClick()
-        waitUntil(timeoutMillis = 5_000) { world.poses.value.forage.any { it.planted } }
-        onNodeWithText("Pause").performScrollTo().performClick()
-        onNodeWithText("Close").performClick()
+        onNodeWithText("Watch the next harvest").performScrollTo().performClick()
+        waitUntil(timeoutMillis = 6_000) { world.poses.value.tick == 300L }
+        assertEquals(6, world.poses.value.forage.count { it.planted })
         waitUntil(timeoutMillis = 5_000) { camera.focus == null }
 
         onNodeWithText("Menu").performClick()
@@ -151,6 +158,24 @@ class DesktopEcologyUiTest {
         onNodeWithText("Return to this history").performScrollTo().performClick()
         onNodeWithText("Play").assertExists()
         assertSame(world, viewport)
+    }
+
+    @Test
+    fun shortLandscapeKeepsTheTargetingPanelBesideTheIsland() = runDesktopComposeUiTest(width = 850, height = 390) {
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        }
+        var viewport: WorldRenderSource? = null
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                App(viewport = { _, world -> SideEffect { viewport = world } })
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { viewport != null }
+        onNodeWithText("Begin story").performScrollTo().performClick()
+        onNodeWithText("Shape").performClick()
+        val power = onNodeWithText("Call rain").fetchSemanticsNode().boundsInRoot
+        assertTrue(power.left > 440f, "The targeting controls should sit to the right of the landscape")
     }
 
     @Test

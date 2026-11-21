@@ -3,7 +3,7 @@ package id.branchworld.game.timeline
 import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
-import id.branchworld.game.ecology.WildlifeRulesVersion
+import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.SettlementEvent
@@ -129,6 +129,28 @@ internal class Timeline private constructor(
 
     fun inspectRegions() = engine.inspectRegions()
 
+    fun preview(kind: Intervention, region: Int) = engine.preview(kind, region)
+
+    fun recommendedRainRegion() = engine.recommendedRainRegion()
+
+    fun recommendedGroveRegion() = engine.recommendedGroveRegion()
+
+    fun cancelShape(): Boolean {
+        if (state.tick != active.head.tick || !engine.cancelShape()) return false
+        commandCount--
+        interventionCount--
+        return true
+    }
+
+    fun warningLocation(): Pair<Int, Long>? {
+        val tick = state.shaping?.warningAt ?: active.head.shaping?.warningAt ?: return null
+        var candidate = active
+        while (candidate.parentId != null && tick <= candidate.start.tick) {
+            candidate = branches.getValue(checkNotNull(candidate.parentId))
+        }
+        return (candidate.id to tick).takeIf { tick in candidate.start.tick..candidate.head.tick }
+    }
+
     fun canSteer(left: Boolean) = editsAllowed && engine.steeringTarget(left) != null
 
     fun steer(left: Boolean) {
@@ -222,7 +244,7 @@ internal class Timeline private constructor(
     companion object {
         fun start(
             terrain: TerrainMap,
-            rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else WildlifeRulesVersion,
+            rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else ShapingRulesVersion,
         ): Timeline {
             val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false)
             return Timeline(terrain, root(engine.state, emptyList()), engine)

@@ -3,6 +3,7 @@ package id.branchworld.game.simulation
 import id.branchworld.game.ecology.CreatureAction
 import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.EcologyState
+import id.branchworld.game.ecology.rooted
 import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.ecology.Need
 import id.branchworld.game.ecology.Species
@@ -34,6 +35,7 @@ data class WorldRenderProjection(
     val settlements: List<SettlementPose>? = null,
     val interpolateCreatures: Boolean = false,
     val wildlife: WildlifeReadout? = null,
+    val shaping: ShapingPose? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
@@ -42,6 +44,28 @@ data class GroundPoint(val x: Int, val z: Int, val elevationTwice: Int)
 
 data class SettlementPose(
     val id: Int, val homes: List<GroundPoint>, val field: GroundPoint, val resident: GroundPoint?,
+    val waterBank: GroundPoint? = null,
+    val haulingWater: Boolean = false,
+)
+
+data class ShapingPose(
+    val spent: Boolean,
+    val warningAt: Long?,
+    val shower: ShowerPose?,
+    val retainedWater: List<WetRegionPose>,
+    val rootedGroves: Int,
+    val welfare: VillageWelfarePose?,
+)
+
+data class ShowerPose(val region: Int, val age: Int)
+data class WetRegionPose(val region: Int, val retained: Int)
+
+data class VillageWelfarePose(
+    val water: Int,
+    val unmet: Int,
+    val harvest: Int,
+    val firstShortage: Long?,
+    val firstRecovery: Long?,
 )
 
 data class CreaturePose(
@@ -190,6 +214,16 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
             site.lots.take(site.homes).map { it.project(terrain) },
             site.field.project(terrain),
             site.center.takeIf { site.residents > 0 }?.project(terrain),
+            site.welfare?.bank?.project(terrain),
+            site.residents > 0 && (site.welfare?.unmet ?: 0) > 0,
+        )
+    },
+    shaping = shaping?.let { shape ->
+        ShapingPose(shape.spent, shape.warningAt, shape.shower?.let { ShowerPose(it.region, (tick - it.startedAt).toInt()) },
+            shape.pools.map { WetRegionPose(it.region, it.retained) }, patches.count { it.rooted() },
+            settlements?.sites?.firstOrNull()?.welfare?.let {
+                VillageWelfarePose(it.water, it.unmet, it.cropYield, it.firstShortage, it.firstRecovery)
+            },
         )
     },
     wildlife = wildlife?.let { history ->
@@ -207,7 +241,7 @@ internal fun climatePose(tick: Long, weather: Weather): ClimatePose {
         maxOf(daylight, dawn), phase.toFloat() / DayLength)
 }
 
-private fun GridCell.project(terrain: TerrainMap?) =
+internal fun GridCell.project(terrain: TerrainMap?) =
     GroundPoint(x, z, terrain?.terrainCell(this)?.elevationTwice ?: 0)
 
 private val ForageBiomes = setOf(Biome.Meadow, Biome.PineForest)

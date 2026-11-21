@@ -41,6 +41,10 @@ class DesktopTimelineUiTest {
         waitUntil(timeoutMillis = 5_000) { viewport != null }
         click("Begin story")
         onNodeWithText("Pause").performClick()
+        onNodeWithText("Menu").performClick()
+        click("Show diagnostics")
+        click("Timeline tick tools")
+        onNodeWithText("Close").performClick()
         awaitText("Timeline")
         onNodeWithText("Timeline").performClick()
         enterTick("60")
@@ -76,6 +80,10 @@ class DesktopTimelineUiTest {
         waitUntil(timeoutMillis = 5_000) { viewport != null }
         click("Begin story")
         onNodeWithText("Pause").performClick()
+        onNodeWithText("Menu").performClick()
+        click("Show diagnostics")
+        click("Timeline tick tools")
+        onNodeWithText("Close").performClick()
         awaitText("Timeline")
         onNodeWithText("Timeline").performClick()
         enterTick("60")

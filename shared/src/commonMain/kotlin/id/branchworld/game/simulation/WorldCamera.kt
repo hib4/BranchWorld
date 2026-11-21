@@ -8,9 +8,10 @@ data class WorldCamera(
     val reducedMotion: Boolean = false,
     val opening: Boolean = false,
     val focusRequest: Int = 0,
+    val targetSites: List<GroundPoint> = emptyList(),
 ) {
     sealed interface Focus {
-        data class Region(val index: Int) : Focus
+        data class Region(val index: Int, val rain: Boolean = false) : Focus
         data class Creature(val id: Long) : Focus
         data class Landmark(val kind: LandmarkKind) : Focus
         data class WildlifeLocation(val ground: GroundPoint) : Focus

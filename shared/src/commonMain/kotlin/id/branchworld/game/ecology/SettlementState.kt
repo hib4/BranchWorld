@@ -2,6 +2,8 @@ package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.GridCell
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 
 internal const val CivilizationRulesVersion = 5
 internal const val SettlementTurn = 60L
@@ -18,6 +20,7 @@ internal data class SettlementWorld(
 )
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class Settlement(
     val id: Int,
     val foundedAt: Long,
@@ -34,7 +37,31 @@ internal data class Settlement(
     val surplus: Int = 0,
     val labor: SettlementLabor = SettlementLabor(),
     val foodBalance: Int = 0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val welfare: SettlementWelfare? = null,
 )
+
+@Serializable
+internal data class SettlementWelfare(
+    val bank: GridCell,
+    val water: Int,
+    val unmet: Int = 0,
+    val cropYield: Int = 0,
+    val firstShortage: Long? = null,
+    val firstRecovery: Long? = null,
+) {
+    fun collect(tick: Long, residents: Int, stage: Int): SettlementWelfare {
+        val demand = residents * 2
+        val supply = residents * if (stage >= LowBankStage) 3 else 1
+        val balance = water + supply - demand
+        return copy(
+            water = balance.coerceIn(0, demand * 2),
+            unmet = (-balance).coerceAtLeast(0),
+            firstShortage = firstShortage ?: tick.takeIf { balance < 0 },
+            firstRecovery = firstRecovery ?: tick.takeIf { firstShortage != null && balance >= 0 },
+        )
+    }
+}
 
 @Serializable
 internal data class SettlementLabor(val farm: Int = 0, val wood: Int = 0, val stone: Int = 0)

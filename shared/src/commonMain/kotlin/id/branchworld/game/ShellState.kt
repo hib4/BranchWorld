@@ -2,7 +2,8 @@ package id.branchworld.game
 
 import androidx.compose.runtime.saveable.listSaver
 import id.branchworld.game.ecology.CivilizationRulesVersion
-import id.branchworld.game.ecology.WildlifeRulesVersion
+import id.branchworld.game.ecology.FadingGroveSeed
+import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 
@@ -11,12 +12,12 @@ internal enum class ShellRoute(val savedId: String) {
     World("world"),
 }
 
-internal val IslandSeeds = listOf(104729L, 271828L, 424242L)
+internal val IslandSeeds = listOf(FadingGroveSeed, 271828L, 424242L)
 internal val IslandGallery = IslandSeeds.map { TerrainKey(it, WatershedWorldgenVersion) }
 
 internal data class IslandSessionKey(
     val terrain: TerrainKey,
-    val rules: Int = if (terrain.worldgenVersion == WatershedWorldgenVersion) WildlifeRulesVersion else CivilizationRulesVersion,
+    val rules: Int = if (terrain.worldgenVersion == WatershedWorldgenVersion) ShapingRulesVersion else CivilizationRulesVersion,
 )
 
 internal data class ShellState(

@@ -83,6 +83,14 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(site.labor.wood)
             writeInt(site.labor.stone)
             writeInt(site.foodBalance)
+            site.welfare?.let {
+                writeCell(it.bank)
+                writeInt(it.water)
+                writeInt(it.unmet)
+                writeInt(it.cropYield)
+                writeLong(it.firstShortage ?: 0L)
+                writeLong(it.firstRecovery ?: 0L)
+            }
         }
         writeInt(world.events.size)
         for (event in world.events) {
@@ -101,6 +109,18 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(event.species.canonicalId)
             writeInt(event.kind.canonicalId)
             writeCell(event.cell)
+        }
+    }
+    shaping?.let {
+        writeInt(if (it.spent) 1 else 0)
+        writeLong(it.refilledSpell)
+        writeLong(it.warningAt ?: 0L)
+        writeLong(it.shower?.startedAt ?: 0L)
+        it.shower?.let { shower -> writeInt(shower.region) }
+        writeInt(it.pools.size)
+        for (pool in it.pools) {
+            writeInt(pool.region)
+            writeInt(pool.retained)
         }
     }
     bytes()

@@ -6,6 +6,7 @@ import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.Species
 import id.branchworld.game.ecology.SettlementEvent
 import id.branchworld.game.ecology.canonicalHash
+import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
 import id.branchworld.game.simulation.WorldCommand
@@ -50,6 +51,7 @@ internal data class InterventionMarker(
 )
 
 internal fun WorldCommand.marker(queued: Boolean): InterventionMarker? = when (this) {
+    is CallRainRegion -> InterventionMarker(tick, sequence, Intervention.Rain, region, queued)
     is ReforestRegion -> InterventionMarker(tick, sequence, Intervention.Reforest, region, queued)
     is SupplementForage -> InterventionMarker(tick, sequence, Intervention.Supplement, region, queued)
     else -> null

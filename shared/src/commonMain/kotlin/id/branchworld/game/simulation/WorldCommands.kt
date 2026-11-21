@@ -24,6 +24,15 @@ internal class WorldCommands<C : WorldCommand>(private val recordHistory: Boolea
         return submit(tick, command(nextTick, lastSequence + 1))
     }
 
+    fun cancel(command: C): Boolean {
+        val atTick = pending[command.tick] ?: return false
+        if (atTick[command.sequence] != command) return false
+        atTick.remove(command.sequence)
+        if (atTick.isEmpty()) pending.remove(command.tick)
+        if (recordHistory) history.remove(command)
+        return true
+    }
+
     fun at(tick: Long): List<C> =
         pending.remove(tick)?.values?.sortedBy(WorldCommand::sequence).orEmpty()
 

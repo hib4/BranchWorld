@@ -134,7 +134,7 @@ class WildlifeTest {
     @Test
     fun plantedAndUntouchedHistoriesReplayAtTheSameTime(): Unit = runBlocking {
         val terrain = terrain()
-        val timeline = Timeline.start(terrain)
+        val timeline = Timeline.start(terrain, rulesVersion = WildlifeRulesVersion)
         repeat(900) { timeline.advance() }
         timeline.show(assertNotNull(timeline.seek(1, 260)).replay())
         val region = 9 // C2.

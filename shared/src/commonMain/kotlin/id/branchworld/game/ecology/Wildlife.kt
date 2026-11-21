@@ -51,6 +51,7 @@ internal class Wildlife(private val island: IslandEcology) {
         patches: MutableList<ForagePatch>,
         waypoints: Map<Long, GridCell>,
         random: SplitMix64,
+        conditions: GrowingConditions? = null,
     ): CreatureTurn {
         updateCover(patches)
         val events = mutableListOf<WildlifeEvent>()
@@ -67,7 +68,7 @@ internal class Wildlife(private val island: IslandEcology) {
                 continue
             }
             val next = act(animal, tick, recharge, patches, state.springs, waypoints[animal.id],
-                herd, foxes, hunt, random)
+                herd, foxes, hunt, random, conditions)
             if (next.depletedTicks >= SurvivalTicks) {
                 events.add(next.event(tick, WildlifeMilestone.Scarcity))
                 continue
@@ -83,7 +84,7 @@ internal class Wildlife(private val island: IslandEcology) {
         var nextId = state.nextEntityId
         if (tick % 120L == 0L) {
             for (species in Species.entries) {
-                if (nextId < Long.MAX_VALUE && breed(animals, patches, species, tick, nextId)) {
+                if (nextId < Long.MAX_VALUE && breed(animals, patches, species, tick, nextId, conditions != null)) {
                     events.add(animals.last().event(tick, WildlifeMilestone.Birth))
                     nextId++
                 }
@@ -93,7 +94,7 @@ internal class Wildlife(private val island: IslandEcology) {
     }
 
     private fun updateCover(patches: List<ForagePatch>) {
-        val rooted = patches.filter { it.planted && it.biomass * 2 >= it.capacity }.map { it.cell }
+        val rooted = patches.filter { it.rooted() }.map { it.cell }
         if (rooted == plantedCover) return
         plantedCover = rooted
         cover = naturalCover.toHashSet().apply {
@@ -143,6 +144,7 @@ internal class Wildlife(private val island: IslandEcology) {
         foxes: List<Creature>,
         hunts: Map<Long, Hunt>,
         random: SplitMix64,
+        conditions: GrowingConditions?,
     ): Creature {
         val pursuit = hunts[animal.id]
         val sprinting = animal.action == CreatureAction.Fleeing || animal.action == CreatureAction.Chasing
@@ -163,7 +165,7 @@ internal class Wildlife(private val island: IslandEcology) {
         val goal = when {
             pursuit?.target != null -> Goal(Need.Hunt, pursuit.target.cell)
             fox != null -> flee(tired, fox)
-            else -> decide(tired, tick, recharge, patches, springs, herd, foxes, random)
+            else -> decide(tired, tick, recharge, patches, springs, herd, foxes, random, conditions)
         }
         val result = when (goal.need) {
             Need.Hunt -> travel(tired, goal, tick, checkNotNull(pursuit).action,
@@ -173,7 +175,7 @@ internal class Wildlife(private val island: IslandEcology) {
             else -> when {
                 goal.cell != tired.cell -> travel(tired, goal, tick, CreatureAction.Walking,
                     if (tired.species == Species.Rabbit) 2 else 3)
-                goal.need == Need.Food -> eat(tired, tick, patches)
+                goal.need == Need.Food -> eat(tired, tick, patches, conditions != null)
                 goal.need == Need.Water -> tired.copy(water = minOf(MaxReserve, tired.water + 31), action = CreatureAction.Drinking)
                 goal.need == Need.Rest -> tired.copy(energy = minOf(MaxReserve, tired.energy + 29), action = CreatureAction.Resting)
                 else -> tired.copy(action = CreatureAction.Idle)
@@ -228,12 +230,13 @@ internal class Wildlife(private val island: IslandEcology) {
         herd: Creature?,
         foxes: List<Creature>,
         random: SplitMix64,
+        conditions: GrowingConditions?,
     ): Goal {
         val prior = animal.goal
         fun wants(need: Need, reserve: Int, start: Int, stop: Int) =
             reserve <= start || (prior?.need == need && reserve < stop)
-        fun water() = waterGoal(animal, springs, recharge)
-        fun food() = foodGoal(animal, patches, recharge, herd)
+        fun water() = waterGoal(animal, springs, recharge, conditions)
+        fun food() = foodGoal(animal, patches, recharge, herd, conditions)
         fun rest() = restGoal(animal)
         // Finish the urgent trip through a recovery reserve. A first bite or sip must not
         // send an animal straight back to the other resource across the island.
@@ -272,12 +275,12 @@ internal class Wildlife(private val island: IslandEcology) {
         return Goal(Need.Roam, if (options.isEmpty()) origin else options[random.nextBounded(options.size)])
     }
 
-    private fun waterGoal(animal: Creature, springs: List<GridCell>, recharge: Int): Goal? {
+    private fun waterGoal(animal: Creature, springs: List<GridCell>, recharge: Int, conditions: GrowingConditions?): Goal? {
         val prior = animal.goal
         if (prior?.need == Need.Water && prior.cell in springs) return prior
         return springs.minWithOrNull(compareBy<GridCell> {
             val distance = island.terrainDistance(animal.cell)[cellId(it)]
-            distance * 5 - terrain.soilMoisture(it, recharge) / if (recharge < 64) 5 else 12
+            distance * 5 - (conditions?.moisture(it) ?: terrain.soilMoisture(it, recharge)) / if (recharge < 64) 5 else 12
         }.thenBy(::cellId))?.let { Goal(Need.Water, it) }
     }
 
@@ -289,12 +292,12 @@ internal class Wildlife(private val island: IslandEcology) {
         return island.nearest(distances, shelters)?.let { Goal(Need.Rest, it) }
     }
 
-    private fun foodGoal(animal: Creature, patches: List<ForagePatch>, recharge: Int, herd: Creature?): Goal? {
+    private fun foodGoal(animal: Creature, patches: List<ForagePatch>, recharge: Int, herd: Creature?, conditions: GrowingConditions?): Goal? {
         val prior = animal.goal
-        if (prior?.need == Need.Food && patches.any { it.cell == prior.cell && edible(it, animal.species) }) return prior
+        if (prior?.need == Need.Food && patches.any { it.cell == prior.cell && edible(it, animal.species, conditions != null) }) return prior
         val distance = island.terrainDistance(animal.cell)
         val home = checkNotNull(animal.wildlife).home
-        val patch = patches.asSequence().filter { edible(it, animal.species) }
+        val patch = patches.asSequence().filter { edible(it, animal.species, conditions != null) }
             .minWithOrNull(compareBy<ForagePatch> {
                 val steps = distance[it.id]
                 val habitat = when (animal.species) {
@@ -306,26 +309,26 @@ internal class Wildlife(private val island: IslandEcology) {
                         spacing(it.cell, herd?.cell ?: home).coerceAtMost(16) * 2
                     Species.Fox -> -spacing(it.cell, home).coerceAtMost(20) * 2
                 }
-                steps * 6 - habitat - it.biomass / 9 - terrain.soilMoisture(it.cell, recharge) / 5
+                steps * 6 - habitat - it.availableBrowse(conditions != null) / 9 - (conditions?.moisture(it.cell) ?: terrain.soilMoisture(it.cell, recharge)) / 5
             }.thenBy { it.id })
         return patch?.let { Goal(Need.Food, it.cell) }
     }
 
-    private fun edible(patch: ForagePatch, species: Species) = patch.biomass >= when (species) {
+    private fun edible(patch: ForagePatch, species: Species, protectRoots: Boolean) = patch.availableBrowse(protectRoots) >= when (species) {
         Species.Fox -> 14
         else -> 5
     } && when (species) {
-        Species.Rabbit -> patch.kind == ForageKind.Meadow || patch.biomass >= 22
+        Species.Rabbit -> patch.kind == ForageKind.Meadow || patch.availableBrowse(protectRoots) >= 22
         Species.Fox -> patch.kind == ForageKind.Browse
         Species.Deer -> true
     }
 
-    private fun eat(animal: Creature, tick: Long, patches: MutableList<ForagePatch>): Creature {
-        val index = patches.indexOfFirst { it.cell == animal.cell && edible(it, animal.species) }
+    private fun eat(animal: Creature, tick: Long, patches: MutableList<ForagePatch>, protectRoots: Boolean): Creature {
+        val index = patches.indexOfFirst { it.cell == animal.cell && edible(it, animal.species, protectRoots) }
         if (index < 0) return animal.copy(action = CreatureAction.Idle)
         if (tick % (if (animal.species == Species.Fox) 5L else 4L) != 0L) return animal.copy(action = CreatureAction.Eating)
         val patch = patches[index]
-        val eaten = minOf(patch.biomass, if (animal.species == Species.Fox) 5 else 10)
+        val eaten = minOf(patch.availableBrowse(protectRoots), if (animal.species == Species.Fox) 5 else 10)
         val nutrition = when (animal.species) {
             Species.Rabbit -> if (patch.kind == ForageKind.Meadow) 4 else 3
             Species.Deer -> if (patch.kind == ForageKind.Browse) 5 else 3
@@ -365,6 +368,7 @@ internal class Wildlife(private val island: IslandEcology) {
         species: Species,
         tick: Long,
         id: Long,
+        protectRoots: Boolean,
     ): Boolean {
         if (animals.count { it.species == species } >= species.populationLimit()) return false
         val adults = animals.indices.filter {
@@ -379,7 +383,7 @@ internal class Wildlife(private val island: IslandEcology) {
             val shelter = island.nearest(distances, shelters) ?: continue
             if (distances[cellId(shelter)] !in 0..10) continue
             val forageRadius = if (species == Species.Fox) 17 else 11
-            val forage = patches.sumOf { if (distances[it.id] in 0..forageRadius && edible(it, species)) it.biomass else 0 }
+            val forage = patches.sumOf { if (distances[it.id] in 0..forageRadius && edible(it, species, protectRoots)) it.availableBrowse(protectRoots) else 0 }
             if (forage < 100) continue
             val pairRange = when (species) {
                 Species.Rabbit -> 21
