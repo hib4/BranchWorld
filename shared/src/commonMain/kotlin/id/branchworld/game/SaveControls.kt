@@ -10,7 +10,6 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import branchworld.shared.generated.resources.Res
-import branchworld.shared.generated.resources.load_world
 import branchworld.shared.generated.resources.save_busy
 import branchworld.shared.generated.resources.save_cancel
 import branchworld.shared.generated.resources.save_corrupt
@@ -24,14 +23,6 @@ import branchworld.shared.generated.resources.save_unreadable
 import branchworld.shared.generated.resources.save_unwritable
 import branchworld.shared.generated.resources.save_world
 import org.jetbrains.compose.resources.stringResource
-
-@Composable
-internal fun LoadControls(status: SaveStatus?, onLoad: () -> Unit) {
-    OutlinedButton(onClick = onLoad, enabled = status != SaveStatus.Busy) {
-        Text(stringResource(Res.string.load_world))
-    }
-    SaveMessage(status)
-}
 
 @Composable
 internal fun SaveControls(status: SaveStatus?, onSave: (Boolean) -> Unit, onDismiss: () -> Unit) {
@@ -55,7 +46,7 @@ internal fun SaveControls(status: SaveStatus?, onSave: (Boolean) -> Unit, onDism
 }
 
 @Composable
-private fun SaveMessage(status: SaveStatus?) {
+internal fun SaveMessage(status: SaveStatus?) {
     val message = when (status) {
         SaveStatus.Busy -> stringResource(Res.string.save_busy)
         SaveStatus.Missing -> stringResource(Res.string.save_missing)

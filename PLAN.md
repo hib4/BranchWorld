@@ -1,220 +1,448 @@
-# BranchWorld - 10-Phase Development Plan
+# BranchWorld — Grand Vision & 10-Phase Master Plan
 
-**Tagline:** Every decision creates another world.
+**Tagline:** *Shape a world. Change its fate. Discover what could have been.*
 
-**Document purpose:** This file defines WHAT the agent must deliver, in 10 major milestones. `AGENTS.md` defines HOW the agent executes, verifies, and reports. No additional phase-prompt files are required.
+**Purpose:** This file defines **WHAT** BranchWorld must become, what players should experience, the 10 major delivery outcomes, concrete acceptance gates, and the persistent progress record. `AGENTS.md` defines **HOW** autonomous agents work.
 
-**Current implementation status:** Unverified until the coding agent inspects and builds the actual repository. The milestones below are specifications, not claims that features already exist.
+**Development philosophy:** **Maximum quality and originality. No invented development schedule, no artificial feature ceiling, and no contest-only shortcut.** Pursue a standout premium game, integrate it steadily, and refuse shallow or visually weak results. This is ambition with real engineering evidence, not a promise that every idea can be built immediately.
 
-## Product goal
+**Context:** The Kotlin Multiplatform Contest remains a key standard of excellence (novelty 40%, genuine KMP utilization/shared Kotlin 40%, coding conventions 20%). The competition has its own external submission requirements; **this product plan does not use a deadline to cap the game's ambitions.** Verify contest-specific information from https://kotlinconf.com/contest-rules/ when relevant.
 
-Create an inviting low-poly 3D miniature world that behaves like a real simulation: islands grow forests, animals seek resources, weather affects survival, and later civilizations develop. The player can intervene, rewind to a past tick, branch a new future, and compare the consequences against the original world. Differences must emerge from deterministic simulation rules, not pre-authored outcomes.
+**Implementation honesty:** The supplied screenshots show a sparse menu, a very small distant 3D island, debug-like animal commands and raw stats. They are evidence of a disappointing player-facing result, **not proof** of what simulation, persistence, timeline, rendering, Android or Desktop code works. The coding agent must audit the actual repository before modifying systems or marking milestones complete.
 
-**Primary platforms:** Android API 26+ and Desktop JVM. **UI:** Compose Multiplatform. **Simulation:** shared Kotlin. **3D:** Kool candidate, subject to Phase 02 verification. **Future:** iOS through a separately validated renderer strategy.
+---
 
-### North-star playable experience
+## 1. The game we are building
 
-1. Generate a recognizable island with seed `104729`, water, trees, and wildlife.
-2. Run its fixed-tick ecology and observe meaningful resource/population changes.
-3. At tick `300`, fork an independent branch named `Restored Forest`.
-4. Reforest one area in the child only; advance parent and child to tick `900`.
-5. Compare both worlds at the SAME simulation tick using measured vegetation, food, wildlife, and events.
-6. Save, close, reopen, and inspect both branches without corruption or state contamination.
+### High concept
 
-This is the signature vertical slice. All phase work should lead toward it.
+**BranchWorld is a premium, single-player, visually captivating, three-dimensional world-shaping strategy game about fragile ecosystems, emerging societies, and alternate histories.** Players become Keepers of living miniature worlds. They explore landscapes and their inhabitants, make consequential interventions, witness unintended ripple effects, rewind a pivotal choice, and discover what another future would have looked like.
 
-## Milestones at a glance
+The player is not primarily a manager of numerical resources. They are an explorer of consequences: **"What if we saved the forest? What if the river changed course? What if the village never settled here?"**
 
-| Phase | Name | Visible result | Engineering proof |
-|---|---|---|---|
-| 01 | Foundation & Architecture | Android/Desktop app shell | Real target builds and shared boundaries |
-| 02 | 3D Engine & Asset Integration | Interactive 3D diorama | Renderer, controls, and real assets on both targets |
-| 03 | Deterministic Simulation | Live world clock and state | Stable ticks, PRNG, ordering, canonical hashes |
-| 04 | Procedural World Generation | Seeded islands and biomes | Reproducible terrain and consistent 3D mapping |
-| 05 | Living Ecosystems & Creature AI | Animals and vegetation interact | Deterministic, measurable ecological feedback |
-| 06 | Environment, Interaction & Saves | Weather, interventions, persistence | Commands affect ecology and survive restart |
-| 07 | Time Travel & Branching | Rewind and independent timelines | Replay equality, branch isolation, durable histories |
-| 08 | Butterfly Effect Explorer | Compare divergent futures | Matched-tick, real-data comparison |
-| 09 | Civilizations & Emergent History | Settlements, growth, decline | Deterministic economy/ecology/history feedback |
-| 10 | Polish, Optimization & Release | Cohesive cross-platform game | Performance, full regression, reproducible release |
+The game's signature innovation is **playable counterfactual history**: two independently simulated futures derived from the same past, with a beautifully integrated way to inspect the difference. The same rules generate both outcomes. The game never replaces real consequences with fictional charts or cosmetic branch effects.
 
-## Phase specifications and acceptance gates
+### Premium promise
 
-### Phase 01 - Foundation & Architecture
+A player should want to launch BranchWorld because:
 
-**Outcome:** A buildable, maintainable game foundation, with a real Android and Desktop application shell.
+1. **The world is breathtaking.** At a glance it resembles a carefully art-directed living storybook diorama, not a debugging viewport.
+2. **Life is worth caring about.** A herd looks for safety, a fisher watches the river, a village struggles through a dry season. Changes are local, human-scale, and visible.
+3. **Their actions matter.** Restoring a wetland can save wildlife but reduce farmland; a rainstorm may rescue a harvest but bring erosion. Tradeoffs emerge from systems.
+4. **Time is expressive.** Rewind and compare decisions without erasing previous futures. Players can preserve, revisit, and inspect their own histories.
+5. **Every world tells a different story.** Procedural geography, climate, relationships, ecology, settlements and player choices create varied but comprehensible outcomes.
+6. **There is a journey.** Crafted scenarios, discoverable possibilities, a living world atlas, unlockable tools, achievements, and optional sandbox mode offer purpose and replay value.
 
-**Build:** Audit existing Gradle modules, Kotlin/Compose versions, source sets, tests, `.agents/skills/`, SDKs, and assets before changing anything. Configure Android minSdk 26 and Desktop JVM, Compose application navigation, a placeholder world viewport, a diagnostic overlay, and app lifecycle plumbing. Establish boundaries between shared simulation, rendering adapters, persistence and UI. Add shared smoke tests and reproducible build/run instructions in the repository's existing documentation. Inventory the eight downloaded packs by actual formats, animation support and intended runtime use, without doing licensing audits.
+### What it is NOT
 
-**Done when:** Both targets actually build and launch; shared tests run; an app shell accepts input and survives ordinary lifecycle changes. Record precise Gradle tasks, devices/SDKs, outcomes, architecture decisions, and any target that could not be tested.
+- A screensaver with a small floating island and a collection of counters.
+- A tech demo whose primary controls are "Send bunny left", raw ticks, and diagnostics.
+- A menu-heavy idle simulator where the world is merely decorative.
+- A random generator with no coherent ecological consequences.
+- A heavily scripted story where outcomes claim to be simulated but are predetermined.
+- A feature checklist built at the expense of beauty, responsiveness, or emotional connection.
+- A clone of an existing ecological strategy, diorama builder, or settlement simulation.
 
-### Phase 02 - 3D Engine & Asset Integration
+### Inspiration without imitation
 
-**Outcome:** An appealing interactive low-poly diorama whose renderer can be replaced without rewriting simulation logic.
+Study why these experiences work: [Tiny Glade](https://store.steampowered.com/app/2198150/Tiny_Glade/) for scene intimacy and satisfying visual craftsmanship; [Terra Nil](https://store.steampowered.com/app/1593030/Terra_Nil/) for legible environmental transformation; [Reus 2](https://store.steampowered.com/app/1875060/Reus_2/) for intertwined ecosystems and society-level decisions. Borrow *design lessons*, never specific art, interfaces, mechanics, marketing, or identities. **BranchWorld's differentiator is seeing, inhabiting, and comparing alternative futures.**
 
-**Build:** Run a minimal Kool proof of concept on Android and Desktop, including Compose HUD interoperability, scene lifecycle, touch/mouse input, resize and pause/resume. Load selected real vegetation, rock, and animal/character models from the downloaded KayKit/Kenney packs; verify actual file formats, model pivots, scale, materials, and animations. Implement orbit/pan/zoom/focus camera controls, water or terrain placeholder, lighting, resource loading and disposal. Keep scene objects outside shared world state.
+---
 
-**Done when:** A user can orbit, pan and zoom a rendered scene with imported assets and a working Compose overlay on both targets. Measure device-specific frame time, asset loading and memory; document a renderer go/no-go decision. Replacing Kool requires human approval.
+## 2. The irresistible player loop
 
-### Phase 03 - Deterministic Simulation Engine
+**Discover -> Understand -> Shape -> Witness -> Rewind -> Compare -> Choose -> Remember -> Discover again.**
 
-**Outcome:** A standalone shared-Kotlin world kernel that produces the same outcomes under the same starting conditions, independently of render FPS.
+| Beat | Player experience | Required in-game manifestation |
+|---|---|---|
+| **Discover** | Explore a gorgeous world already full of life | Orbiting cinematic camera, animated fauna, readable settlements, environmental storytelling |
+| **Understand** | Notice an opportunity or an emerging threat | A world-local event, character reaction, visible habitat change and optional context |
+| **Shape** | Use a world-shaping tool thoughtfully | Clear target/preview, costs/tradeoffs, touch/mouse affordances, satisfying action feedback |
+| **Witness** | Watch consequences develop | Growth, migration, river changes, building activity, weather, human-readable events |
+| **Rewind** | Return to a meaningful earlier decision | Rich timeline navigation, reconstruction and smooth transition; previous branch preserved |
+| **Compare** | Reveal which outcomes changed | Matched-time synchronized views, world-space Echo Lens overlays, causal event trails and metrics |
+| **Choose** | Adopt one future or continue exploring | Preserve branch, keep both, branch again, bookmark a turning point |
+| **Remember** | Build a personal history of worlds | Chronicle, map memories, outcomes, unlocks and saved alternate branches |
 
-**Build:** Define `WorldState`, stable IDs, deterministic PRNG, fixed tick update order, tick-indexed commands, explicit world ruleset version, world clock, immutable render projections, and canonical world-state serialization/hash. Compose controls pause/resume/speed but never mutates state directly. Keep coroutine scheduling from influencing authoritative decisions.
+**Principle:** Even if a player ignores branching for a while, the living world and its inhabitants must remain worth watching and shaping. But branching must ultimately provide the signature feeling no conventional ecological strategy game can offer as directly.
 
-**Done when:** Identical seed + version + ordered commands give identical canonical hashes at ticks `0`, `300`, `600`, `900` across repeated runs. Verify ordering, pause/speed equivalence, restart/replay readiness, and cross-target fixture consistency where runners are available. Clearly report numeric precision limitations.
+### Intervention design — meaningful verbs, not debug commands
 
-### Phase 04 - Procedural World Generation
+Candidate world-shaping powers, to be prototyped and balanced through general rules:
 
-**Outcome:** Beautiful, distinct, reproducible miniature islands generated by shared Kotlin rules.
+| Power | Immediate expression | Potential simulated consequence / tradeoff |
+|---|---|---|
+| **Restore Grove** | New saplings, spreading roots and canopy | Slow soil recovery, shelter and forage, consumes finite seeds/effort or displaces open habitat |
+| **Guide Water** | Visible stream path or wetland restoration | Better downstream water access, altered flood risk and available farmland |
+| **Call Rain** | Cloud build-up and rainfall | Fast moisture relief; excessive rain can cause runoff/erosion where terrain warrants |
+| **Protect Habitat** | Mark a refuge with visible environmental feedback | Reduced disturbance, possible settlement resource constraints |
+| **Reintroduce Wildlife** | Herd arrives and begins exploring | Biodiversity benefits but competition or grazing pressure may increase |
+| **Shape the Land** | Terrain modification with clear preview | New waterways/habitat corridors, potential instability, changing access paths |
 
-**Build:** Implement a seeded island mask, terrain elevation, coastlines, beaches, biomes, moisture/temperature, plant/rock placement and usable land/water geography. Render terrain meshes/chunks and instanced assets through the renderer. Expose terrain queries for navigation, resources and animal habitats. Favor coherent geography over half-finished advanced features.
+Do not force every power into the first implementation. Each power must be better than an alternative **in some conditions and worse in others** for reasons players can understand. All consequences must flow through tick-indexed shared Kotlin commands.
 
-**Done when:** Seeds `104729`, `271828`, and `424242` produce recognizable different islands; repeating a seed and worldgen version reproduces authoritative geography and placements. Verify mesh integrity, valid elevations, traversability where required, and measured generation/load performance on both targets.
+### Depth without tedious micromanagement
 
-### Phase 05 - Living Ecosystems & Creature AI
+Players influence **systems**, not the manually controlled movement of individual rabbits. They can inspect and follow a creature, but wild animals must make their own decisions. The best strategic choices have delayed, interpretable ripple effects, not merely positive/negative progress bars.
 
-**Outcome:** A compact but genuine ecology where creatures and resources influence one another.
+### Failure and recovery
 
-**Build:** Model vegetation biomass, consumption and regrowth; at least two distinct animal behavior profiles where assets and performance permit; needs such as food, rest and water; deterministic perception/movement/foraging; reproduction/death or equivalent population turnover; habitat and survival constraints. Use simple state machines or utility scoring rather than unnecessary generic AI infrastructure. Render animal movement and appropriate animations based on simulated state.
+Worlds are allowed to struggle, decline, recover, and change. Avoid binary punishment whenever possible. Failure should create a story, a new question, or a chance to explore an alternative strategy. The player keeps access to previous histories and may branch again.
 
-**Done when:** Animals choose actions based on needs and environment, food patches respond to grazing, and at least one ecological feedback loop is observable in a repeatable seed scenario. Tests confirm deterministic decisions, valid resource bounds and stable long-running behavior. Record population and biomass traces, not only screenshots.
+---
 
-### Phase 06 - Environmental Systems, World Interaction & Saves
+## 3. A distinctive art and presentation system
 
-**Outcome:** A living world players can inspect, change, save and restore.
+### World composition
 
-**Build:** Add world day/night and simple weather (e.g., rainy/dry), with at least one REAL effect on moisture, plant growth or wildlife. Implement a world/creature inspector, play/pause/speed controls, and two meaningful player interventions including regional reforestation. Route every intervention through deterministic commands. Add versioned save/load for world state, ruleset/worldgen versions, tick, PRNG, creatures and resources; implement storage adapters for both targets and safe handling of missing/corrupt files.
+The opening must be a **hero image generated by the actual game renderer**. Most of the play viewport is occupied by layered, readable landscape: near-field canopy and rocks, midground habitats and paths, a focal river or settlement, background hills, lively water and atmospheric depth. Use a composed isometric-leaning perspective that can smoothly transition to close creature tracking and broader survey views.
 
-**Done when:** At least two interventions visibly and measurably affect world simulation, and the world survives a complete save/quit/relaunch/load/resume cycle on Android and Desktop. Serialization round-trip and corrupt-file tests pass; a saved-state hash matches the restored state.
+**Required redesign from current screenshots:**
 
-### Phase 07 - Time Travel & Timeline Branching
+- Remove the large blank home screen and the tiny island in a broad dark rectangle. Launch into a live world, using an unobtrusive overlay for Continue / Begin Story / Atlas / Settings.
+- Treat world scale, zoom, camera focal length, terrain composition and viewport layout as first-class art problems. As an initial review heuristic, the meaningful 3D world should occupy roughly **two-thirds or more** of the usable play frame in the standard hero shot; adjust based on composition and platform, not an inflexible number.
+- Hide diagnostic controls and tick counters by default. Replace them with a concise objective, contextual event notification, a thoughtfully designed action bar, world-time affordance, and an accessible inspect mode.
+- Use close-up creature and settlement moments to create empathy; avoid uniformly distant top-down observation.
+- Animate **the world itself**: leaf movement, grass, smoke, river ripples, birds, animal gait, seasonal changes, lamps at twilight, rain hitting terrain, terrain-color response to moisture.
 
-**Outcome:** Correct rewind, replay, and persistent alternative histories.
+### Art language
 
-**Build:** Create an append-only ordered command history and periodic snapshots, reconstruct past states by replay, and model a branch ancestry graph with stable IDs, fork ticks, branch-local commands, mutable state and PRNG. Support rewind, create branch, switch branch and resume execution. Reuse the same simulation engine and persistence. Bound cache/memory use; avoid a full world copy for every rendered frame.
+- **Visual language:** warm storybook low-poly forms, strong silhouettes, tasteful painted materials, lush vegetation variation, soft but directional lighting, rich water treatment, readable atmospheric perspective. Cohesive rather than photorealistic.
+- **Palette:** vivid but controlled biome-specific schemes. For instance, forest jade/moss and sunlit honey, shallow-water teal, weathered stone, warm village wood, twilight indigo and gold. Lighting and weather must alter tone without losing readability.
+- **Camera:** graceful orbit, pan, zoom, click-to-focus, follow-animal, cinematic reveal, branch-transition alignments, safe bounds, smooth touch/mouse input and adjustable motion intensity.
+- **Assets:** use the downloaded KayKit/Kenney packs as material; normalize scale/rotation/pivots and unify their look through custom material/shading, mesh placement, foliage variation and animation. Select better-suited assets or author supporting geometry when existing packs cannot meet the target.
+- **Sound:** spatial wind, water, birds, wildlife calls, settlement ambience and restrained music that reacts to season, threat and resolution. Interaction sounds and haptics where platform support allows.
+- **UI:** minimal, elegant, responsive Compose UI with clear type hierarchy, unobtrusive transitions and world-aware placement; no developer-dashboard identity.
 
-**Done when:** Rewinding from tick `600` to `300` and replaying to `600` reproduces the original canonical gameplay-state hash. A fork at tick `300` does not mutate its parent; parent and child can advance independently. Save/restore preserves branches, snapshots, inputs, and deterministic replay. Test switching, corrupt history and repeated forks.
+### Non-negotiable image-quality test
 
-### Phase 08 - Butterfly Effect & Timeline Explorer
+Capture authentic game screenshots at representative Desktop wide/16:9 and Android sizes under: **sunny day, dusk, rain or crisis, a close-up creature, and a branch comparison.** Review clarity at thumbnail size and up close. Any phase modifying graphics must retain good framing and avoid asset popping, clipping, broken shadows, unreadable silhouettes, or visual clutter. A static concept illustration is not evidence of in-engine quality.
 
-**Outcome:** BranchWorld's signature mechanic becomes understandable and satisfying for players.
+---
 
-**Build:** Create a Compose timeline tree, branch selection and naming, scrubber, intervention indicators and a paired comparison view (side-by-side or synchronized switching). Compare branches at the SAME tick using actual simulated vegetation, food, wildlife, and significant events. Explain observed differences without inventing causes or scripted results. Make the complete flow accessible with mouse/keyboard and touch.
+## 4. The first truly memorable world-story
 
-**Done when:** A new player can run the north-star scenario: seed `104729`, fork at tick `300`, reforest only the child, advance both to `900`, inspect genuine differences, and save/reload both histories. The comparison uses canonical simulated state, not animated decoration. Provide screen recordings/screenshots where possible and a concise user walkthrough.
+### Chapter One — The Fading Grove
 
-### Phase 09 - Civilizations & Emergent History
+**Setting:** A valley of luminous forests, a river bend, shallow wetlands, small farms and a timber village named **Hollowmere**. Deer and rabbits move through meadows, birds cross the sky, families gather near the water. The scene feels beautiful before anything goes wrong.
 
-**Outcome:** Autonomous settlements arise within the ecosystem and develop distinct histories across branches.
+**Premise:** A dry season begins earlier than expected. The river shallows; grazing land shrinks; villagers worry about harvests, and wildlife searches for water. The player can make deliberate interventions, but none simply restores everything for free.
 
-**Build:** Simulate inhabitants or population cohorts, settlement selection, food/wood/stone gathering, storage, farming, homes, work allocation, population change, scarcity and migration. Use the existing KayKit medieval buildings and character assets where technically suitable. Have settlement activity consume and transform environmental resources; record founding, shortage, expansion and abandonment events in the same history system. Favor aggregated simulation where individual agents would be wasteful.
+**Candidate choices:**
 
-**Done when:** At least one settlement develops autonomously, reacts to ecological and economic conditions, and creates persistent historical events. An intervention can measurably alter settlement outcomes between branches. Verify deterministic replays, branch isolation, save/load and representative performance.
+- **Restore the upper grove:** slow-growing moisture retention, habitat improvement and delayed benefits, but limited immediate relief.
+- **Guide the river into the old wetlands:** quickly creates water access and habitat, but redirects water away from other uses and reshapes flood exposure.
+- **Call seasonal rain:** immediate water and growth stimulus, with runoff/erosion or downstream risk if the world conditions create them.
 
-### Phase 10 - Polish, Optimization & Release
+**Emergent consequences:** The same underlying hydrology, vegetation, creature-needs, and settlement resource rules drive all outcomes. A rainy season may rescue fields or damage slopes; a restored grove may help food webs later; a new wetland may support animals at the expense of one farm. Do not preassign success/failure to each power.
 
-**Outcome:** A cohesive, stable, high-quality experience on verified Android and Desktop builds.
+**Emotional anchors:** Give the world a small cast of observable persistent entities or communities: an identified deer herd, a river fisherman, a named village, or a local ranger. Characters do not need expansive dialogue; reactions, animation, movement and concise event text can make their lives meaningful. The Chronicle should tell the truth about events that actually occurred.
 
-**Build:** Refine materials, terrain, water, lighting, wildlife animation, sound, camera transitions, onboarding, UI readability, performance and error states. Profile renderer frame times, draw calls, memory, worldgen, simulation throughput, load/save and rewind latency on identified hardware. Apply bounded performance experiments only after correctness is protected. Run regression, lifecycle, file corruption, deterministic replay and long-run simulation tests. Prepare real build instructions, an honest feature list, reproducible screenshots/demo and installable release artifacts.
+**Chapter climax:** The player witnesses the outcome, rewinds to the warning, tries another intervention, and sees a **Living Echo**: foliage or paths from one future overlaid against the other, synchronized cameras, population and river differences, and an event chronology explaining how each unfolded.
 
-**Done when:** A fresh installation on both primary platforms can run the signature world -> intervention -> rewind -> fork -> compare -> save/restore flow. No known critical data-loss or branch-contamination issues remain. Record real tested builds, devices, measured budgets and release limitations.
+**Closure:** Players may keep both futures, choose which to revisit, bookmark a turning point, and unlock another world-story or sandbox possibility. A history should remain accessible; do not delete a discarded branch without explicit user action.
 
-## Implementation order and release scope
+**Playable proof:** An independent tester can experience the conflict and compare different futures using normal controls, without opening diagnostics, inspecting code, or receiving a live developer explanation. The exact effects are reproducible from a documented seed and command sequence; no scripted fake statistic is accepted.
 
-- Work phase-by-phase, completing the end-to-end player-visible slice and its verification. Minor preparatory interface design for later phases is fine; do not build unrelated future systems early.
-- Correctness, UX, accessibility, tests and profiling are continuous duties, not deferred until Phase 10.
-- Phase 09 is important for the FULL GAME, but not necessary for the signature alternate-history demo. With explicit user approval, mark Phase 09 `DEFERRED (contest track)` and proceed to essential Phase 10 release checks after Phase 08. This does not count Phase 09 as complete.
-- For an approaching contest deadline, prefer one small, beautiful, stable island and a real measurable branch comparison over many unfinished features. Confirm current contest requirements separately before submission.
-- Android/Desktop are authoritative launch targets. iOS is not implied by shared Kotlin logic and requires its own rendering validation.
+---
 
-## Phase acceptance and evidence
+## 5. World systems and how they connect
 
-A phase is ready for review only when it has a demonstrable player-visible outcome (where applicable), meaningful automated checks, actual target-specific build/run evidence, a reproducible demo scenario, no unacknowledged architecture violations, and an honest list of remaining risks.
-
-`PASS`, `FAIL`, `BLOCKED`, and `NOT RUN` must be distinguished. A green JVM test is not proof of working Android graphics. Completion requires explicit human acceptance; the agent must stop before the next milestone.
-
-### Progress Ledger (agent-maintained; update ONLY based on actual evidence)
-
-| Phase | Engineering status | Human gate | Evidence / last verified revision |
-|---|---|---|---|
-| 01 | COMPLETE | ACCEPTED | Verified on Android API 36 and macOS ARM64, with both shared test runners passing. Foundation committed at `28a1c26`. |
-| 02 | COMPLETE | ACCEPTED | Kool prototype GO on Android API 36 (GLES) and Apple M4 macOS (Vulkan with Compose frame delivery). Verified at `73ca11e` and approved by the user. |
-| 03 | COMPLETE | ACCEPTED | Rules v1 checkpoints and runtime playback verified at `790e34e`. Approved by the user. |
-| 04 | COMPLETE | ACCEPTED | Terrain and rules v2 fixtures and both primary runtimes were verified at `bcc8069`. Approved by the user. |
-| 05 | COMPLETE | ACCEPTED | Rules v3 goldens, 10,000-tick ecology fixtures, Android APK, Desktop Compose controls, and native Vulkan frames were verified at `496ebef`. Approved by the user. |
-| 06 | COMPLETE | ACCEPTED | Rules v4, both interventions, and Android/macOS restart were verified at `2c0021a`. Approved by the user. |
-| 07 | COMPLETE | ACCEPTED | Exact replay and Android/macOS timeline restore were verified at `f29203b`. Approved by the user. |
-| 08 | COMPLETE | ACCEPTED | Matched-tick comparison and Android/macOS restart verified at `4d9c704`. Approved by the user. |
-| 09 | COMPLETE | ACCEPTED | Rules v5 matched on four runners. Android API 36 and Apple M4 macOS reproduced the tick-900 comparison and wrote byte-identical saves. Accepted at `f2665b9`. |
-| 10 | COMPLETE | PENDING | Final signed APK and ARM64 DMG passed the installed walkthrough and restart. Android ART (46), app instrumentation (2), and all host and simulator checks passed. |
-
-**Allowed engineering statuses:** `NOT VERIFIED`, `IN PROGRESS`, `COMPLETE`, `PARTIAL`, `BLOCKED`, `DEFERRED`. **Human gate:** `PENDING`, `ACCEPTED`, `REJECTED`, or `DEFERRED WITH APPROVAL`. The agent cannot set `ACCEPTED` without an explicit user decision. Do not modify phase requirements without user approval; record technical evidence and decisions below.
-
-### Decision Log (agent-maintained)
-
-| Date / phase | Decision or experiment | Evidence and trade-off | User approval needed? |
-|---|---|---|---|
-| 2026-11-19 / 01 | Keep the existing Android app, Desktop app, and shared module. | Both apps build with the pinned Gradle 9.5.1, Kotlin 2.4.21, AGP 9.1.1, Compose 1.12.2, and Azul Java 21. APK metadata reports minSdk 26 and targetSdk 37. | No |
-| 2026-11-19 / 01 | Use shared, saveable state for the viewport route and diagnostics visibility. Keep the illustrated viewport read-only. | Rotation destroyed and recreated the Android Activity and restored both UI values. Desktop resize and minimize/restore retained them. World state, render projections, and platform storage ownership are documented in README.md. | No |
-| 2026-11-19 / 01 | Inventory the eight original packs for later selection. | Inspected actual glTF, GLB, FBX, texture, and audio files and recorded animation metadata and intended use in README.md. Historical renderer logs lack their corresponding source in this checkout. Kool remains a Phase 02 candidate. | No |
-| 2026-11-19 / 02 | Pin Kool 0.19.0 in an Android and JVM renderer module. Set its JVM consumers to bytecode level 17. | Both apps built and ran with the existing Azul Java 21 toolchain. The APK keeps minSdk 26. The Desktop bundle includes `jdk.unsupported` for LWJGL. Checked 11 packaged ARM64 native binaries against the Maven artifacts. Their executable sections match and the package signatures differ, which accounts for the hash warning. | No |
-| 2026-11-19 / 02 | Keep the Android EGL context for the app process and release each diorama when leaving the viewport. | A stock surface reproduced the retained-context error on Activity recreation. The retained EGL context passed repeat launches and rotation on the software-rendered AVD. A GPU reset or context loss on physical hardware remains unverified. | No |
-| 2026-11-19 / 02 | Use a Vulkan offscreen pass to supply Desktop frames to Compose. | The native Swing canvas stayed blank beneath the HUD. The copyable color attachment with one readback in flight displayed the scene with working controls. The readback costs memory and limits the view to 768 pixels on its longest side. | Yes, at the phase gate |
-| 2026-11-20 / 03 | Keep rules v1 in shared Kotlin. Apply validated destination commands in sequence order before seeded movement on an integer grid. | SplitMix64 state is explicit. A 52-byte canonical state and FNV-1a 64 digest matched across JVM, Android ART, and Kotlin/Native. Accepted inputs are retained separately for replay. | No |
-| 2026-11-20 / 03 | Retain the in-memory world in the shared UI's ViewModel. Pace integer ticks at nominal 20 Hz with 1×, 2×, and 4× rates. | Lifecycle suspension discards elapsed time. The renderer reads immutable poses, and tests matched state at the same tick across all rates, including after a rapid pause and resume. | No |
-| 2026-11-20 / 03 | Serialize Android surface idle and wake-up on the UI thread and refresh readiness for each viewport entry. | A rapid reopen after Activity recreation previously stalled on the loading screen. The device test passed twice after the fix, with three verified reopens in each run. | No |
-| 2026-11-20 / 04 | Version integer world generation independently. Hash 64×64 terrain, climate, and prop placement separately from mutable state. | The three preset terrains reproduced their digests on all runners. The land masks differed by at least 15% of the union for each pair. | No |
-| 2026-11-20 / 04 | Use rules v2 with the generated terrain's largest walkable component and deterministic distance fields. | Movement honors shoreline, slope, and prop occupancy. The v2 canonical state appends worldgen version and terrain digest. The v1 fixtures still pass. | No |
-| 2026-11-20 / 04 | Build 16×16 terrain chunks and group the existing GLBs into GPU instances. Keep one in-memory session bound to the chosen seed. | Rendered all three seeds on GLES and Vulkan. Verified same-seed resume, different-seed reset, and scene release. | No |
-| 2026-11-20 / 05 | Use rules v3 with integer forage and animal reserves, two herbivore profiles, and a cap of eight per species. Retain the v1 and v2 fixtures. | Both species stayed present at every tick through 10,000 on all three seeds. The paired patch recovered after grazing and was eaten again. | No |
-| 2026-11-20 / 05 | Keep urgent food and water goals active through recovery. Rank moist spring candidates by terrain distance from the island center. | The starting rule lost all rabbits on seed 271828 at tick 1356. Hysteresis prevented that collapse. Accessible springs improved survival and yielded births on seeds 104729 and 271828. A lower breeding water threshold alone did not produce births on 271828 and was reverted. | No |
-| 2026-11-20 / 05 | Use the Kenney deer and rabbit clips, scene-owned textures, pooled models, and instanced forage tiers. | Android displayed both models and the changing forage total. The Desktop Vulkan probe isolated 82 pixels changed by forage, exercised births and deaths, and reopened the scene to identical pixels at the same tick. | No |
-| 2026-11-20 / 06 | Add rules v4 with a deterministic 1,200-tick day and a separate weather PRNG. Rain doubles integer forage regrowth within patch capacity. | A depleted patch reached 22 biomass in dry weather and 24 in rain with identical starting state at tick 299. Rules v1–v3 still pass. Both species persisted for 10,000 ticks on all three preset seeds. | No |
-| 2026-11-20 / 06 | Plant traversable browse in stable cell order and supplement the most depleted patches in the selected region. Select B3 by default when eligible. | With seed 104729 at tick 300, B2 planting did not produce a deer bite by tick 900. B3 planted six saplings at tick 301 and deer 5 ate planted browse at (7, -8) by tick 604. Separate intervention runs added 180 browse and 120 supplemental forage to the unchanged control. | No |
-| 2026-11-20 / 06 | Save one versioned JSON checkpoint with pending commands, a checksum, and explicit replacement confirmation. | Interrupted-write tests recovered the committed slot. Restart tests compared canonical hashes and applied both queued commands on the first resumed tick. Loading opens paused at 1×. | No |
-| 2026-11-20 / 07 | Keep a distinct viewed tick and branch head, and record commands only when the live head advances. Retain eight periodic checkpoints per branch at 300-tick intervals, plus branch starts and heads. | Replaying tick 300 to 600 reproduced the original state. A test also recovered tick 250 after advancing to 3300 and evicting the oldest periodic checkpoints. | No |
-| 2026-11-20 / 07 | Fork from the displayed state with independent future commands and preserve both PRNG states. Key creature presentation by branch as well as tick. | Seed 104729 at tick 900 had 9893 forage and zero saplings on Main, and 11105 forage and six saplings on Restored Forest. Switching branches at that tick updated the Vulkan viewport and restored the previous branch's pixels when switching back. | No |
-| 2026-11-20 / 07 | Save branch history to schema v2 and retain the Phase 06 file as the fallback when the v2 slot is absent. | macOS restored cursor 700 and both branches at 900. Import preserved the v1 file byte for byte. Damaged v2 data kept the active session intact. | No |
-| 2026-11-20 / 08 | Compare read-only snapshots at a common tick and switch the existing viewport between them. | Comparison preserves both branch histories and pending queues. The Apple M4 Vulkan probe rendered 651 changed pixels for the child at tick 900 and restored the same parent pixels when switching back. | No |
-| 2026-11-20 / 08 | Derive timeline markers from recorded inputs and verify outcomes by replaying from before the execution tick. | The shared fixtures verified a no-op command, ordered commands at the same tick, and an audited event after checkpoint eviction. The North Star comparison confirmed six B3 saplings at tick 301. | No |
-| 2026-11-20 / 08 | Keep comparison selection in memory and reuse schema v2 for the histories and names. | Desktop rename and reload kept the branch name. Opening comparison after process restart reproduced both canonical hashes and all displayed observations. | No |
-| 2026-11-20 / 09 | Run the settlement economy every 60 ticks after wildlife. Simulate one cohort with up to four homes and one possible relocation. | Production and work allocation respond to weather, live forage, and reserves. Seed 104729 founded in C2 at tick 60 and reached 13 residents and four homes by 1800. Controlled depletion verified shortage, migration with conserved residents, and eventual abandonment. | No |
-| 2026-11-20 / 09 | Keep authoritative settlements, harvest, and milestones in common Kotlin. Use existing KayKit homes, a windmill, and a static Ranger for visual representation. | The harvest is included in the ecology biomass ledger. Pooled scene models read projected ground points. With every other input held fixed, the macOS Vulkan frame changed by 99 pixels when the founding models appeared. | No |
-| 2026-11-20 / 09 | Start fresh worlds on rules v5 and write schema v3 in a separate atomic slot. Open schema v1 and v2 under their original rules. | The macOS compatibility probe reproduced the Phase 08 schema-v2 save's 75,147 bytes and SHA-256. It loaded both branches at tick 900 on rules v4 and wrote a separate v3 file while the v2 bytes stayed unchanged. | No |
-| 2026-11-20 / 09 | Use the settlement region C2 for the rules-v5 branch demo. | With seed 104729 and a fork at 300, the child planted six saplings at 301. At 900, it held 124 wood against Main's 76. Both sites had eight residents and two homes. | No |
-| 2026-11-20 / 10 | Ship a separately signed local Android APK and a local macOS ARM64 DMG. | The release APK uses the existing app ID and a local test certificate. The DMG's app passed strict code-signature verification. The user selected direct local installation. | No |
-| 2026-11-20 / 10 | Rebuild the forage instance buffer only for groups whose visible poses changed. | Three paired Apple M4 Vulkan runs over seed 104729, ticks 300–600, reduced uploads from 66 to 36. Median-run renderer p95 was 33.409 ms before and 33.497 ms after. All six runs produced the same tick-600 frame SHA-256 and canonical hash. | No |
-| 2026-11-20 / 10 | Keep motion, focus, and opt-in feedback in the presentation layer. | Kotlin simulation hashes at 0, 300, 600, and 900 matched JVM, Android host, Android ART, and iOS simulator. The UI uses one-way projections for wildlife motion. The optional fork and save cues played through the platform audio adapters. | No |
-
-### Latest phase handoff (agent-maintained)
+BranchWorld's depth comes from **interacting systems**. Never build each subsystem as a disconnected collection of menu toggles.
 
 ```text
-PHASE: 10 - Polish, Optimization & Release
-STATUS: COMPLETE
-PLAYER-VISIBLE OUTCOME: The Home guide explains the branch flow. The installed apps offer keyboard tick submission, compact comparison rows, clearer save recovery, smoother movement, visible dusk terrain, and opt-in fork and save sounds.
-IMPLEMENTATION: Shared Compose guide, controls, and feedback. Renderer-only motion, water, lighting, frame counters, and forage group reuse. Android SoundPool and Desktop Java Sound use two curated mono WAVs. The release files are a locally signed Android APK and a macOS ARM64 DMG.
-VERIFICATION:
-  PASS - ./gradlew --offline --console=plain :shared:jvmTest :shared:testAndroidHostTest :shared:iosSimulatorArm64Test :shared:compileKotlinIosArm64 :shared:compileCommonMainKotlinMetadata :shared:packageAndroidDeviceTest :renderer:jvmTest :renderer:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleDebugAndroidTest :androidApp:assembleRelease :androidApp:lintRelease :androidApp:lintDebug :desktopApp:test :desktopApp:packageDmg
-         Shared (47 each across JVM, Android host and iOS ARM64 simulator), Desktop renderer and Compose (9), Android host renderer (4), and Desktop storage (1) passed. Kotlin/Native printed debug-link warnings and ran the native tests successfully.
-  PASS - zipalign -c -P 16 4, apksigner verify --verbose --print-certs, adb -s emulator-5560 install, and python3 build/verification/phase10/final-android/walkthrough.py.
-         The Pixel 9 API 36 emulator installed the final local APK on fresh data. Hardware Enter submitted 600 and 300 in Timeline. Both branches and the audited C2 event returned after PID 6730 changed to 9178. SoundPool logged the successful fork and save clips.
-  PASS - hdiutil verify, hdiutil attach -nobrowse -readonly, ditto, codesign --verify --strict, and LaunchServices open for the copied app on Apple M4 macOS.
-         The final installed app completed the walkthrough, resized, minimized and restored, and reproduced the same comparison after relaunch. In the comparison tick field, Left moved the caret before entering a digit. A separate app home with a truncated v3 file showed the recovery message and opened a fresh island. The damaged file SHA-256 matched before and after.
-  PASS - adb -s emulator-5560 shell am instrument -w -r with id.branchworld.game.shared.test/androidx.test.runner.AndroidJUnitRunner and id.branchworld.game.test/androidx.test.runner.AndroidJUnitRunner.
-         Final Android ART (46) and same-certificate app instrumentation (2) passed. The app suite verified renderer gestures and Activity recreation on the signed APK. Both 130% text captures showed a ready renderer and tick 900 in portrait and landscape. The emulator settings were returned to portrait and 100% text.
-  NOT RUN - Physical Android hardware, API 26 runtime, Windows and Linux Desktop, and iOS rendering.
-DETERMINISM / SAVE / BRANCH: Seed 104729 on rules v5 matched cross-target at ticks 0, 300, 600, and 900 with hashes c33fb0e33fc6928c, 3e23596da947225c, 4a0ddfec9533864a, and 5dce8f94926c905d. At tick 900 Main and Restored Forest stored 76 and 124 wood, with hashes 5dce8f94926c905d and 4689c1bc6a8d2df2. Both apps reported six C2 saplings in the child at tick 301. The final macOS save matched the verified Phase 09 fixture byte for byte. The codec and storage regressions cover legacy import, interrupted writes, corrupt data, and isolation.
-PERFORMANCE: At tick 900 in three final runs, median-run renderer p95 was 31.33 ms on the Pixel 9 emulator and 30.99 ms on Apple M4 Vulkan. Display samples were 29.50 ms p95 in the final Android SurfaceFlinger buffer and 38.38 ms median-run p95 in macOS Compose readback. Both recorded 69 draw commands. Android median PSS was 101559 KiB, with 1806204 GPU buffer bytes and 16265532 texture bytes. macOS Vulkan recorded 6424980 buffer bytes and 21690043 texture bytes, with about 196000 KiB process RSS on a packaged profiling run. Generation took 258 ms on the successful Android walkthrough and 71 ms on macOS. Rewind to 300 took 4 and 20 ms, respectively. Save took 201 and 57 ms. Median of three restore samples was 247 and 133 ms. At 10000 ticks, v5 fixtures took 97–315 ms on Apple M4 JVM and 965–2337 ms on emulator ART. The controlled forage experiment reduced uploads by 45% and held median renderer p95 within 0.1 ms. General baseline profiles show load variability and Android build-mode differences.
-DEMO: Start an empty seed 104729, play to 600, go to 300, fork Restored Forest, and reforest C2. Play both branches to 900. Compare wood, inspect the tick-301 event, save, quit, and reopen.
-LIMITATIONS: Direct local installation uses a test certificate on Android and a non-notarized macOS disk image. Android measurements use SwiftShader. The runtime matrix is limited to the environments listed above.
-EVIDENCE: build/verification/phase10/final-verification.log, release/SHA256SUMS, final-android/walkthrough.log, final-android/runtime.log, final-android/instrumentation.log, final-android/profile.log, macos-final.log, macos-final-restore.log, macos-final-save-sha256.txt, corrupt-before.txt, and the forage experiment logs and captures.
-NEXT STEPS: Review and accept the local release artifacts. Phase 10 is the last planned phase.
-APPROVAL NEEDED: yes
+Procedural terrain + climate + water circulation
+                  |
+                  v
+       Soil moisture + biome suitability
+                  |
+                  v
+     Plants + food + shelter + regeneration
+                  |
+                  v
+   Herbivores + predators + migration + life
+                  |
+                  v
+    Settlement resources + labor + development
+                  |
+                  v
+       Local events + remembered history
+                  |
+                  v
+      Branch-specific alternate outcomes
 ```
 
-## How to invoke the coding agent
+### Authoritative shared Kotlin model
 
-For the first session: **"Read AGENTS.md and PLAN.md. Inspect the repository, then execute Phase 01 end-to-end. Run real checks, update the Progress Ledger in PLAN.md, and stop for my approval."**
+Suggested logical interfaces (names are illustrative, not proof these classes exist):
 
-For subsequent sessions: **"Execute Phase NN according to AGENTS.md and PLAN.md. Do not advance beyond this phase without my approval."**
+- `WorldSeed`, `WorldRulesetVersion`, `WorldState`, `TickIndex` and stable entity IDs.
+- `WorldCommand` for all user interventions and simulation commands, with explicit tick and ordering.
+- `SimulationEngine.step(state, commands)` as the sole authoritative state advancement path.
+- `WorldGenerator` for terrain, biomes, water networks, spatial resources and spawn records.
+- `WorldEvent` and a reliable event chronology with recorded causes where actually known.
+- `WorldSnapshot` and read-only `WorldView`/`SceneProjection` for the UI/render adapter.
+- `TimelineBranch`, `SnapshotStore`, `ReplayEngine` and branch-specific PRNG state for versioned histories.
+- `SaveRepository` shared schema behind Android/Desktop storage adapters.
+
+**Hard invariant:** Simulation rules never depend on Kool scene nodes, Compose recomposition timing, wall-clock elapsed time or device scheduling. Do not call a procedural renderer state "deterministic" unless cross-target replay fixtures actually agree.
+
+### Deterministic simulation is a feature
+
+The same initial seed, ruleset, command sequence and simulation tick must recreate equivalent authoritative state and a stable canonical state hash. Deterministic state makes world comparison, shareable histories, user trust, troubleshooting and portable saves possible. Quantize/fix numeric computations where required for target parity.
+
+### Scalable world representation
+
+Design terrain chunks, spatial indexing, instanced vegetation, animation update budgets, camera-based LOD, culling and aggregate distant simulation carefully. A world can *appear* vast while detailed simulation concentrates near the player; far-away systems may use deterministic aggregate models that yield compatible results when brought into focus. Avoid changing authoritative outcomes based on GPU framerate.
+
+---
+
+## 6. Ten major development phases (outcome-driven, not timeboxed)
+
+Phases are milestones with **observable player value**, not tiny tickets. The Lead Architect generates internal implementation tasks and delegates safely. Foundational tests, art, camera, input, sound, saves and performance work are continuous across every phase; they do not wait until Phase 10. A verified vertical slice should remain playable as systems grow.
+
+### PHASE 01 — Experience Reconstruction & Art Direction
+
+**Player milestone:** Opening BranchWorld instantly presents a beautiful, interactive living world instead of an empty technical application.
+
+**Build:** Audit the actual existing KMP project and keep proven working simulation, renderer, assets and saves. Replace the menu-first presentation with a live 3D hero world and elegant overlay. Recompose the viewport so the landscape is large, layered and readable. Establish the project's visual identity and coherent interface components, beautiful camera controls and player-oriented interactions. Relocate debug controls to an opt-in diagnostics mode. Introduce a clear chapter/location identity and one visible world concern. Verify the first render on Desktop and Android rather than trusting only the desktop screenshot.
+
+**Craft focus:** The opening screenshot must be attractive before the player knows any technical details. The player can orbit/zoom, inspect a creature, understand what the world is, and start the story. Use convincing real-world geometry and animation; polish the focal camera position and scene scale.
+
+**Gate:** Real captured before/after screenshots show substantial improvement, the playable world occupies the visual center, menu and HUD no longer dominate, camera/input works, and the agent can demonstrate exactly how to launch both targets or report truthful platform blockers. The current "tiny island" appearance is unacceptable.
+
+### PHASE 02 — Breathtaking 3D World & Responsive Presentation
+
+**Player milestone:** The world feels like a premium, handcrafted storybook diorama at every reasonable camera distance.
+
+**Build:** Validate the chosen rendering adapter on Android and Desktop, including Compose surface interop, camera gestures, scene disposal and lifecycles. Implement a polished terrain mesh/water shoreline, biomes in presentation, varied trees/rocks, animated animals and vegetation, shadow/lighting strategy, atmosphere, time-of-day tone, rain, fog, VFX and audio ambience. Unify imported assets with carefully designed materials, pivots and scale. Add camera tracking and a small amount of world-local storytelling animation. Instrument asset loads, memory, draw calls, frame time and input latency; optimize the measured bottleneck instead of guessing.
+
+**Craft focus:** The scene must remain delightful in a still screenshot, become more captivating in motion, and remain readable on Android. Adjust visual richness by device tier without changing simulation truth.
+
+**Gate:** Real gameplay captures demonstrate good composition in sunlight, dusk and rain, from overview and close-up. Imported models/animations work where source data supports them, Compose controls remain responsive, and load/lifecycle/performance behavior is measured on available hardware.
+
+### PHASE 03 — Rich Procedural Geography & Living Environments
+
+**Player milestone:** Each generated world feels like a distinct believable place rather than a random scattering of assets.
+
+**Build:** Develop seed/ruleset-versioned island geometry, coastlines, elevation, slopes, land/water boundaries, soil/moisture, climate, biome transitions, rivers/lakes/wetlands, forest patterns, rock placement, navigable clearings and resource maps. Support natural landmarks and spatial storytelling. Connect generation to rendering and ecological inputs through shared Kotlin authoritative data. Use appropriate terrain chunks and placement/instancing. Add environmental cycles—day/night, seasons, storms, drought, fire risk where designed—with rules and visuals separated correctly.
+
+**Craft focus:** Different seeds should produce visually varied but composed, explorable islands. Cohesion and compelling landmarks matter more than raw noise complexity or sheer map size.
+
+**Gate:** A seed gallery demonstrates multiple genuinely different, attractive worlds; repeated seed/ruleset reproduces identical authoritative geography; terrain supports credible creature movement, local hydrology and future settlements; measured worldgen and scene performance is documented.
+
+### PHASE 04 — Believable Creatures, Habitats & Ecosystem Feedback
+
+**Player milestone:** Players can follow and care about creatures while ecology evolves for understandable reasons.
+
+**Build:** Model plant biomass, food, shelter, habitat, water, regrowth, resource depletion, carrying capacity and migration pressure. Implement wildlife sensory/decision systems, needs, movement, terrain navigation, predator/prey or competition dynamics where appropriate, reproduction, age and mortality. Use autonomous Kotlin rules; derive 3D animation from simulated actions. Add creature follow/inspect, subtle behavior cues and event reporting. Develop at least several interacting loops—forest-water-herbivore, predator-prey, village-resource—even if the representative chapter uses a subset.
+
+**Craft focus:** Avoid wandering entities that all behave alike. Give visible groups habits, distinctive movement/animation and enough continuity for players to recognize them over time.
+
+**Gate:** In a documented fixed-seed scenario, changes in moisture, vegetation or predator pressure alter creature decisions and population trajectories. Both visual and numerical outcomes follow actual state. Long-run fixtures detect instability; save/replay consistency holds across targets where verified.
+
+### PHASE 05 — Expressive World-Shaping Powers & Strategic Consequences
+
+**Player milestone:** Changing the world feels wonderful in the moment and strategically significant over time.
+
+**Build:** Implement the intervention framework with command validation, targeting/preview, costs or limited opportunities as appropriate, satisfying animations/sound, contextual explanations and reversible UX mistakes. Prototype Restore Grove, Guide Water, Call Rain, Protect Habitat, and carefully chosen later powers. Wire actions into hydrology, soil, vegetation, wildlife and settlement effects. Design conflicts with multiple legitimate strategies, forecasts that communicate uncertainty, and world events that surface consequences without overwhelming the HUD. Develop the first complete dilemma in The Fading Grove, including failure and recovery. For this initial story, implement a compact, real settlement-welfare model (population, food/water needs and visible reactions) before the deeper village simulation in Phase 07; avoid placeholder villagers or manufactured outcome text.
+
+**Craft focus:** The player should feel agency but not omniscience. One well-composed ecological intervention that dramatically changes the living scene is worth many shallow tools.
+
+**Gate:** Multiple player approaches lead to measurably and visibly different simulated results under identical starting conditions. UX is understandable without developer labels; side effects are traceable; there are no purely cosmetic "powers" masquerading as real state changes.
+
+### PHASE 06 — Time Weaving, Alternate Futures & the Living Echo
+
+**Player milestone:** BranchWorld delivers its unmistakable signature: rewind a real choice and *see another possible world*.
+
+**Build:** Implement/complete stable snapshots, command/event logs, deterministic replay, branch ancestry, branch-local mutable state and PRNG, versioned persistence and integrity checks. Add tactile time-scrubbing, meaningful turning-point markers, branch creation/naming and a graceful transition across worlds. Build an extraordinary matched-time comparison experience: aligned 3D camera views; side-by-side or fast-switch modes; **Living Echo** spatial overlays highlighting changed forests, river paths, habitats and settlements; event chronology and real state metrics. Offer a way to keep both histories, inspect them, compare again and revisit older decisions.
+
+**Craft focus:** The player should understand changed outcomes emotionally and spatially before needing to open a chart. Use measured changes and recorded events—never fake a cause chain or predetermined ending.
+
+**Gate:** An agent can reproduce a documented scenario: from the same ancestor, fork two branches, choose two different interventions, simulate to a matched tick, display authentic world-state differences, then save/restart/reload/reconstruct both branches with matching canonical hashes. Parent and child remain strictly isolated. A new player can do this through normal controls.
+
+### PHASE 07 — Settlements, Civilization & Emergent History
+
+**Player milestone:** Worlds develop inhabited stories as settlements emerge, adapt, flourish, migrate or collapse.
+
+**Build:** Extend the smaller Phase 05 settlement-welfare model into resource-conscious settlement founding, villager/cohort needs, food, shelter, labor, agriculture, forestry, paths, construction, storage, and responses to drought, wildlife and environmental change. Populate with selected medieval buildings and inhabitants from asset packs. Support recognizable village life and animations (working, gathering, traveling, nightfall), historical milestones and relationships where they create meaningful decisions. Use deterministic scalable simulation; aggregate distant population if appropriate. Integrate civilization events, structures and resources into rewind/branch/save/compare. Add the human-scale Chronicle of consequential events.
+
+**Craft focus:** A village is not a numeric population counter. Its growth and hardships must be *seen* in buildings, movement, land use and character-level moments.
+
+**Gate:** Players can witness a settlement's visible development and create a reproducible ecological-to-societal divergence: the same past intervention changes future settlement welfare, construction or location. The Chronicle and Living Echo accurately represent recorded history.
+
+### PHASE 08 — World Atlas, Crafted Stories & Meaningful Progression
+
+**Player milestone:** A finished story leads naturally to curiosity about another world; sandbox remains a joyful alternative.
+
+**Build:** Build a world atlas/map of discovered islands, save slots and branching histories, chapter progression and memorable discoveries. Create a designed anthology of distinct ecological/historical dilemmas that use systemic rules differently: **The Fading Grove** (drought/forest), **Ember Season** (fire/regeneration), **The Last Crossing** (wildlife corridor and human expansion), **The River Remembers** (water flow and agriculture), and later procedurally remixed events. Distinct worlds should offer different landscape composition, characters, powers, hazards, tradeoffs and closing stories. Add optional sandbox mode, photo mode, replay bookmarks, progression rewards that broaden expression, and approachable tutorials.
+
+**Craft focus:** Each chapter should have a strong dramatic premise, an environmental identity and a memorable difference from previous worlds. Do not turn unlocks into grinding or force one correct outcome.
+
+**Gate:** Multiple substantial world-stories can be played, replayed and meaningfully compared; progression and history persist; new players understand what to do next; the sandbox supports creative exploration without breaking deterministic world rules.
+
+### PHASE 09 — Advanced Living Worlds, Scale & Discovery
+
+**Player milestone:** BranchWorld rewards long-term curiosity with surprising interactions and deep systems rather than repeating one formula.
+
+**Build:** Expand ecology/civilization complexity where it produces new player stories: species diversity and niches, seasonal migration, storms/drought/fire/flood, ecosystem succession, fisheries, terrain transformation, trade/resource webs, long-term settlement development, cultural priorities, multi-island connections and generation-spanning change. Add robust world history browsing, event bookmarks, causality-aware explanations grounded in actual events, sophisticated Living Echo visualization, and shareable world seeds/branch descriptors. Explore larger maps, archipelagos or cross-world atlases only when they remain visually and computationally coherent. Use spatial partitioning, instancing, LOD, streaming, deterministic aggregate simulation and measured CPU/memory budgets.
+
+**Craft focus:** Complexity should produce better choices and richer surprises, not invisible background calculations. Add advanced systems only when their impact can be recognized through visuals, narrative and meaningful decisions.
+
+**Gate:** Stress-tested large/deep scenarios remain reproducible, save-safe and intelligible; richer systems materially change player strategy and create memorable events. Profiling proves scalability on representative hardware; scope expansion does not regress the polished core loop.
+
+### PHASE 10 — Masterpiece-Level Craft, QA & Publication
+
+**Player milestone:** The whole experience feels intentionally designed, stable, immersive and recommendable—not like an unfinished engineering project.
+
+**Build:** Apply cohesive art/sound direction across every scene, animation, lighting state and interaction. Perfect the opening, camera, world feedback, time transitions, information architecture and endings. Balance scenarios with real playtests and field recordings of confusion, delight and replay intent; iterate on weak decisions. Ensure accessibility, settings, input parity, localization-ready text, save repair/migration, clean installs, reliable recovery, performance profiles and platform-native behavior. Develop a compelling English README, screenshots/recorded real gameplay, clear architecture/demo narrative, release builds, and contest materials if applicable. Evaluate future platform ports (iOS/Web) based on actual renderer support rather than assumptions. For commercial distribution, research market interest, platform fit, discoverability, pricing and store presentation without inventing demand.
+
+**Craft focus:** The final experience is judged holistically: the world looks beautiful, actions are engaging, other futures are surprising, and the software is trustworthy.
+
+**Gate:** Independent testers can learn, complete and replay the core journey without developer coaching; recorded feedback supports improvements. Verified Android and Desktop targets run the same meaningful shared-Kotlin gameplay. No known critical save corruption or branch-contamination defects remain; performance is measured on named devices; screenshots and demonstration footage are authentic; the repository is inspectable and conventions are maintained.
+
+---
+
+## 7. The competition advantage (without a date-driven scope ceiling)
+
+The official Kotlin Multiplatform Contest judging criteria are **creativity/novelty 40%, KMP use/shared Kotlin 40%, Kotlin conventions 20%**. Optimize the *substance* of the project for these criteria while still aiming at a remarkable commercial-quality game.
+
+| Contest dimension | BranchWorld's convincing proof |
+|---|---|
+| **Creativity / novelty** | A living, emotionally meaningful 3D world; choice-driven ecological and social ripple effects; actual counterfactual histories; in-world Living Echo comparisons |
+| **Meaningful KMP engineering** | Shared deterministic simulation, worldgen, ecology, settlement systems, commands, snapshots/replay, save schemas, chronology and scenario test fixtures; real Android + Desktop operation |
+| **Idiomatic Kotlin craft** | Clear domain APIs, Kotlin conventions, focused modules, reproducible tests, safe state transitions, appropriate Flow/coroutines, portable models and honest architecture documentation |
+
+The most persuasive technical presentation is a **single real gameplay demonstration** whose behavior can be reproduced on both platforms with the same world seed, ordered intervention log, tick count and measured state. It shows why shared Kotlin matters instead of just stating a percentage.
+
+External contest requirements (eligibility, allowed repository license, README, essay and entry mechanism) still must be checked if an actual submission is made. Do not imply that the competition has no closing date; this plan simply avoids using that date to constrain the full game's design.
+
+---
+
+## 8. Cross-phase acceptance and research program
+
+### Five proofs of excellence
+
+| Proof | Verify by | Disqualifying weakness |
+|---|---|---|
+| **First-frame beauty** | Authentic screenshot/capture on target screen sizes, compared to curated art-quality references | Empty UI, tiny world, asset pile without lighting/material cohesion |
+| **Delightful interaction** | Live controller/mouse/touch walkthrough, feedback latency/clarity review | Debug actions, confusing target selection, no immediate response |
+| **Real emergent consequence** | Fixed-seed tests of intervention -> system changes -> visual outcomes | Scripted fake outcomes, untraceable numbers, no alternate strategies |
+| **Trustworthy alternate histories** | Exact command replay, branch isolation and save/restart tests | Parent changes after fork, mismatched state or nonrepeatable scenario |
+| **Player desire to return** | Independent play sessions, recorded confusion/delight/voluntary replay, later market research | Agent declares fun/sellability without evidence |
+
+### Design experiments
+
+Choose experiments that directly improve the game, not random benchmarking exercises:
+
+- **Camera & composition:** Different orbit centers, FOV, island scale and water/terrain framing assessed via authentic side-by-side screenshots.
+- **Art direction:** Lighting rig, palette, cloud/fog, material treatments and vegetation density assessed for beauty and readability.
+- **Ecology & balance:** Same-seed drought/rain/forest scenarios; compare recovery, overgrazing, settlement welfare and player-perceived fairness.
+- **Timeline UI:** Compare spatial overlay, synchronized split view, and quick-switch history; test whether first-time players can identify what changed and why.
+- **Performance:** With identical scenes, measure frame-time distributions, GPU/draw budgets, memory and startup/load on available named devices.
+- **Desirability:** Blind playtest observation, voluntary replay, scenario-completion friction and later informed willingness-to-pay research. None are assumed successful beforehand.
+
+Log experiments in the ledger near the end of this file. Keep or revert based on evidence; do not declare visual quality through FPS alone.
+
+### Performance and platform truth
+
+Optimize for smooth interaction on a nominated Desktop test machine and representative Android devices. Initial aspirations may include ~60 FPS Desktop and ~30+ FPS on representative Android hardware, but these are **provisional goals**, not guaranteed facts. Use frame-time budgets, responsiveness, memory growth, lifecycle reliability and actual device classes as the evidence. Scale visual settings without altering deterministic simulation.
+
+### Source asset inventory (known from planning; verify in repository)
+
+- KayKit Forest Nature — foliage and environmental props
+- KayKit Medieval Hexagon — settlement structures
+- KayKit Adventurers — inhabitants
+- KayKit Character Animations — animations
+- Kenney Nature Kit — additional landscape props
+- Kenney Cube Pets — stylized animals
+- Kenney Interface Sounds — interface feedback
+- Cute Pets & Wildlife Free — candidate animated wildlife; archive contents not yet verified here
+
+Source archives may live in `assets/{animals,audio,buildings,characters,environment}/`. Optimize selected runtime assets for the real KMP module's resource system; do not assume contents without inspecting files.
+
+---
+
+## 9. The immediate transformation — what the next coding session must do
+
+**The screenshots are a useful baseline, not an acceptable destination.** Do not postpone the experience rescue to a later polish phase.
+
+1. **Inspect and preserve reality:** Read both root documents, check real code/Git/builds and installed Skills, identify which systems are functional and which are placeholders, and save the result below.
+2. **Rebuild the opening composition:** Reframe the 3D island so the world—not the UI or empty viewport—commands attention. Improve environmental density, lighting and the focal camera. Use actual runtime screenshots to compare before/after.
+3. **Replace the player-facing dashboard:** A living world with a clear local concern, one world-focused action, minimal purposeful HUD and simple inspection. Hide `Send bunny left/right`, raw diagnostic stats and developer buttons from normal play.
+4. **Give the world a pulse:** Movement, foliage/water motion, audio and at least one evolving ecological state connected to what is shown on screen. If any system does not exist yet, implement the smallest coherent real path without faking it.
+5. **Validate across targets and hand off:** Run available tests and Desktop/Android checks, inspect actual visuals, note unknowns and failure modes, update status below and stop for human acceptance at the Phase 01 gate.
+
+**Starter instruction to agent:**
+
+> Read `AGENTS.md` and `PLAN.md` entirely. Inspect the actual BranchWorld repository, Git status, installed Skills and builds. Resume the active phase; if none is verified, execute Phase 01. Your objective is a remarkable world-first, player-centered game—not a prototype dashboard. Preserve proven code, implement real gameplay/visual changes, capture real screenshots, test both KMP targets, and iterate until the player, visual and engineering gates are met. Keep `PLAN.md` current for seamless continuation and request approval before moving to the next phase.
+
+---
+
+## 10. Persistent progress record (AI-agent maintained)
+
+The evidence below follows the current ten-phase plan. Earlier implementation commits and captures document working systems in the previous plan. The current phase gates require a separate player-facing review and explicit human acceptance.
+
+### Current State
+
+**Active phase:** 01 — Experience Reconstruction & Art Direction. The live Fading Grove opening, viewport, first intervention, and inspection flow are implemented. Both launch targets have rendered the reconstructed world. Human acceptance is pending.
+
+**Verified foundations:** Android GLES and Desktop Vulkan render the same shared world. Shared tests cover seed generation, ecology, settlements, interventions, replay, branch isolation, and save compatibility. The persistent schema and ruleset versions stayed unchanged in this phase. The shared iOS simulator target compiles, and the iOS shell remains outside the 3D launch gate.
+
+**Player experience:** The opening looks into seed `104729` before time starts. Beginning the story keeps the world in place and starts its clock. Restore grove highlights a region and plants through the existing shared command. Inspect follows a creature by ID and exposes its current activity. Timeline, save, and diagnostics are available through the in-world controls.
+
+### Phase Ledger
+
+| Phase | Engineering status | Player / visual quality | Evidence | Human acceptance |
+|---|---|---|---|---|
+| 01 | COMPLETE | World-first opening and intervention reviewed on Android and Desktop | See Latest Handoff | PENDING |
+| 02 | PARTIAL | Current renderer, input, scenery, lighting, and rain verified | Android device tests and Desktop Vulkan captures | PENDING |
+| 03 | PARTIAL | Existing shared terrain, biomes, and traversability | `IslandGeneratorTest`, terrain replay fixtures | PENDING |
+| 04 | PARTIAL | Creatures respond and can be inspected in the scene | Shared ecology tests and Android walkthrough | PENDING |
+| 05 | PARTIAL | Regional reforestation and forage supplementation are available | Environmental rules, pending/applied tests, and new grove workflow | PENDING |
+| 06 | PARTIAL | Matched-time history switches in a single viewport | `TimelineTest`, save codecs, Desktop comparison test and Vulkan captures | PENDING |
+| 07 | PARTIAL | Settlement development renders in the existing world | Settlement fixtures and seed `104729` captures | PENDING |
+| 08 | NOT VERIFIED | NOT VERIFIED | Independent gate review pending | PENDING |
+| 09 | NOT VERIFIED | NOT VERIFIED | Independent gate review pending | PENDING |
+| 10 | NOT VERIFIED | NOT VERIFIED | Independent gate review pending | PENDING |
+
+### Decision Log
+
+| Decision | Rationale | Status |
+|---|---|---|
+| Maximize premium game quality; do not run a deadline-compressed product lane | Explicit player direction; existing screenshots are well below target quality | Product direction accepted; implementation pending |
+| Retain the ten-phase milestone system and only two root planning files | Clear autonomous-agent continuity without document sprawl | Accepted by previous user instruction |
+| Preserve alternate-history branching as a defining **game mechanic** | Core identity and originality; "timeline" objection refers to development schedule, not time-rewind gameplay | Existing deterministic branching and save fixtures pass on JVM and Android |
+| Keep Android and Desktop as core KMP targets; renderer is an adapter | Meaningful shared Kotlin engineering without assuming extra platform support | Android GLES and Desktop Vulkan verified in Phase 01 |
+| Open the Fading Grove on seed `104729`, with a paused authoritative clock | The real world appears immediately and the player chooses when time starts | Implemented and covered by the Desktop ecology UI test |
+| Route grove planting and creature focus through their existing owners | The deterministic command affects future histories. Camera requests remain cosmetic | Implemented |
+
+### Experiment Ledger
+
+| Hypothesis / candidate | Baseline scenario | What was actually measured or observed | Keep / revert / pending |
+|---|---|---|---|
+| Fill the frame with a coastal landscape | Seed `104729`, default camera and scrolling dashboard on Pixel 9 AVD and Apple M4 | Full-frame water removes the exposed sea rim. The closer landscape makes creatures and terrain visible on both targets. Portrait crops the coast intentionally. | KEEP. Check the remaining near-field and canopy detail in Phase 02 after approval. |
+| Add contact shade, rock silhouettes, and meadow detail | Seed `104729`, tick 0, Desktop Vulkan | Replaced repetitive round rocks with terrain-conforming facets and added small plants. The first shade pass showed white patches in Desktop composition. Opaque framebuffer alpha restored the correct shade and wavelets. | KEEP corrected composition. Measure presentation pacing at the larger readback size. |
+| Keep creatures visible during mobile inspection | Seed `104729`, Pixel 9 portrait | The initial sheet hid much of the focused animal and the camera button overlapped the title. A shared header row allocates room for both labels and the regional controls now expand on demand. | KEEP. Review with an unaided player and larger text. |
+
+### Latest Handoff
+
+```text
+ACTIVE PHASE / STATUS: 01 — COMPLETE, awaiting human acceptance
+PLAYER-VISIBLE CHANGE: The Fading Grove opens directly onto a live coast at seed 104729. Begin story starts time in the same scene. Restore grove previews a region and plants through the shared simulation. Inspect can follow a creature. Narrow comparison keeps the scene visible and expands the details on demand.
+VISUAL EVIDENCE: build/verification/experience-01 contains Android before/after, portrait/landscape, 1.3× text, rain, creature focus, planting preview, and matched-time comparison. The Desktop bundle was reviewed at 2240×1300 window pixels. Native Desktop Vulkan captures are 1152×648. See the evidence links below.
+CODE CHANGED: Shared Compose opening, HUD, inspection, comparison, and planting feedback. Kool camera, terrain detail, water, rain, and Desktop frame compositing. Android and Desktop entry points, affected tests, and the README walkthrough.
+BUILDS & TESTS: PASS. ./gradlew --offline --console=plain :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest :desktopApp:test :desktopApp:assemble :desktopApp:createDistributable :androidApp:assembleDebug :androidApp:lintDebug :shared:compileKotlinIosSimulatorArm64 :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest
+SIMULATION / SAVE / BRANCH: PASS. 108 host test executions and 48 on Pixel 9 API 36 AVD. The rules-v5 C2 fork fixture at tick 900 returned Main 5dce8f94926c905d and planted branch 4689c1bc6a8d2df2. The branch planted six saplings and stored wood was 76 vs 124. The Android walkthrough saved two branches, restarted, and restored Main at tick 900 with the same canonical hash. A final-build walkthrough reopened both histories from the generated fixture and checked compact switching and details.
+PERFORMANCE: Apple M4, packaged JVM/Vulkan probe at 1152×648, renderer p95 32.68 ms and Compose delivery p95 40.12 ms. The 960×540 trial gave 32.88 ms and 44.51 ms in its single sample. Kept 1152 for readability. Pixel 9 API 36 emulator at 1080×2424 reported renderer p95 18.41 ms on the opening walkthrough and 19.15 ms on restored comparison. These are local scene samples.
+PLAYTEST: Agent walkthroughs opened both targets, advanced the world clock, inspected wildlife and regions, and reviewed the final composition. Android exercised a complete fork, planting, comparison, and save/reload with the normal controls. Device tests exercised orbit, pan, pinch, Activity recreation, and foreground pause. Independent unaided playtest NOT TESTED.
+DECISIONS / EXPERIMENTS: Retained the existing rules, save layout, and renderer adapters. Kept the opening view at tick 0 and raised Desktop readback to 1152 pixels after measuring both sizes. Flattened framebuffer alpha for Desktop composition. Collapsed mobile comparison details so the player can see the island when switching histories.
+KNOWN GAPS: Physical Android NOT TESTED. Independent player reaction and replay intent are unmeasured. Broader environmental animation, lighting and ambience, plus steady Desktop presentation pacing, remain Phase 02 work.
+NEXT ACTION: Review the evidence and run ./gradlew :desktopApp:run. Begin the story, pause, and inspect a creature. Open Restore grove, preview B3, plant, and resume time. Accept Phase 01 before starting Phase 02.
+PHASE APPROVAL: AWAITING
+```
+
+- Android opening and play. [Before opening](build/verification/experience-01/android-before-opening.png) · [Before gameplay](build/verification/experience-01/android-before-world.png) · [Live opening](build/verification/experience-01/android-after-opening.png) · [Gameplay](build/verification/experience-01/android-after-world.png) · [Landscape](build/verification/experience-01/android-landscape-opening.png) · [Landscape at 1.3× text](build/verification/experience-01/android-landscape-large-text.png)
+- Android intervention and branches. [Creature focus](build/verification/experience-01/android-creature-focus.png) · [Planting preview](build/verification/experience-01/android-planting-preview.png) · [Main](build/verification/experience-01/android-final-comparison-main.png) · [Restored Forest](build/verification/experience-01/android-final-comparison-grove.png) · [Comparison details](build/verification/experience-01/android-final-comparison-details.png)
+- Desktop native Vulkan frames. [Prior wide render](build/verification/phase05/macos-wildlife-tick-0.png) · [Opening composition](build/verification/experience-01/desktop-opening.png) · [Rain](build/verification/experience-01/desktop-rain.png) · [Creature focus](build/verification/experience-01/desktop-creature.png) · [Main](build/verification/experience-01/desktop-main-900.png) · [Restored Forest](build/verification/experience-01/desktop-grove-900.png)
+- Verification logs. [Gradle](build/verification/experience-01/gradle-acceptance.log) · [Android walkthrough](build/verification/experience-01/android-walkthrough.log) · [Android save, restore, and renderer](build/verification/experience-01/android-runtime.log) · [Desktop timing](build/verification/experience-01/desktop-perf-1152.log)

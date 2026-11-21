@@ -31,7 +31,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
 
     fun resize(size: IntSize) {
         if (size.width < 2 || size.height < 2) return
-        val ratio = minOf(1f, 768f / maxOf(size.width, size.height))
+        val ratio = minOf(1f, 1152f / maxOf(size.width, size.height))
         requestedSize.value = Vec2i(
             (size.width * ratio).roundToInt().coerceAtLeast(2),
             (size.height * ratio).roundToInt().coerceAtLeast(2),
@@ -73,6 +73,9 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
                 if (target !== current) return@launch
                 val bytes = ByteArray(pixels.width * pixels.height * 4)
                 (pixels.data as Uint8Buffer).useRaw { it.duplicate().clear().get(bytes) }
+                // The scene fills the viewport. Vulkan blend pipelines can leave translucent
+                // fragment alpha in the attachment even though RGB is already composited.
+                for (alpha in 3 until bytes.size step 4) bytes[alpha] = 0xff.toByte()
                 val info = ImageInfo(pixels.width, pixels.height, ColorType.RGBA_8888, ColorAlphaType.OPAQUE)
                 Image.makeRaster(info, bytes, pixels.width * 4).use { image ->
                     frame.value = image.toComposeImageBitmap()

@@ -51,7 +51,7 @@ adb install build/release/BranchWorld-android-local.apk
 
 ### Play and compare
 
-Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. A new island starts paused at tick 0 with four rabbits and three deer. Select **Play** and watch the forage total as they eat and the patches regrow. The blue markers show freshwater springs. **Send bunny left** and **Send bunny right** queue a waypoint for the lead rabbit, which tends to urgent needs first. Use **1×**, **2×**, or **4×** to change playback speed and **Pause** to hold the tick. **Focus island** resets the camera.
+BranchWorld opens on **The Fading Grove**, the live scene for seed `104729`. Choose **Begin story** to start time, or **Continue** to load the local save. Other island seeds and camera motion settings are in **Menu**.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
@@ -59,17 +59,11 @@ Choose island seed `104729`, `271828`, or `424242`, then select **Open world**. 
 | Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
 | Zoom | Pinch | Scroll |
 
-To check lifecycle behavior, background and return to the Android app, then rotate it. On Desktop, resize, minimize, and restore the window. Use **Back to home** and reopen the same seed to retain the current tick. Opening a different seed replaces the in-memory session and starts at tick 0.
+Use **Focus island** to return to the opening overview. **Inspect** lets you select and follow a creature or check on a settlement. **Restore grove** opens a map of candidate regions. Select a region to see it highlighted in the world, then choose **Plant saplings**. If time is paused, the planting takes effect on the next tick after you choose **Play**. **Menu** → **Show diagnostics** exposes seed, ticks, playback speeds, and wildlife counters.
 
-For an intervention demo, open seed `104729`, play until shortly after rain begins at tick 300, and pause. Open **Inspect world**, choose region **B3**, and queue **Reforest region** and **Supplement forage**. Start playback to see saplings appear and the region's forage rise. Use the creature picker to check an animal's needs and current action.
+**Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** on the opening screen restores the world in a paused state. Older saves retain their original rules, and an existing single-island save opens as **Main** at its saved tick.
 
-**Save world** captures the current tick and any queued interventions in one local slot. After closing and reopening BranchWorld, choose **Load saved world** from Home. The island opens paused at the saved tick. Press **Play** to resume and apply any queued interventions.
-
-Start a new island with seed `104729` and use **Timeline** → **Play to tick** to reach `600`. Use **Go to tick** to rewind to `300`. Select **Fork here** and name the branch **Restored Forest**. In **Inspect world**, choose **C2** and select **Reforest region**. Play the child to `900`, select **Main** in the timeline tree, and play it to the same tick.
-
-Choose **Compare branches** to see both histories at tick `900`. **Show left** and **Show right** switch the island at the same camera position. Main has 76 stored wood and Restored Forest has 124. Select **Reforest C2 at tick 301** to see the six saplings the command planted. Close comparison, choose **Save world**, then quit and relaunch. Use **Load saved world** and reopen comparison. Older saves retain their original rules. An existing single-island save opens as **Main** at its saved tick.
-
-**How to branch** on Home summarizes the walkthrough. **World sounds** turns on short cues for successful forks and saves for the current session.
+For the reproducible branching walkthrough, start on seed `104729`. Pause, then use **Timeline** → **Play to tick** to reach `600`. Use **Go to tick** to rewind to `300`. Choose **Fork here** and name the branch **Restored Forest**. Close Timeline, open **Restore grove**, select **C2**, and plant saplings. Reopen Timeline, play the child to `900`, select **Main**, and play it to `900` as well. **Compare branches** opens the matched views. **Show left** and **Show right** switch histories at the same camera position. On narrow screens, open **Compare details** to see the branch picker, time controls, and changes. Main has 76 stored wood and Restored Forest has 124. Select **Reforest C2 at tick 301** to see the six saplings planted by that command. Close comparison, save, and use **Continue** after relaunch to reopen both histories.
 
 Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
 

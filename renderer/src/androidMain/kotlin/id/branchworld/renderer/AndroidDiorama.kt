@@ -7,11 +7,13 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.viewinterop.AndroidView
 import de.fabmax.kool.KoolConfigAndroid
 import de.fabmax.kool.createKoolContext
 import de.fabmax.kool.platform.KoolContextAndroid
 import de.fabmax.kool.platform.KoolSurfaceView
+import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
@@ -26,7 +28,7 @@ class AndroidDiorama(context: Context) {
     @Composable
     fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
         AndroidView(
-            modifier = modifier,
+            modifier = modifier.onSizeChanged { controller.resize(it.width, it.height) },
             factory = {
                 try {
                     AndroidRenderer.surface(appContext)
@@ -46,6 +48,8 @@ class AndroidDiorama(context: Context) {
             },
         )
     }
+
+    fun present(camera: WorldCamera) = controller.present(camera)
 
     @Composable
     fun Hud() = PreviewHud(controller)

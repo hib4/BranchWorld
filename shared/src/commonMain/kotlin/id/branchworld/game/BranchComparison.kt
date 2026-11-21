@@ -73,7 +73,12 @@ import id.branchworld.game.timeline.inTreeOrder
 import org.jetbrains.compose.resources.stringResource
 
 @Composable
-internal fun ComparisonHeader(island: IslandLoad.Ready, view: ComparisonView, branches: List<BranchSummary>) {
+internal fun ComparisonHeader(
+    island: IslandLoad.Ready,
+    view: ComparisonView,
+    branches: List<BranchSummary>,
+    showBranchPickers: Boolean,
+) {
     val target = view.target
     val event = view.event
     LaunchedEffect(island, target) { target?.let { island.loadComparison(it) } }
@@ -86,11 +91,13 @@ internal fun ComparisonHeader(island: IslandLoad.Ready, view: ComparisonView, br
             modifier = Modifier.semantics { heading() },
         )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            BranchPicker(stringResource(Res.string.comparison_left, view.left.name), order, view.left.id, view.right.id) {
-                island.selectComparison(it, view.right.id)
-            }
-            BranchPicker(stringResource(Res.string.comparison_right, view.right.name), order, view.right.id, view.left.id) {
-                island.selectComparison(view.left.id, it)
+            if (showBranchPickers) {
+                BranchPicker(stringResource(Res.string.comparison_left, view.left.name), order, view.left.id, view.right.id) {
+                    island.selectComparison(it, view.right.id)
+                }
+                BranchPicker(stringResource(Res.string.comparison_right, view.right.name), order, view.right.id, view.left.id) {
+                    island.selectComparison(view.left.id, it)
+                }
             }
             OutlinedButton(onClick = island::closeComparison) { Text(stringResource(Res.string.comparison_close)) }
         }

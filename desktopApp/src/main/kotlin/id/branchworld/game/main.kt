@@ -1,5 +1,6 @@
 package id.branchworld.game
 
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -14,7 +15,7 @@ fun main() {
         val sounds = remember { DesktopWorldSounds() }
         DisposableEffect(sounds) { onDispose(sounds::close) }
         val saveStore = remember { DesktopWorldSaveStore() }
-        val state = rememberWindowState()
+        val state = rememberWindowState(width = 1120.dp, height = 650.dp)
         val foreground = !state.isMinimized
         SideEffect { renderer.foreground(foreground) }
         Window(
@@ -25,7 +26,9 @@ fun main() {
             App(
                 viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
+                viewportCamera = renderer::present,
                 foreground = foreground,
+                playInUnfocusedWindow = true,
                 saveStore = saveStore,
                 playSound = sounds::play,
             )

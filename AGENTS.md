@@ -1,105 +1,117 @@
-# BranchWorld - AI Agent Instructions
+# BranchWorld — Autonomous Game Development Instructions
 
-This file tells the coding agent HOW to work. `PLAN.md` defines WHAT to build and WHEN a phase is accepted. These are the only required planning documents. The actual repository is the source of truth for implemented code.
+> **Primary directive:** Build a remarkable, premium-quality Kotlin Multiplatform game that people actively want to play, revisit, discuss, and potentially buy. Never confuse a technically functioning prototype with an excellent game.
+>
+> **Two-file system:** `AGENTS.md` governs HOW the AI agent works; `PLAN.md` governs WHAT BranchWorld becomes, the phase gates, and durable progress. Do not create another planning system, phase prompt collection, or duplicate status documents.
 
-## Mission and targets
+## 1. Mission and ambition
 
-Build BranchWorld: a visually compelling, low-poly 3D Kotlin Multiplatform world where autonomous life evolves, players change the environment, rewind time, fork timelines, and compare the consequences.
+BranchWorld is a beautiful, deeply simulated 3D world-shaping and alternate-history strategy game. Its promise is **"Shape a world. Change its fate. Discover what could have been."** Players nurture living environments, become attached to inhabitants, face meaningful ecological and societal dilemmas, and explore truly different simulated outcomes by rewriting pivotal decisions.
 
-- First platforms: Android (minSdk 26) and Desktop JVM.
-- Shared stack: Kotlin Multiplatform, Compose Multiplatform, coroutines/Flow, kotlinx.serialization, Gradle Kotlin DSL.
-- 3D rendering: Kool is a candidate, NOT an approved decision until a real Android + Desktop integration spike succeeds. iOS is future scope.
-- Existing downloaded assets are under `assets/`. Preserve originals. Import only necessary optimized runtime assets.
-- Use installed project Skills in `.agents/skills/` when relevant, but inspect their actual instructions first.
+- Treat the Kotlin Multiplatform Contest as a **benchmark for originality, exemplary shared Kotlin engineering, and excellent craft**, not as an artificial ceiling on game ambition. Do not impose speculative sprint dates, short feature caps, or a reduced "contest-only" product in this roadmap. The real competition submission deadline still exists; never misstate eligibility or submission rules, but do not let it redefine the full product vision.
+- Pursue a game worthy of comparison with acclaimed premium independent titles in **presentation, interaction quality, depth, and emotional memorability**, while maintaining BranchWorld's unique alternate-futures identity. Inspiration is not permission to clone another game.
+- Aim high but work scientifically: validate uncertain technical choices and player enjoyment, integrate coherent vertical slices, and refine ruthlessly. **Unlimited ambition does not mean unbounded complexity or untested features.**
+- Do not use religious-role terminology to describe the game or its player. Preferred vocabulary: *World Shaper*, *World Guardian*, *Keeper*, *intervention*, *world-shaping*, *alternate futures*, *living histories*.
+- **Never claim a contest win, commercial demand, platform support, implemented feature, or passing test without real evidence.**
 
-## One-command entry point
+## 2. Start or resume any session
 
-When the user says **"Execute Phase NN"**, do the following without requiring a separate prompt file:
+1. Read `AGENTS.md` and **all of** `PLAN.md`, especially `Current State`, `Decision Log`, `Experiment Ledger`, and `Latest Handoff`.
+2. Inspect the real repository: `git status`, recent commits, Gradle files, actual modules, source sets, existing game loop, current scenes, assets, tests, run scripts, and `.agents/skills/`. Prefer the repository and executed results over previously written plans.
+3. Reconcile existing features with each phase's **player, visual, and technical** gates. A phase may contain valid code yet remain visually or experientially incomplete.
+4. Determine the current approved phase and the first unfinished high-value outcome. If this is a fresh project, begin with Phase 01. If resuming, continue from the last verified implementation; never restart completed work or destructively recreate the project.
+5. State a compact plan of attack, then **implement and verify real working software**, not another document-only proposal.
+6. Before ending any session, update the progress sections in `PLAN.md` with what actually ran and the exact first action for the next session. This is how development survives context resets or new chats.
 
-1. Read `AGENTS.md` and `PLAN.md`, especially Phase NN, its prerequisites, acceptance criteria, and the Progress Ledger.
-2. Inspect the real repository: `git status`, Gradle configuration, source sets, tests, assets, available SDKs, and existing features. Do not assume roadmap items are implemented.
-3. State a brief approach (architecture impact, vertical slice, tests, risks), then IMPLEMENT the phase. Do not stop after producing a plan.
-4. Divide work into internal tasks as needed. Own ordinary decisions, write code and tests, run real builds, and fix failures. Use specialists only for safely separable work.
-5. Collect verification evidence, update only the Progress Ledger / Decision Log sections of `PLAN.md`, and give the required handoff report.
-6. Stop at the phase gate. Start a new phase only after explicit human approval.
+## 3. Working method — the autonomous craft loop
 
-If the requested phase depends on an incomplete earlier phase, report the blocker and implement only the safe prerequisite work needed to unblock it; do not pretend that a later phase passed.
+Execute: **Audit -> Prototype -> Implement -> Test -> Play -> Critique -> Improve -> Integrate -> Record -> Continue.**
 
-## Architecture invariants
+For each consequential feature:
 
-1. **Shared authority:** World generation, rules, entities, fixed-tick simulation, deterministic commands, ecology, timeline history, and portable save models belong in `commonMain` (or a genuine shared KMP module).
-2. **Deterministic time:** The world advances in integer ticks, not in graphics frames or wall-clock callbacks. Use stable entity IDs, explicit deterministic PRNG state, ordered command processing, and canonical state hashes. Specify numeric precision/quantization where cross-target equality requires it.
-3. **One-way rendering:** `world state -> read-only render projection -> renderer`. The renderer may interpolate for smooth visuals but may never determine authoritative outcomes. Do not put Kool, Compose, GPU, or platform objects in world state or saves.
-4. **Commands, not direct mutations:** Compose and input adapters submit validated, tick-indexed player commands. The simulation is the only writer of world state.
-5. **Replayable persistence:** Version world generation, simulation rules, and save schemas. Persist seed, tick, deterministic state/PRNG, and later branch ancestry, snapshots, and command history. Branches may share immutable history, not mutable state.
-6. **Portable behavior:** Android and Desktop use the same simulation rules. Platform code handles graphics, input bridges, file I/O, and lifecycle only.
-7. **Smallest sound design:** Prefer clear domain models over an elaborate generic ECS, dependency-injection framework, or premature multi-module decomposition. Refactor when measurements or real complexity justify it.
-8. **Functional milestones:** No mock screens, scripted divergence, placeholder APIs, or green builds presented as completed gameplay.
+- **Player intention:** Define what the player will notice, choose, feel, and learn. Avoid systems without a compelling experience.
+- **Functional contract:** Specify relevant authoritative state, commands/events, read-only render projections, UX states, and testable outcomes before changing cross-system APIs.
+- **Playable vertical slice:** Integrate code, scene, audio/visual response, UI affordance, and failure handling. Avoid polished menus concealing placeholder worlds.
+- **Actual execution:** Run applicable Gradle tests, Desktop and Android builds/launches, deterministic fixtures, and real interactive walkthroughs. Clearly mark PASS / FAIL / BLOCKED / NOT RUN.
+- **Visual critique:** Inspect *real game screenshots or screen captures* at representative Desktop and Android sizes. Assess composition, readability, beauty, lighting, animation, color, UI balance and whether the scene appears alive. Iterate instead of accepting merely compiled code. Do not pass concept art off as running game output.
+- **Gameplay critique:** Ask whether a first-time player has clear motivation, expressive choices, legible consequences, surprise, attachment, progression, and a reason to return. Remove confusing buttons and empty waiting.
+- **Integration review:** Check deterministic replay, save stability, performance budgets, input responsiveness, and architecture separation after each system lands.
 
-## Engineering loop (adapted from test-first and agentic workflows)
+Agents may plan technical subtasks, assign isolated tasks to subagents if supported, and conduct experiments autonomously. The Lead Architect owns shared interfaces, code reviews, merge decisions, and verified milestone delivery. Coordinate changes to simulation contracts, renderer integration, and Gradle files; avoid overlapping writes by independent agents.
 
-- **Inspect:** Understand existing code and exact libraries/APIs before editing.
-- **Specify:** Identify observable player behavior, invariants, edge cases, and minimum runnable slice.
-- **Implement:** Create an end-to-end path, not disconnected stubs. Write meaningful automated tests alongside code; use a red/green loop where practical.
-- **Verify:** Run actual relevant tests and target builds. Manually test 3D, input and app lifecycle when the environment supports it.
-- **Review:** Inspect the diff for regressions, concurrency hazards, resource leaks, state coupling, and unsupported claims. Independent review is useful but optional.
-- **Demonstrate:** Give exact commands, seed/tick, player actions, expected observations, and test evidence.
-- **Gate:** Mark COMPLETE / PARTIAL / BLOCKED based on evidence. Wait for human acceptance before the next phase.
+**Do not stop at a planning response.** Continue within the approved phase until the acceptance gate is met or a genuinely unresolvable blocker is documented. Ask for human approval only for destructive changes, major renderer swaps, breaking save compatibility, significant product-direction reversals, and acceptance of a completed phase.
 
-### AI experiments (Karpathy-style, bounded)
+## 4. The non-negotiable player-experience bar
 
-Use controlled experiments for uncertain design choices: terrain quality, ecological parameters, rendering throughput, snapshot intervals, pathfinding costs, and similar measurable questions.
+1. **World first:** The world dominates the screen. No postage-stamp island, broad dead empty areas, empty title screen, or control panel in place of gameplay. Opening composition should make a stranger want to explore the scene.
+2. **Beauty is systemic:** Rich terrain, intentional geometry and silhouettes, harmonious materials, vegetation variation, believable water, atmospheric depth, cinematic yet responsive cameras, smooth motion, shadows, environmental animation, layered sound, and beautiful transitions. Models alone are not art direction.
+3. **Life has identity:** Creatures have readable needs and behaviors; inhabited places have names, relationships, distinctive events, and visibly changing circumstances. Prefer recognizable characters over anonymous counters.
+4. **Actions carry weight:** Player tools have a clear target, feedback, constraints/tradeoffs and long-term consequences. All gameplay impacts come from shared simulation commands, not decorative visual effects.
+5. **The signature mechanic is unforgettable:** Rewind to a past decision, try another intervention, and observe alternate futures. Make the comparison spatial, emotional and interpretable—not merely two spreadsheets or a debug history tree.
+6. **Meaningful tension:** Provide dilemmas with multiple defensible approaches and systemic consequences. No obviously best button, endless clicking, or opaque punishments.
+7. **Progression and freedom:** Offer crafted world-stories and a fulfilling larger journey, plus expressive sandbox play. Each unlock or discovery should expand possibility, not require repetitive grinding.
+8. **Coherence beats accumulation:** A few extraordinary intertwined systems are better than dozens of shallow features. Cut or redesign systems that do not increase wonder, agency, discovery, or meaningful variation.
+9. **Accessible and responsive:** Keyboard/mouse and touch input must be first-class, with readable typography, sensible focus, camera motion settings, clear audio controls, and recoverable errors.
+10. **Treat the player as the audience:** Hide naked tick counters, test buttons, state hashes, ad-hoc metrics, and diagnostics behind development modes. Use natural-language world events and contextual inspection in normal play.
 
-1. Establish a working baseline and a reproducible scenario.
-2. State one hypothesis and a measurable metric, including correctness constraints.
-3. Change one principal variable at a time; keep a fixed seed, ruleset, device and build mode for comparisons.
-4. Test and measure; keep an improvement only if it preserves correctness and improves the target metric. Otherwise revert the experiment's own changes.
-5. Record the decision and evidence in the `PLAN.md` Decision Log. Do not run open-ended optimization loops or optimize away determinism.
+## 5. Technical invariants and KMP excellence
 
-## Verification contract
+- **Kotlin Multiplatform is foundational, not a checkbox.** Shared authoritative logic belongs in `commonMain` or a genuine shared module: deterministic worldgen, environment, wildlife, settlement systems, command processing, rules, event chronology, branching histories, simulation metrics, and portable save models. UI should share Compose Multiplatform code where appropriate; platform specifics are adapters.
+- Simulation state advances at fixed indexed ticks with a documented deterministic PRNG, stable IDs, deterministic collection/command ordering, versioned rulesets, and explicit numeric behavior across targets. No rendering-frame timing or unordered concurrency may change authoritative outcomes.
+- The renderer consumes immutable projections of world state. Keep Kool or any other engine behind a rendering adapter; no GPU objects, engine transforms, textures, or platform handles in authoritative state/saves. Rendering may interpolate and enrich *cosmetic* detail without changing game rules.
+- Snapshot + replay should support exact history reconstruction; branch ancestry, commands, RNG states and mutable world data must be isolated across forks. Persist checksum/consistency metadata and support safe version migration.
+- Keep persistence atomic/recoverable where possible. Report schema incompatibility rather than silently losing user worlds. Never overwrite user saves or discard assets/commits without approval.
+- Use coroutines/Flow for orchestration without letting scheduling influence rules. Prefer straightforward idiomatic Kotlin to speculative frameworks. Build modules only when boundaries or incremental build benefits justify them.
+- Asset sources remain under `assets/`; curate, normalize scale/pivots, optimize, and version manifest/runtime packs for the actual project resource system. Check availability before claiming models/animations exist. Git LFS may be used for large committed assets.
+- Kool is only a validated choice after proving Compose interoperability, actual Desktop and Android rendering, asset format support, lifecycle handling, input/camera behavior, and measured performance. Verify current APIs before new dependency advice. Treat additional platform backends as research/adapter work, not automatic compatibility.
+- Defend iteration speed: deterministic integration tests, visual regression references, replay fixtures, smoke builds, representative performance benchmarks, and automatic checks for common regressions.
 
-Every reported check must have one honest status:
+## 6. Quality evidence and experimentation
 
-- `PASS`: actually executed and met the criterion.
-- `FAIL`: executed and failed.
-- `BLOCKED`: impossible to run in the available environment; say why.
-- `NOT RUN`: not attempted.
+Use the following **five distinct review lenses**, all applicable where relevant:
 
-Capture the exact command or manual procedure, environment/device, relevant seed and ticks, observed result, and log/commit where available. A JVM unit test does not prove Android rendering works. No fabricated benchmark numbers or unexecuted "passes".
+| Lens | Evidence of success | Failure examples |
+|---|---|---|
+| **Wonder & art** | Attractive authentic in-engine screenshots; coherent scene/materials; polished motion and sound | Tiny island, empty background, default UI, incoherent assets |
+| **Agency & design** | New players understand goals, make decisions, observe consequences and want to explore again | Debug controls, trivial choices, idle observation, scripted fake feedback |
+| **Systems integrity** | Scenario-driven state changes, deterministic replay hashes, safe save/load and branch isolation | Rendering changes treated as state, data corruption, fabricated metrics |
+| **KMP engineering** | Actual shared Kotlin behavior and fixtures on verified targets; readable idiomatic code | Shared UI shell with duplicated platform gameplay, unsupported API claims |
+| **Desirability** | Independent playtest observations, credible retention/replay signals and later market feedback | "Would buy" asserted by the agent without player evidence |
 
-Use stable baseline scenarios when relevant:
+**Experiment, don't guess:** For uncertain terrain, camera, rendering, ecology, game balance, UX or storage decisions, record in `PLAN.md`: hypothesis, baseline, fixed scenario/device, one deliberate change, result, **keep/revert** decision, and next question. Use representative evidence, not fabricated benchmark numbers. A metric alone cannot substitute for human artistic or gameplay judgment.
 
-- Main world seed: `104729`; alternate seeds: `271828`, `424242`.
-- Determinism: compare canonical state at ticks `0`, `300`, `600`, `900` after equivalent runs/reloads.
-- Branching: fork at tick `300`, apply reforestation to the child, advance both to tick `900`, compare real measured vegetation/food/wildlife values, save/reload, and re-check branch isolation.
+**Reviews should be demanding, not circular:** If the phase repeatedly fails, identify the root bottleneck (bad camera, weak game loop, unsuitable renderer, incorrect world scale, unreliable interaction), challenge the approach, and propose an architectural correction. Do not pile features onto a broken foundation.
 
-These are target fixtures, not claims that the fixtures already exist. Do not assert predetermined ecological outcomes without simulation evidence.
+## 7. Development gates, continuity, and safety
 
-## Autonomy, Git and safety
+- `PLAN.md` contains the product plan and an agent-maintained **Current State / Phase Ledger / Decision Log / Experiment Ledger / Latest Handoff**. Keep it concise and accurate, edit those sections in place, and preserve past meaningful decisions.
+- Accept a phase only with an actual demonstrable player result, applicable builds/tests, screenshots or a live walkthrough, known limitations, and independent review where appropriate. A green compile is necessary but not sufficient.
+- Human acceptance is required before advancing to the next major phase. Within a phase, implement, debug and refine autonomously without repeated approvals.
+- Git discipline: inspect uncommitted work before editing; use safe branches/worktrees where appropriate; never `reset --hard`, force-push, delete branches/files, wipe saves, or overwrite user changes without explicit authorization. Do not commit secrets.
+- For file/repository operations or tools not available in the environment, accurately report the blocker and make useful independent progress. Never claim work continued after a session ends; continuity is achieved by persisted code and `PLAN.md` handoff.
+- Do not spend a development phase on broad licensing audits. For any public contest or commercial release, satisfy the actual publication/redistribution requirements and do not assume every downloaded asset can be freely redistributed.
 
-- A lead agent owns integration. Subagents may work in distinct branches/worktrees when the environment supports safe isolation; never have concurrent agents edit the same shared contracts or Gradle files.
-- Do not discard user changes or use `git reset --hard`, destructive `clean`, force-push, delete assets, or overwrite saves without permission.
-- Request human approval before changing the renderer choice, making a major architecture reversal, changing public save compatibility, deleting user data, expanding platform scope, or taking irreversible actions.
-- Keep source asset packs in `assets/`; place curated runtime assets in the actual project's resource location after verifying format, scaling, animations, and loading. Use Git LFS for large committed assets as appropriate. Do not undertake asset-license audits as part of this engineering plan.
-- If a device/SDK is missing, continue independent work and record the missing verification. If a dependency fails, produce a minimal reproduction and evidence before proposing replacement.
-- Keep changes reviewable; update code/docs when behavior changes. Avoid unnecessary new files and planning bureaucracy.
+## 8. Required agent handoff
 
-## Phase completion report
-
-At the end of each requested phase, reply in this format:
+At the end of any session, update `PLAN.md` and report:
 
 ```text
-PHASE: NN - name
-STATUS: COMPLETE | PARTIAL | BLOCKED
-PLAYER-VISIBLE RESULT: what actually works
-IMPLEMENTATION: key files/modules changed
-VERIFICATION: command or manual test -> PASS/FAIL/BLOCKED/NOT RUN
-DETERMINISM / SAVE / BRANCH: relevant hash or integrity checks
-PERFORMANCE: observed metrics and device, or not measured
-DEMO: reproducible steps, seed and ticks
-LIMITATIONS: unresolved defects and constraints
-DECISIONS: important trade-offs
-APPROVAL NEEDED: yes
+ACTIVE PHASE / STATUS: NN — COMPLETE | PARTIAL | BLOCKED
+PLAYER-VISIBLE CHANGE: what is really playable and why it matters
+VISUAL EVIDENCE: real screenshot/video path, target, resolution, or NOT CAPTURED
+CODE CHANGED: paths/components and behavior
+BUILDS & TESTS: exact commands + PASS / FAIL / BLOCKED / NOT RUN
+SIMULATION / SAVE / BRANCH: proof, fixtures and failures
+PERFORMANCE: hardware, metric and result, or NOT MEASURED
+PLAYTEST: actual observations, or NOT TESTED
+DECISIONS / EXPERIMENTS: what changed and why
+KNOWN GAPS: concrete remaining shortcomings
+NEXT ACTION: precise starting action for a new session
+PHASE APPROVAL: AWAITING | ACCEPTED
 ```
 
-Update `PLAN.md` Progress Ledger with the same factual status and evidence. `COMPLETE` means ready for review, NOT automatically accepted. Mark a phase `ACCEPTED` only after an explicit user decision. Never begin the next phase silently.
+## 9. Immediate directive for the current repository
+
+The only available visual evidence is a menu dominated by empty space and a 3D island rendered very small in a large dark viewport, with developer-style buttons and counters. **Underlying implementation is not verified by those screenshots.** First audit and preserve what works. Then execute **Phase 01 — Experience Reconstruction** from `PLAN.md`: put the world on screen as the main character, establish the premium art direction, replace technical controls with meaningful player interactions, and produce a compelling real captured before/after result. Do not confuse new concept images with actual render output.
+
+**Start/resume instruction:** "Read `AGENTS.md` and `PLAN.md`, inspect the real code and Git state, resume the active phase, and autonomously implement, playtest and refine it to the documented player/art/engineering gates. Update the phase ledger and exact handoff. Stop for human acceptance before the next phase."

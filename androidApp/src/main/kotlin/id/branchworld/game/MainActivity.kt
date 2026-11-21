@@ -22,6 +22,7 @@ class MainActivity : ComponentActivity() {
             App(
                 viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
                 viewportHud = { renderer.Hud() },
+                viewportCamera = renderer::present,
                 registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
                 saveStore = saveStore,
                 playSound = sounds::play,

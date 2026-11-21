@@ -31,32 +31,39 @@ class DesktopTimelineUiTest {
         val owner = object : LifecycleOwner {
             override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
         }
-        setContent { CompositionLocalProvider(LocalLifecycleOwner provides owner) { App() } }
-        onNodeWithText("Open world").performClick()
+        var viewport: WorldRenderSource? = null
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                App(viewport = { _, world -> SideEffect { viewport = world } })
+            }
+        }
+        awaitText("Begin story")
+        waitUntil(timeoutMillis = 5_000) { viewport != null }
+        click("Begin story")
+        onNodeWithText("Pause").performClick()
         awaitText("Timeline")
-        onNodeWithText("Timeline").performScrollTo().performClick()
-        enterTick("8")
+        onNodeWithText("Timeline").performClick()
+        enterTick("60")
         onNodeWithText("Play to tick").performClick()
-        awaitText("Tick 8")
-        awaitText("Play")
-        enterTick("4")
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
+        enterTick("20")
         onNodeWithText("Go to tick").performClick()
-        awaitText("Tick 4")
+        waitUntil(timeoutMillis = 5_000) { viewport?.poses?.value?.tick == 20L }
         onNodeWithText("Fork here").performClick()
-        onNodeWithText("Create a branch at tick 4").assertIsDisplayed()
+        onNodeWithText("Create a branch at tick 20").assertIsDisplayed()
         onAllNodes(hasSetTextAction())[1].performTextReplacement("Restored Forest")
         onNodeWithText("Create branch").performClick()
         awaitText("Branch Restored Forest")
-        enterTick("8")
+        enterTick("60")
         onNodeWithText("Play to tick").performClick()
-        awaitText("Tick 8")
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
         onNodeWithText("Main").performClick()
         awaitText("Branch Main")
-        awaitText("Tick 8")
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
     }
 
     @Test
-    fun compareScrubberAndViewportHoldTheSameTickForBothBranches() = runDesktopComposeUiTest(width = 1000, height = 1500) {
+    fun compareScrubberAndViewportHoldTheSameTickForBothBranches() = runDesktopComposeUiTest(width = 720, height = 1000) {
         val owner = object : LifecycleOwner {
             override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
         }
@@ -66,35 +73,38 @@ class DesktopTimelineUiTest {
                 App(viewport = { _, world -> SideEffect { viewport = world } })
             }
         }
-        click("Open world")
+        waitUntil(timeoutMillis = 5_000) { viewport != null }
+        click("Begin story")
+        onNodeWithText("Pause").performClick()
         awaitText("Timeline")
-        click("Timeline")
-        enterTick("8")
+        onNodeWithText("Timeline").performClick()
+        enterTick("60")
         click("Play to tick")
-        awaitText("Tick 8")
-        enterTick("4")
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
+        enterTick("20")
         click("Go to tick")
-        awaitText("Tick 4")
+        waitUntil(timeoutMillis = 5_000) { viewport?.poses?.value?.tick == 20L }
         click("Fork here")
         onNodeWithText("Create branch").performClick()
         awaitText("Branch Branch 2")
-        enterTick("8")
+        enterTick("60")
         click("Play to tick")
-        awaitText("Tick 8")
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
         val stableViewport = checkNotNull(viewport)
         click("Compare branches")
-        awaitText("Viewing Main at tick 8")
+        awaitText("Viewing Main at tick 60")
+        click("Compare details")
         onNodeWithContentDescription("Timeline position").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
-        awaitText("Viewing Main at tick 4")
+        awaitText("Viewing Main at tick 20")
         click("Show right")
-        awaitText("Viewing Branch 2 at tick 4")
+        awaitText("Viewing Branch 2 at tick 20")
         assertEquals(2, stableViewport.poses.value.branchId)
-        assertEquals(4L, stableViewport.poses.value.tick)
+        assertEquals(20L, stableViewport.poses.value.tick)
         assertEquals(stableViewport, viewport)
         click("Close comparison")
-        awaitText("Tick 8")
-        assertEquals(8L, stableViewport.poses.value.tick)
+        waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
+        assertEquals(60L, stableViewport.poses.value.tick)
     }
 
     private fun ComposeUiTest.click(text: String) {

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import de.fabmax.kool.KoolConfigJvm
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.swing.SwingWindowSubsystem
+import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
 import java.awt.BorderLayout
 import java.awt.Canvas
@@ -52,7 +53,10 @@ class DesktopDiorama {
         SideEffect { controller.showWorld(projection) }
         val frame by output.frame.collectAsState()
         val focus = remember { FocusRequester() }
-        Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).onSizeChanged(output::resize)) {
+        Box(modifier.background(MaterialTheme.colorScheme.surfaceContainerHigh).onSizeChanged { size ->
+            controller.resize(size.width, size.height)
+            output.resize(size)
+        }) {
             // Kool's Vulkan backend needs an AWT peer. The visible viewport is the
             // separately sized offscreen output composited by Compose.
             SwingPanel(
@@ -76,6 +80,8 @@ class DesktopDiorama {
             }
         }
     }
+
+    fun present(camera: WorldCamera) = controller.present(camera)
 
     @Composable
     fun Hud() = PreviewHud(controller)

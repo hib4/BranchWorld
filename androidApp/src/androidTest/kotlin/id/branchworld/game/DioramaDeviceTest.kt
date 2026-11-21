@@ -29,25 +29,21 @@ class DioramaDeviceTest {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
         )
         try {
-            tap(bounds("Open world"))
-            bounds("Island ready")
-            val focus = bounds("Focus island")
-            val bottom = bounds("Back to home").top
-            bounds("Tick 0")
-            bounds("Rabbits 4 · Deer 3")
-            bounds("Births 0 · Deaths 0")
-            val initialForage = currentForage()
-            assertTrue(initialForage > 0)
+            tap(bounds("Begin story", enabled = true))
+            tap(bounds("Pause"))
+            bounds("Focus island")
+            assertTrue(findVisible { it.text == "Send bunny left" } == null)
+            tap(bounds("Menu"))
+            tap(bounds("Reduce camera motion"))
+            tap(bounds("Close"))
 
             val screen = requireNotNull(input.takeScreenshot())
-            val viewport = Rect(screen.width / 8, focus.bottom + 35, screen.width * 7 / 8, bottom - 30)
+            val viewport = Rect(screen.width / 8, screen.height / 3, screen.width * 7 / 8, screen.height * 2 / 3)
             screen.recycle()
             val start = point(viewport.centerX(), viewport.centerY())
             val span = viewport.width() / 7
 
-            waitUntil("paused viewport pixels to settle") {
-                difference(viewport, action = {}) < 0.002
-            }
+            waitUntil("paused viewport pixels to settle") { difference(viewport, action = {}) < 0.002 }
             assertTrue("One-finger drag did not orbit", difference(viewport) {
                 gesture(start, start.copy(x = start.x + span))
             } > 0.01)
@@ -62,50 +58,35 @@ class DioramaDeviceTest {
                 gesture(start, start.copy(x = start.x - span / 2), second, second.copy(x = second.x + span / 2))
             } > 0.01)
             resetCamera()
-            tap(bounds("Send bunny left"))
-            tap(bounds("Send bunny right"))
-            bounds("Tick 0")
+
+            tap(bounds("Restore grove"))
+            tap(bounds("Plant saplings"))
+            bounds("Saplings will be planted when time moves forward.")
             tap(bounds("Play"))
-            bounds("Pause")
-            waitUntil("world clock to advance") { currentTick() >= 3 }
-            assertTrue("Wildlife pixels did not move", difference(viewport, action = {}) > 0.001)
-            waitUntil("forage to decrease") { currentForage() in 0 until initialForage }
+            waitUntil("planting feedback") { findVisible { it.text?.endsWith("saplings have taken root.") == true } != null }
             tap(bounds("Pause"))
-            bounds("Play")
+            tap(bounds("Close"))
+
+            tap(bounds("Menu"))
+            tap(bounds("Show diagnostics"))
+            bounds("Seed: 104729")
             val parked = currentTick()
             val parkedForage = currentForage()
-            assertTrue(parked > 0)
-            waitUntil("paused viewport pixels to settle again") { difference(viewport, action = {}) < 0.002 }
+            assertTrue(parked > 0 && parkedForage > 0)
+            SystemClock.sleep(500)
             assertEquals(parked, currentTick())
             assertEquals(parkedForage, currentForage())
 
-            tap(bounds("Show diagnostics"))
+            instrumentation.runOnMainSync { activity.recreate() }
+            waitUntil("previous Activity destroyed") { activity.isDestroyed }
+            bounds("Focus island")
             bounds("Seed: 104729")
-            tap(bounds("Send bunny right"))
+            bounds("Tick $parked")
             tap(bounds("2×"))
             tap(bounds("4×"))
             tap(bounds("Play"))
             waitUntil("running clock at 4×") { currentTick() >= parked + 8 }
-            tap(bounds("Pause"))
-            bounds("Play")
-            val retained = currentTick()
-
-            instrumentation.runOnMainSync { activity.recreate() }
-            waitUntil("previous Activity destroyed") { activity.isDestroyed }
-            bounds("Island ready")
-            bounds("Seed: 104729")
-            bounds("Tick $retained")
-            tap(bounds("Hide diagnostics"))
-            repeat(3) {
-                tap(bounds("Back to home"))
-                tap(bounds("Open world"))
-                bounds("Island ready")
-                bounds("Tick $retained")
-            }
-
             tap(bounds("1×"))
-            tap(bounds("Play"))
-            waitUntil("world to resume at 1×") { currentTick() >= retained + 3 }
             val beforeHome = currentTick()
             assertTrue(input.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME))
             waitUntil("launcher to become visible") {
@@ -118,20 +99,10 @@ class DioramaDeviceTest {
             waitUntil("world to resume after foregrounding") { currentTick() > beforeHome }
             assertTrue("World caught up on time spent in the background", currentTick() - beforeHome < 30)
             tap(bounds("Pause"))
+            tap(bounds("Close"))
+            tap(bounds("Menu"))
             tap(bounds("Back to home"))
-            bounds("Open world")
-
-            for (seed in listOf("271828", "424242", "104729")) {
-                tap(bounds(seed))
-                tap(bounds("Open world"))
-                bounds("Island $seed")
-                bounds("Island ready")
-                bounds("Tick 0")
-                tap(bounds("Show diagnostics"))
-                bounds("Seed: $seed")
-                tap(bounds("Back to home"))
-            }
-            bounds("Open world")
+            bounds("Begin story")
         } finally {
             if (!activity.isDestroyed) instrumentation.runOnMainSync { activity.finish() }
         }
@@ -217,10 +188,12 @@ class DioramaDeviceTest {
         }
     }
 
-    private fun bounds(label: String): Rect {
+    private fun bounds(label: String, enabled: Boolean = false): Rect {
         var result: Rect? = null
         waitUntil(label) {
-            result = findVisible { it.text?.toString()?.trim() == label || it.contentDescription?.toString()?.trim() == label }
+            result = findVisible {
+                (!enabled || it.isEnabled) && (it.text?.toString()?.trim() == label || it.contentDescription?.toString()?.trim() == label)
+            }
                 ?.let { node -> Rect().also(node::getBoundsInScreen) }
             result != null
         }
