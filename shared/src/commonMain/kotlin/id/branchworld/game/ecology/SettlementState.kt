@@ -12,11 +12,15 @@ internal const val MaximumHomes = 4
 internal const val StockLimit = 256
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class SettlementWorld(
     val sites: List<Settlement> = emptyList(),
     val events: List<SettlementEvent> = emptyList(),
     val gatheredFood: Long = 0,
     val gatheredWood: Long = 0,
+    // Omitted before rules v9 so earlier saves keep their exact integrity bytes.
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val village: VillageState? = null,
 )
 
 @Serializable
@@ -50,9 +54,9 @@ internal data class SettlementWelfare(
     val firstShortage: Long? = null,
     val firstRecovery: Long? = null,
 ) {
-    fun collect(tick: Long, residents: Int, stage: Int): SettlementWelfare {
+    fun collect(tick: Long, residents: Int, stage: Int, extra: Int = 0): SettlementWelfare {
         val demand = residents * 2
-        val supply = residents * if (stage >= LowBankStage) 3 else 1
+        val supply = residents * (if (stage >= LowBankStage) 3 else 1) + extra
         val balance = water + supply - demand
         return copy(
             water = balance.coerceIn(0, demand * 2),
@@ -79,5 +83,8 @@ internal data class SettlementEvent(
     val amount: Int = 0,
 )
 
-internal fun SettlementWorld.reservedCells(): List<GridCell> =
-    sites.flatMap { listOf(it.center, it.field) + it.lots }
+internal fun SettlementWorld.reservedCells(): List<GridCell> {
+    val base = sites.flatMap { listOf(it.center, it.field) + it.lots }
+    val extra = village?.structures?.map { it.cell }?.filter { it !in base }.orEmpty()
+    return if (extra.isEmpty()) base else base + extra.distinct()
+}

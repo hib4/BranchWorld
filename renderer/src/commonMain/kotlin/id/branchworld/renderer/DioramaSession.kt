@@ -25,6 +25,7 @@ import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
 import id.branchworld.game.simulation.ClimatePose
 import id.branchworld.game.simulation.WorldCamera
+import id.branchworld.game.simulation.SettlementPose
 import id.branchworld.game.simulation.WorldRenderSource
 import id.branchworld.game.terrain.PropKind
 import id.branchworld.game.terrain.TerrainMap
@@ -68,7 +69,10 @@ internal class DioramaSession(
     private var creatureFocusOrbit = 0L
     private var creatureFocusYaw: Float? = null
     private var propModels = emptyList<Model>()
-    private var settlements: SettlementModels? = null
+    /** Each pine model's instances with their cells, so settlements can clear the trees on their plots. */
+    private var pineStands = emptyList<Pair<Model, List<Pair<Long, MutableMat4f>>>>()
+    private var clearedCells: Set<Long>? = null
+    private var settlements: VillageModels? = null
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
     private val timing = FrameTiming("renderer", measureDraws = true)
@@ -190,6 +194,14 @@ internal class DioramaSession(
                         targetY = world.terrain.heightAt(x, z).coerceAtLeast(0f) + if (narrow) -0.72f else 0.13f,
                         distance = (if (narrow) 4.9f else 4.4f) + span * 1.1f)
                 }
+                is WorldCamera.Focus.Village -> focus.grounds.takeIf { it.isNotEmpty() }?.let { grounds ->
+                    val x = (grounds.minOf { it.x } + grounds.maxOf { it.x } + 1) * CellSize / 2f
+                    val z = (grounds.minOf { it.z } + grounds.maxOf { it.z } + 1) * CellSize / 2f
+                    val span = maxOf(grounds.maxOf { it.x } - grounds.minOf { it.x }, grounds.maxOf { it.z } - grounds.minOf { it.z }) * CellSize
+                    previous.copy(targetX = x, targetZ = z,
+                        targetY = world.terrain.heightAt(x, z).coerceAtLeast(0f) + if (narrow) -0.55f else 0.08f,
+                        distance = ((if (narrow) 3.4f else 2.7f) + span * 0.7f).coerceAtMost(6f))
+                }
                 null -> null
             }
             if (target != null) {
@@ -242,7 +254,9 @@ internal class DioramaSession(
             if (isVisible) transform.setIdentity().translate(0f, -(time * if (light.storm) 5.6f else 3.6f) % 1.7f, 0f)
         }
         wildlife?.show(snapshot, request.reducedMotion)
-        settlements?.show(snapshot.settlements.orEmpty(), snapshot.tick, world.terrain, request.reducedMotion)
+        if (pineStands.isNotEmpty()) clearPines(snapshot.settlements.orEmpty())
+        settlements?.show(snapshot.settlements.orEmpty(), snapshot.tick, snapshot.climate?.dayPhase ?: 0.2f, world.terrain,
+            request.reducedMotion, time)
         forage?.show(snapshot, time, request.reducedMotion)
         localDetails?.show(snapshot, light, time, request.reducedMotion)
         output?.update()
@@ -286,6 +300,8 @@ internal class DioramaSession(
         echoVisible = false
         localDetails = null
         propModels = emptyList()
+        pineStands = emptyList()
+        clearedCells = null
         settlements = null
         assetFrame = -1
         timing.reset()
@@ -373,7 +389,7 @@ internal class DioramaSession(
             canopy = propModels.flatMap { model -> model.meshes.values.mapNotNull { it.shader as? KslPbrShader } }
             updateLandHaze(light)
             val assets = loadCreatureAssets(world.poses.value.wildlife != null)
-            val towns = if (world.poses.value.settlements != null) SettlementModels.load(target) else null
+            val towns = if (world.poses.value.settlements != null) VillageModels.load(target) else null
             if (scene !== target || !currentCoroutineContext().isActive) {
                 throw CancellationException("The island scene was replaced while loading wildlife")
             }
@@ -389,7 +405,30 @@ internal class DioramaSession(
         }
     }
 
+    /** Cosmetic only: trees standing on settlement plots are hidden while those plots are in use. */
+    private fun clearPines(sites: List<SettlementPose>) {
+        val cells = buildSet {
+            for (site in sites) {
+                val village = site.village ?: continue
+                for (ground in village.structures.map { it.ground } + village.center) {
+                    for (dz in -1..1) for (dx in -1..1) add(cellKey(ground.x + dx, ground.z + dz))
+                }
+            }
+        }
+        if (cells == clearedCells) return
+        clearedCells = cells
+        for ((model, stand) in pineStands) {
+            val kept = stand.filter { it.first !in cells }
+            model.meshes.values.forEach { mesh ->
+                mesh.addInstances<InstanceLayouts.ModelMat>(kept.size, clear = true) { buffer ->
+                    for ((_, matrix) in kept) buffer.put { set(it.modelMat, matrix) }
+                }
+            }
+        }
+    }
+
     private suspend fun Scene.placePines(terrain: TerrainMap, variant: PineVariant): Model? {
+        val cells = mutableListOf<Long>()
         val matrices = buildList {
             for (index in 0 until terrain.propCount) {
                 val prop = terrain.prop(index)
@@ -402,6 +441,7 @@ internal class DioramaSession(
                 val variation = 0.82f + ((prop.x * 17 + prop.z * 41) and 15) / 38f
                 val scale = variant.height / variant.sourceHeight * variation * (prop.scalePercent / 100f)
                 // The Kenney scene nodes put the base 0.05 units below their file origin.
+                cells.add(cellKey(prop.x, prop.z))
                 add(MutableMat4f()
                     .translate(center.x, terrain.heightAt(center.x, center.z) + 0.05f * scale, center.z)
                     .rotate(prop.yawDegrees.toFloat().deg, Vec3f.Y_AXIS)
@@ -431,6 +471,7 @@ internal class DioramaSession(
             },
         )).also { model ->
             attachWhileCurrent(model)
+            pineStands = pineStands + (model to cells.zip(matrices))
             model.meshes.values.forEach { mesh ->
                 mesh.isFrustumChecked = false
                 mesh.addInstances<InstanceLayouts.ModelMat>(matrices.size) { buffer ->
@@ -448,6 +489,8 @@ internal class DioramaSession(
         addNode(model)
     }
 }
+
+private fun cellKey(x: Int, z: Int): Long = (x.toLong() shl 32) or (z.toLong() and 0xffffffffL)
 
 private data class PineVariant(val asset: DioramaAsset, val height: Float, val sourceHeight: Float, val foliage: Color)
 

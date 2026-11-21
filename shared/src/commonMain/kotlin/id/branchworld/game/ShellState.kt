@@ -3,7 +3,7 @@ package id.branchworld.game
 import androidx.compose.runtime.saveable.listSaver
 import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.FadingGroveSeed
-import id.branchworld.game.ecology.ShapingRulesVersion
+import id.branchworld.game.ecology.VillageRulesVersion
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 
@@ -17,7 +17,7 @@ internal val IslandGallery = IslandSeeds.map { TerrainKey(it, WatershedWorldgenV
 
 internal data class IslandSessionKey(
     val terrain: TerrainKey,
-    val rules: Int = if (terrain.worldgenVersion == WatershedWorldgenVersion) ShapingRulesVersion else CivilizationRulesVersion,
+    val rules: Int = if (terrain.worldgenVersion == WatershedWorldgenVersion) VillageRulesVersion else CivilizationRulesVersion,
 )
 
 internal data class ShellState(

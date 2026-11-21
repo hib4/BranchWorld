@@ -121,7 +121,7 @@ internal fun ComparisonHeader(
                     label = { Text(stringResource(Res.string.comparison_select_right)) })
             }
             val side = if (view.showRight) view.right else view.left
-            Text(if (diagnostics || island.key.rules != ShapingRulesVersion) {
+            Text(if (diagnostics || island.key.rules < ShapingRulesVersion) {
                 stringResource(Res.string.comparison_viewing, side.name, view.pair.tick.toString())
             } else stringResource(Res.string.shape_compare_viewing, side.name))
         }
@@ -188,7 +188,7 @@ internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView, d
         target?.let(island::compareAt)
     }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        val showTicks = diagnostics || island.key.rules != ShapingRulesVersion
+        val showTicks = diagnostics || island.key.rules < ShapingRulesVersion
         if (showTicks) Text(stringResource(Res.string.comparison_ticks, view.range.first.toString(), view.range.last.toString()))
         TimelineScrubber(view.range, tick, enabled = true, showTicks = showTicks, onSeek = island::compareAt)
         if (showTicks) FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -315,11 +315,11 @@ private fun ComparisonEvents(island: IslandLoad.Ready, branch: BranchSummary, si
     if (side.events.isEmpty() && wildlifeMoments.isEmpty() && side.settlementEvents.isEmpty() && welfare?.firstShortage == null) {
         Text(stringResource(Res.string.comparison_no_events))
     }
-    for (milestone in side.settlementEvents) Text(milestone.label(island.key.rules != ShapingRulesVersion), style = MaterialTheme.typography.bodySmall)
+    for (milestone in side.settlementEvents) Text(milestone.label(island.key.rules < ShapingRulesVersion), style = MaterialTheme.typography.bodySmall)
     for (moment in wildlifeMoments) Text(moment.description(), style = MaterialTheme.typography.bodySmall)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         for (marker in side.events) {
-            OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label(island.key.rules != ShapingRulesVersion)) }
+            OutlinedButton(onClick = { island.inspectComparisonEvent(branch.id, marker) }) { Text(marker.label(island.key.rules < ShapingRulesVersion)) }
         }
     }
     if (view.event?.branchId == branch.id) {

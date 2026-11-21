@@ -33,6 +33,9 @@ import branchworld.shared.generated.resources.*
 import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.FadingGroveSeed
 import id.branchworld.game.ecology.SettlementEvent
+import id.branchworld.game.ecology.StructureKind
+import id.branchworld.game.ecology.VillageEvent
+import id.branchworld.game.ecology.VillageState
 import id.branchworld.game.simulation.EchoKind
 import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.simulation.WildlifeMoment
@@ -145,6 +148,13 @@ internal fun LivingEchoPlaces(
         EchoKind.Field -> echoOutcome(Res.string.echo_field_outcome, a?.welfare?.harvest, b?.welfare?.harvest, view)
         EchoKind.Grove -> echoOutcome(Res.string.echo_grove_outcome, a?.rootedGroves, b?.rootedGroves, view)
             ?: echoOutcome(Res.string.echo_sapling_outcome, pair.left.metrics.saplings.toInt(), pair.right.metrics.saplings.toInt(), view)
+        EchoKind.Homes -> echoOutcome(Res.string.echo_homes_outcome,
+            pair.left.settlement?.homes?.toInt(), pair.right.settlement?.homes?.toInt(), view)
+        EchoKind.Household -> echoOutcome(Res.string.echo_families_outcome,
+            pair.left.settlement?.residents?.toInt(), pair.right.settlement?.residents?.toInt(), view)
+        EchoKind.Well -> echoOutcome(Res.string.echo_well_outcome, pair.left.village.wells(), pair.right.village.wells(), view)
+        EchoKind.Clearing -> echoOutcome(Res.string.echo_clearing_outcome,
+            pair.left.village?.cleared?.size, pair.right.village?.cleared?.size, view)
         else -> null
     }
     Surface(modifier, color = NightGreen.copy(alpha = 0.94f), contentColor = Parchment,
@@ -172,12 +182,17 @@ internal fun LivingEchoPlaces(
                     }
                 }
                 if (context != null) Text(context, style = MaterialTheme.typography.bodySmall)
-                if (view.echoEnabled) Text(stringResource(Res.string.echo_legend),
+                val villageMarks = groups.keys.any { it in VillageEchoKinds }
+                if (view.echoEnabled) Text(stringResource(if (villageMarks) Res.string.echo_village_legend else Res.string.echo_legend),
                     style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 3.dp, bottom = 6.dp))
             }
         }
     }
 }
+
+private val VillageEchoKinds = setOf(EchoKind.Homes, EchoKind.Well, EchoKind.Clearing, EchoKind.Household)
+
+private fun VillageState?.wells() = this?.structures?.count { it.kind == StructureKind.Well && it.complete } ?: 0
 
 @Composable
 private fun echoOutcome(label: StringResource, left: Int?, right: Int?, view: ComparisonView): String? =
@@ -191,6 +206,8 @@ private fun shortMomentLabel(moment: HistoryMoment, chapter: Boolean): String {
         HistoryMoment.Kind.Fork -> Res.string.echo_fork_short
         HistoryMoment.Kind.Shortage -> if (chapter) Res.string.echo_harvest_short else Res.string.echo_scarcity
         HistoryMoment.Kind.AfterRain -> Res.string.echo_rains_short
+        HistoryMoment.Kind.Petition -> Res.string.echo_petition_short
+        HistoryMoment.Kind.Departure -> Res.string.echo_departure_short
         else -> return momentLabel(moment, chapter)
     }
     return stringResource(label)
@@ -206,6 +223,8 @@ internal fun HistoryMoment.rank() = when (kind) {
     HistoryMoment.Kind.Shortage -> 2
     HistoryMoment.Kind.Recovery -> 3
     HistoryMoment.Kind.AfterRain -> 4
+    HistoryMoment.Kind.Petition -> 2
+    HistoryMoment.Kind.Departure -> 3
     HistoryMoment.Kind.Intervention -> 5
 }
 
@@ -216,6 +235,8 @@ internal fun momentLabel(moment: HistoryMoment, chapter: Boolean): String = when
     HistoryMoment.Kind.Shortage -> stringResource(if (chapter) Res.string.echo_shortage else Res.string.echo_scarcity)
     HistoryMoment.Kind.Recovery -> stringResource(Res.string.echo_recovery)
     HistoryMoment.Kind.AfterRain -> stringResource(Res.string.echo_after_rain)
+    HistoryMoment.Kind.Petition -> stringResource(Res.string.echo_petition)
+    HistoryMoment.Kind.Departure -> stringResource(Res.string.echo_departure)
     HistoryMoment.Kind.Intervention -> checkNotNull(moment.intervention).marker.label(showTicks = false)
 }
 
@@ -225,6 +246,9 @@ private fun EchoKind.label() = when (this) {
     EchoKind.Grove -> Res.string.echo_grove
     EchoKind.Homes -> Res.string.echo_homes
     EchoKind.WetGround -> Res.string.echo_wet_ground
+    EchoKind.Well -> Res.string.echo_well
+    EchoKind.Clearing -> Res.string.echo_clearing
+    EchoKind.Household -> Res.string.echo_household
 }
 
 private sealed interface ChronicleEntry {
@@ -232,6 +256,11 @@ private sealed interface ChronicleEntry {
     data class Command(val event: OwnedIntervention) : ChronicleEntry { override val tick get() = event.marker.tick }
     data class Wildlife(val event: WildlifeMoment) : ChronicleEntry { override val tick get() = event.tick }
     data class Village(val event: SettlementEvent) : ChronicleEntry { override val tick get() = event.tick }
+    data class Household(val event: VillageEvent, val village: VillageState) : ChronicleEntry {
+        override val tick get() = event.tick
+        override fun equals(other: Any?) = other is Household && other.event == event
+        override fun hashCode() = event.hashCode()
+    }
     data class Moment(val event: HistoryMoment) : ChronicleEntry { override val tick get() = event.tick }
 }
 
@@ -239,6 +268,7 @@ private fun ComparedBranch.chronicle(commands: List<OwnedIntervention>): List<Ch
     commands.mapTo(this, ChronicleEntry::Command)
     projection.wildlife?.moments.orEmpty().mapTo(this, ChronicleEntry::Wildlife)
     settlementEvents.mapTo(this, ChronicleEntry::Village)
+    village?.let { state -> state.chronicle.mapTo(this) { ChronicleEntry.Household(it, state) } }
     projection.shaping?.warningAt?.let { add(ChronicleEntry.Moment(HistoryMoment(it, HistoryMoment.Kind.Warning))) }
     projection.shaping?.welfare?.firstShortage?.let { add(ChronicleEntry.Moment(HistoryMoment(it, HistoryMoment.Kind.Shortage))) }
     projection.shaping?.welfare?.firstRecovery?.let { add(ChronicleEntry.Moment(HistoryMoment(it, HistoryMoment.Kind.Recovery))) }
@@ -277,6 +307,7 @@ private fun ChronicleTrail(name: String, entries: List<ChronicleEntry>, island: 
                 else -> momentLabel(entry.event, chapter)
             }
             is ChronicleEntry.Village -> entry.event.label(showTick = false)
+            is ChronicleEntry.Household -> entry.event.describe(entry.village, chapter)
             is ChronicleEntry.Wildlife -> entry.event.description()
         }
         if (entry is ChronicleEntry.Command) {

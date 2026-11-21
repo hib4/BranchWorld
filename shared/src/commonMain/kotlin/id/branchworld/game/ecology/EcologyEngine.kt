@@ -2,6 +2,7 @@ package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.CreatureHeading
+import id.branchworld.game.simulation.EndorsePlan
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SetDestination
@@ -23,16 +24,18 @@ internal class EcologyEngine(
     private val wildlife by lazy { Wildlife(island) }
     private val regional by lazy { RegionalEcology(island) }
     private val economy by lazy { SettlementEconomy(island) }
-    private val chapter = rulesVersion == ShapingRulesVersion && terrain.key.seed == FadingGroveSeed
+    private val villageRules by lazy { VillageRules(island, economy) }
+    private val chapter = rulesVersion in ShapingRulesVersion..VillageRulesVersion && terrain.key.seed == FadingGroveSeed
     private val openingRain = if (chapter) OpeningDryEnd else 300L
     private val rainSoils by lazy { List(RegionCount) { rainGround(terrain, it) } }
     private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
-            ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
+            VillageRulesVersion, ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
                 val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain),
-                    settlements = SettlementWorld(), shaping = if (rulesVersion == ShapingRulesVersion) ShapingState() else null)
+                    settlements = SettlementWorld(village = if (rulesVersion == VillageRulesVersion) VillageState() else null),
+                    shaping = if (rulesVersion >= ShapingRulesVersion) ShapingState() else null)
                 if (rulesVersion >= WildlifeRulesVersion) wildlife.populate(opening) else opening
             }
             CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
@@ -49,7 +52,7 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
-        require((rulesVersion in WatershedRulesVersion..ShapingRulesVersion) == (terrain.watershed != null))
+        require((rulesVersion in WatershedRulesVersion..VillageRulesVersion) == (terrain.watershed != null))
         require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
         require(state.settlements == null || state.environment != null)
         require(state.wildlife == null || state.environment?.recharge != null)
@@ -92,7 +95,9 @@ internal class EcologyEngine(
     }
 
     fun submit(command: WorldCommand): Boolean =
-        validTarget(command) &&
+        validTarget(command) && (command !is EndorsePlan || state.settlements?.let {
+            villageRules.endorse(it, command.tick, command.petitionId, command.option)
+        } == true) &&
             (command !is SetDestination || state.creatures.any { it.id == command.entityId && it.species == Species.Rabbit }) &&
             inputs.submit(state.tick, command)
 
@@ -101,6 +106,7 @@ internal class EcologyEngine(
         is ReforestRegion -> state.environment != null && command.region in 0 until RegionCount
         is SupplementForage -> state.environment != null && state.shaping == null && command.region in 0 until RegionCount
         is CallRainRegion -> state.shaping != null && command.region in 0 until RegionCount
+        is EndorsePlan -> state.settlements?.village != null && command.petitionId > 0
     }
 
     fun acceptedCommands(): List<WorldCommand> = inputs.accepted()
@@ -120,7 +126,9 @@ internal class EcologyEngine(
         state.wildlife?.validate(state, island)
         require(state.creatures.all { it.matureAt >= 0 && it.breedAfter >= 0 && it.depletedTicks in 0 until SurvivalTicks })
         val natural = state.patches.filterNot { it.planted }
-        require(natural.map { it.copy(biomass = it.capacity) } == baseline.patches)
+        val cleared = state.settlements?.village?.cleared.orEmpty().toSet()
+        require(natural.none { it.id in cleared })
+        require(natural.map { it.copy(biomass = it.capacity) } == baseline.patches.filterNot { it.id in cleared })
         val planted = state.patches.filter { it.planted }
         require(planted.all { regional.validSapling(it, state.springs) })
         require(ledger.introduced >= planted.size * RegionalEcology.SaplingBiomass)
@@ -136,7 +144,8 @@ internal class EcologyEngine(
             require(environment == opening.copy(recharge = recharge))
         } else require(environment.nextChange - state.tick in 0..360)
         state.settlements?.let {
-            economy.validate(it, state.tick, state.patches, state.springs, state.shaping != null)
+            if (it.village != null) villageRules.validate(it, state.tick, state.patches, state.springs, baseline.patches)
+            else economy.validate(it, state.tick, state.patches, state.springs, state.shaping != null)
             require(it.gatheredFood.toULong() + it.gatheredWood.toULong() <= ledger.consumed.toULong())
         }
     }
@@ -152,7 +161,7 @@ internal class EcologyEngine(
 
     fun preview(kind: Intervention, region: Int): ShapePreview? {
         val shaping = state.shaping ?: return null
-        if (region !in 0 until RegionCount || kind == Intervention.Supplement) return null
+        if (region !in 0 until RegionCount || kind == Intervention.Supplement || kind == Intervention.Plan) return null
         val village = state.settlements?.sites?.lastOrNull { it.residents > 0 }
         val sites = if (kind == Intervention.Reforest) regional.plantingSites(region, state.patches, state.springs,
             state.settlements?.reservedCells().orEmpty()) else emptyList()
@@ -172,12 +181,26 @@ internal class EcologyEngine(
     fun recommendedGroveRegion(): Int =
         if (chapter) 9 else inspectRegions().indexOfFirst { it.canPlant }.coerceAtLeast(0)
 
+    /** The village's open petition and the plans it can carry out. */
+    fun openPetition(): Petition? = state.settlements?.village?.openPetition()
+
+    fun pendingEndorsement(): EndorsePlan? = inputs.pending().firstOrNull { it is EndorsePlan } as EndorsePlan?
+
+    fun endorse(option: PlanOption): Boolean {
+        val petition = openPetition() ?: return false
+        if (option !in petition.options || pendingEndorsement() != null || state.tick >= petition.deadline) return false
+        return inputs.submitNext(state.tick) { tick, sequence -> EndorsePlan(tick, sequence, petition.id, option) }
+    }
+
+    fun cancelEndorsement(): Boolean = pendingEndorsement()?.let(inputs::cancel) ?: false
+
     fun pendingShape(): WorldCommand? = if (state.shaping == null) null else
         inputs.pending().firstOrNull { it is CallRainRegion || it is ReforestRegion }
 
     fun cancelShape(): Boolean = pendingShape()?.let(inputs::cancel) ?: false
 
     fun intervene(kind: Intervention, region: Int): Boolean {
+        if (kind == Intervention.Plan) return false
         if (state.shaping != null) {
             if (preview(kind, region)?.let { it.blocked == null } != true) return false
         } else {
@@ -190,7 +213,7 @@ internal class EcologyEngine(
                 command.tick == nextTick && when (command) {
                     is ReforestRegion -> kind == Intervention.Reforest && command.region == region
                     is SupplementForage -> kind == Intervention.Supplement && command.region == region
-                    is CallRainRegion, is SetDestination -> false
+                    is CallRainRegion, is SetDestination, is EndorsePlan -> false
                 }
             }) return false
         }
@@ -199,6 +222,7 @@ internal class EcologyEngine(
                 Intervention.Reforest -> ReforestRegion(tick, sequence, region)
                 Intervention.Supplement -> SupplementForage(tick, sequence, region)
                 Intervention.Rain -> CallRainRegion(tick, sequence, region)
+                Intervention.Plan -> error("Plans are endorsed through a petition")
             }
         }
     }
@@ -227,9 +251,13 @@ internal class EcologyEngine(
         val patches = previous.patches.toMutableList()
         appliedCommands = inputs.at(tick)
         var introduced = 0
+        var endorsed = previous.settlements
         val results = buildList {
             for (command in appliedCommands) {
                 when (command) {
+                    is EndorsePlan -> endorsed = endorsed?.let {
+                        villageRules.applyEndorsement(it, tick, command.petitionId, command.option)
+                    }
                     is SetDestination -> waypoints[command.entityId] = command.cell
                     is ReforestRegion -> {
                         val current = shaping
@@ -282,8 +310,11 @@ internal class EcologyEngine(
         val births = nextId - previous.nextEntityId
         val deaths = previous.creatures.size - animals.size + births
         val ledger = previous.ledger
-        val settlements = previous.settlements?.let {
-            if (tick % SettlementTurn == 0L) economy.advance(
+        val settlements = endorsed?.let {
+            if (it.village != null) {
+                val grazed = villageRules.graze(it, animals)
+                villageRules.advance(grazed, tick, checkNotNull(environment), patches, previous.springs, checkNotNull(conditions))
+            } else if (tick % SettlementTurn == 0L) economy.advance(
                 it, tick, requireNotNull(environment).weather, patches, previous.springs, environment.recharge, conditions,
             )
             else it

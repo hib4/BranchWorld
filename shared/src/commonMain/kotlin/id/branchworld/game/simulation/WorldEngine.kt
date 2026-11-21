@@ -1,5 +1,7 @@
 package id.branchworld.game.simulation
 
+import id.branchworld.game.ecology.PlanOption
+
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.TerrainNavigation
@@ -79,6 +81,16 @@ internal data class CallRainRegion(
     override val tick: Long,
     override val sequence: Long,
     val region: Int,
+) : WorldCommand
+
+/** The Keeper endorses one of the plans in the village's open petition (rules v9). */
+@Serializable
+@SerialName("endorse_plan")
+internal data class EndorsePlan(
+    override val tick: Long,
+    override val sequence: Long,
+    val petitionId: Int,
+    val option: PlanOption,
 ) : WorldCommand
 
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */

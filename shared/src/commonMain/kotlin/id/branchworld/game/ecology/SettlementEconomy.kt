@@ -108,9 +108,9 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         return workers * (soil + if (weather == Weather.Rain) 1 else 0)
     }
 
-    private fun harvest(
+    internal fun harvest(
         patches: MutableList<ForagePatch>, local: List<Int>, kind: ForageKind, capacity: Int, space: Int,
-        protectRoots: Boolean = false,
+        protectRoots: Boolean = false, retainDivisor: Int = 4,
     ): Int {
         val budget = minOf(capacity, space).coerceAtLeast(0)
         var remaining = budget
@@ -119,7 +119,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
             val patch = patches[index]
             if (patch.kind != kind) continue
             val available = if (protectRoots && patch.planted) patch.availableBrowse(true)
-                else (patch.biomass - patch.capacity / 4).coerceAtLeast(0)
+                else (patch.biomass - patch.capacity / retainDivisor).coerceAtLeast(0)
             val taken = minOf(remaining, available)
             if (taken == 0) continue
             patches[index] = patch.copy(biomass = patch.biomass - taken)
@@ -128,13 +128,15 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         return budget - remaining
     }
 
-    private fun found(
+    internal fun found(
         id: Int, tick: Long, residents: Int, patches: List<ForagePatch>, springs: List<GridCell>, previous: List<Settlement>,
+        lotCount: Int = MaximumHomes, blockedCells: Collection<GridCell> = emptyList(), lotSpacing: Int = 1,
     ): Settlement? {
         val localFood = patches.asSequence().filter { it.kind == ForageKind.Meadow }
             .groupBy { it.cell.region() }.mapValues { (_, forage) -> forage.sumOf { it.biomass } }
         val blocked = patches.mapTo(springs.toMutableSet()) { it.cell }
         for (site in previous) blocked.addAll(site.lots + site.center + site.field)
+        blocked.addAll(blockedCells)
         val distances = springs.map(island::terrainDistance)
         val candidates = island.reachable.asSequence()
             .filter { it !in blocked && suitable(it) && localFood.getOrElse(it.region()) { 0 } >= 80 }
@@ -150,10 +152,21 @@ internal class SettlementEconomy(private val island: IslandEcology) {
                     if (cell != center && cell in plots && cell !in blocked && suitable(cell)) add(cell)
                 }
             }
-            if (clear.size < MaximumHomes + 1) continue
+            if (clear.size < lotCount + 1) continue
             val field = clear.maxWith(compareBy<GridCell> { terrain.terrainCell(it).moisture }.thenByDescending(::cellId))
-            val lots = clear.asSequence().filter { it != field }
-                .sortedWith(compareBy<GridCell> { distance(it, center) }.thenBy(::cellId)).take(MaximumHomes).toList()
+            val ordered = clear.asSequence().filter { it != field }
+                .sortedWith(compareBy<GridCell> { distance(it, center) }.thenBy(::cellId))
+            val lots = if (lotSpacing <= 1) ordered.take(lotCount).toList() else buildList {
+                // Spaced lots keep homes from overlapping at their rendered size.
+                val taken = mutableListOf(center, field)
+                for (cell in ordered) {
+                    if (size == lotCount) break
+                    if (taken.any { maxOf(abs(it.x - cell.x), abs(it.z - cell.z)) < lotSpacing }) continue
+                    add(cell)
+                    taken.add(cell)
+                }
+            }
+            if (lots.size < lotCount) continue
             val quarry = uplands.count { cell ->
                 distance(cell, center) <= 12 && previous.none { distance(cell, it.center) <= 12 }
             } * 8
@@ -205,7 +218,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         })
     }
 
-    private fun suitable(cell: GridCell): Boolean = biome(cell) in listOf(Biome.Meadow, Biome.PineForest)
+    internal fun suitable(cell: GridCell): Boolean = cell in plots && biome(cell) in listOf(Biome.Meadow, Biome.PineForest)
     private fun biome(cell: GridCell) = terrain.terrainCell(cell).biome
     private fun distance(a: GridCell, b: GridCell) = abs(a.x - b.x) + abs(a.z - b.z)
     private fun Settlement.event(tick: Long, event: SettlementEventKind, amount: Int = 0) = SettlementEvent(tick, id, event, amount)

@@ -102,4 +102,6 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 
 The runtime tree set uses Kenney Nature’s `tree_pineRoundA`, `tree_pineRoundB`, and `tree_pineTallA_detailed`, with in-engine matte materials and normalized ground pivots. The original BranchWorld surf, wind, rain, and bird layers can be regenerated with `python3 assets/audio/branchworld/generate_coast.py`. World Sounds controls the ambience and interaction cues. Reduce Motion holds decorative effects and camera transitions while keeping weather and lighting visible.
 
+Hollowmere (rules v9) uses KayKit Medieval homes A/B in four colours, the well, scaffolding, stores, fence and lumber, all sharing one runtime copy of `hexagons_medieval.png`, plus Kenney Nature furrows, wheat, stumps and log stacks. Villagers are built by `python3 -I tools/assets/build_villagers.py .`, which combines the KayKit Ranger, Rogue and Barbarian bodies (quiver and bear hat removed) with ten renamed `Rig_Medium` clips: idle, walk, carry, chop, dig, hammer, pick, gather, sit and wave.
+
 Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on Android and Desktop.

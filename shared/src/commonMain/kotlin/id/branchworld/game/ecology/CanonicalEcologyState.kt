@@ -99,6 +99,7 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(event.kind.code)
             writeInt(event.amount)
         }
+        world.village?.let(::writeVillage)
     }
     wildlife?.let { history ->
         writeLong(history.catches)
@@ -131,4 +132,62 @@ internal fun EcologyState.canonicalHash(): String = canonicalBytes().canonicalHa
 private fun CanonicalWriter.writeOptionalCell(cell: GridCell?) {
     writeInt(if (cell == null) 0 else 1)
     if (cell != null) writeCell(cell)
+}
+
+/** Rules v9 village section. Absent in earlier rules, so their canonical bytes are unchanged. */
+private fun CanonicalWriter.writeVillage(village: VillageState) {
+    writeInt(village.nextId)
+    writeInt(village.thirstTurns)
+    writeInt(village.grazing)
+    writeLong(village.lastGrazed ?: -1L)
+    writeLong(village.lastFlood ?: -1L)
+    writeInt(village.cleared.size)
+    village.cleared.forEach(::writeInt)
+    writeInt(village.households.size)
+    for (household in village.households) {
+        writeInt(household.id)
+        writeInt(household.name)
+        writeInt(household.siteId)
+        writeInt(household.home)
+        writeInt(household.members)
+        writeInt(household.trade.code)
+        writeLong(household.joinedAt)
+        writeInt(household.hardship)
+        writeInt(household.task.code)
+        writeLong(household.leftAt ?: -1L)
+        writeInt(household.leftBecause?.code ?: 0)
+    }
+    writeInt(village.structures.size)
+    for (structure in village.structures) {
+        writeInt(structure.id)
+        writeInt(structure.siteId)
+        writeInt(structure.kind.code)
+        writeCell(structure.cell)
+        writeLong(structure.startedAt)
+        writeInt(structure.required)
+        writeInt(structure.progress)
+        writeInt(structure.level)
+        writeLong(structure.completedAt ?: -1L)
+    }
+    writeInt(village.petitions.size)
+    for (petition in village.petitions) {
+        writeInt(petition.id)
+        writeInt(petition.kind.code)
+        writeInt(petition.siteId)
+        writeLong(petition.raisedAt)
+        writeLong(petition.deadline)
+        writeInt(petition.options.size)
+        petition.options.forEach { writeInt(it.code) }
+        writeInt(petition.choice?.code ?: 0)
+        writeLong(petition.decidedAt ?: -1L)
+        writeInt(if (petition.byKeeper) 1 else 0)
+    }
+    writeInt(village.chronicle.size)
+    for (event in village.chronicle) {
+        writeLong(event.tick)
+        writeInt(event.kind.code)
+        writeInt(event.siteId)
+        writeInt(event.subject)
+        writeInt(event.detail)
+    }
 }

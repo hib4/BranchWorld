@@ -2,6 +2,7 @@ package id.branchworld.game
 
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.Intervention
+import id.branchworld.game.ecology.PlanOption
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.canonicalHash
@@ -226,6 +227,26 @@ internal sealed interface IslandLoad {
             if (navigationAvailable) clock.playTo(tick)
         }
 
+        /** Hollowmere's open petition, if the village is waiting for the Keeper. */
+        fun openPetition() = timeline.openPetition()
+        fun pendingEndorsement() = timeline.pendingEndorsement()
+
+        fun endorse(option: PlanOption) {
+            if (navigationAvailable && timeline.endorse(option)) {
+                feedback.value = feedback.value.copy(queued = timeline.queuedInterventions)
+                updateTimeline()
+            }
+        }
+
+        fun cancelEndorsement() {
+            if (navigationAvailable && timeline.cancelEndorsement()) {
+                feedback.value = feedback.value.copy(queued = timeline.queuedInterventions)
+                updateTimeline()
+            }
+        }
+
+        fun villageChronicle(branch: Int) = timeline.villageChronicle(branch)
+
         suspend fun seek(tick: Long) = navigate(timeline.branchId, tick)
 
         fun markers(branch: Int) = timeline.interventionMarkers(branch, includePending = true)
@@ -258,6 +279,8 @@ internal sealed interface IslandLoad {
                 feedback.value = InterventionFeedback(timeline.queuedInterventions)
                 return false
             }
+            // A new petition is a turning point: hold time so the Keeper can answer it.
+            if (timeline.openPetition()?.raisedAt == timeline.state.tick) clock.pause()
             val queued = timeline.queuedInterventions
             val applied = timeline.interventionResults
             if (applied.isNotEmpty() || queued != feedback.value.queued) {
@@ -336,10 +359,10 @@ internal sealed interface IslandLoad {
             val right = branches.firstOrNull { it.id == rightId } ?: return
             val range = commonTicks(left, right)
             val previous = comparisonState.value
-            val current = previous?.tick ?: timeline.state.tick.takeIf { key.rules == ShapingRulesVersion }
+            val current = previous?.tick ?: timeline.state.tick.takeIf { key.rules >= ShapingRulesVersion }
             comparisonState.value = ComparisonView(left, right, range,
                 current?.takeIf { it in range } ?: range.last.takeUnless { range.isEmpty() },
-                showRight = (previous?.visibleBranchId ?: timeline.branchId.takeIf { key.rules == ShapingRulesVersion }) == rightId,
+                showRight = (previous?.visibleBranchId ?: timeline.branchId.takeIf { key.rules >= ShapingRulesVersion }) == rightId,
                 echoEnabled = previous?.echoEnabled ?: true,
                 sharedPast = timeline.sharedPast(leftId, rightId),
                 moments = timeline.comparisonMoments(leftId, rightId, range),

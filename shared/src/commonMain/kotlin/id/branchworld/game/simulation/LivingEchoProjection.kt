@@ -2,6 +2,9 @@ package id.branchworld.game.simulation
 
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.RegionalWater
+import id.branchworld.game.ecology.Structure
+import id.branchworld.game.ecology.StructureKind
+import id.branchworld.game.ecology.VillageState
 import id.branchworld.game.ecology.rainCovers
 import id.branchworld.game.ecology.rooted
 import id.branchworld.game.terrain.TerrainMap
@@ -10,7 +13,8 @@ import kotlin.math.abs
 /** Locations where the two reconstructed histories differ at the same moment. */
 data class LivingEchoProjection(val sites: List<EchoSite>)
 
-enum class EchoKind { Bank, Field, Grove, Homes, WetGround }
+/** Homes, Well and Clearing values: 0 absent, 1 under construction, 2 standing, 3 enlarged. Household: members at home. */
+enum class EchoKind { Bank, Field, Grove, Homes, WetGround, Well, Clearing, Household }
 
 data class EchoSite(
     val kind: EchoKind,
@@ -54,10 +58,39 @@ internal fun livingEcho(terrain: TerrainMap, visible: EcologyState, alternate: E
                 }
             }
             if (field != null) changed(EchoKind.Field, field, a?.cropYield ?: 0, b?.cropYield ?: 0)
-            val localHomes = local?.lots.orEmpty().take(local?.homes ?: 0)
-            val otherHomes = other?.lots.orEmpty().take(other?.homes ?: 0)
-            for (lot in (localHomes + otherHomes).distinct()) {
-                changed(EchoKind.Homes, lot, if (lot in localHomes) 1 else 0, if (lot in otherHomes) 1 else 0)
+            if (visible.settlements?.village == null && alternate.settlements?.village == null) {
+                val localHomes = local?.lots.orEmpty().take(local?.homes ?: 0)
+                val otherHomes = other?.lots.orEmpty().take(other?.homes ?: 0)
+                for (lot in (localHomes + otherHomes).distinct()) {
+                    changed(EchoKind.Homes, lot, if (lot in localHomes) 1 else 0, if (lot in otherHomes) 1 else 0)
+                }
+            }
+        }
+        val localVillage = visible.settlements?.village
+        val otherVillage = alternate.settlements?.village
+        if (localVillage != null || otherVillage != null) {
+            fun built(village: VillageState?) = village?.structures.orEmpty()
+                .filter { it.kind != StructureKind.Field }
+                .associate { (it.kind to it.cell) to it.echoStage() }
+            val localBuilt = built(localVillage)
+            val otherBuilt = built(otherVillage)
+            for (key in (localBuilt.keys + otherBuilt.keys).distinct()) {
+                val kind = when (key.first) {
+                    StructureKind.Home -> EchoKind.Homes
+                    StructureKind.Well -> EchoKind.Well
+                    StructureKind.Clearing, StructureKind.Field -> EchoKind.Clearing
+                }
+                changed(kind, key.second, localBuilt[key] ?: 0, otherBuilt[key] ?: 0)
+            }
+            fun families(village: VillageState?): Map<GridCell, Int> {
+                val homes = village?.structures.orEmpty().associateBy { it.id }
+                return village?.households.orEmpty().filter { it.active }
+                    .mapNotNull { household -> homes[household.home]?.let { it.cell to household.members } }.toMap()
+            }
+            val localFamilies = families(localVillage)
+            val otherFamilies = families(otherVillage)
+            for (cell in (localFamilies.keys + otherFamilies.keys).distinct()) {
+                changed(EchoKind.Household, cell, localFamilies[cell] ?: 0, otherFamilies[cell] ?: 0)
             }
         }
 
@@ -84,4 +117,10 @@ internal fun livingEcho(terrain: TerrainMap, visible: EcologyState, alternate: E
         }
     }
     return LivingEchoProjection(sites.sortedWith(compareBy({ it.kind }, { it.ground.z }, { it.ground.x })))
+}
+
+private fun Structure.echoStage() = when {
+    !complete && level == 1 -> 1
+    complete && level >= 2 -> 3
+    else -> 2
 }

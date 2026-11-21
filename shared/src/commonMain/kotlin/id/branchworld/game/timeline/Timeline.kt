@@ -5,9 +5,15 @@ import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.FadingGroveSeed
 import id.branchworld.game.ecology.ShapingRulesVersion
+import id.branchworld.game.ecology.VillageRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.SettlementEvent
+import id.branchworld.game.ecology.Petition
+import id.branchworld.game.ecology.PlanOption
+import id.branchworld.game.ecology.VillageEvent
+import id.branchworld.game.ecology.VillageEventKind
+import id.branchworld.game.simulation.EndorsePlan
 import id.branchworld.game.simulation.SetDestination
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
@@ -76,6 +82,30 @@ internal class Timeline private constructor(
     fun settlementEvents(branchId: Int): List<SettlementEvent> {
         val branch = branches[branchId] ?: return emptyList()
         return branch.head.settlements?.events.orEmpty().filter { it.tick > branch.start.tick }
+    }
+
+    /** Rules v9 chronicle recorded after this branch began. */
+    fun villageChronicle(branchId: Int): List<VillageEvent> {
+        val branch = branches[branchId] ?: return emptyList()
+        return branch.head.settlements?.village?.chronicle.orEmpty().filter { it.tick > branch.start.tick }
+    }
+
+    fun openPetition(): Petition? = engine.openPetition()
+
+    fun pendingEndorsement(): EndorsePlan? = engine.pendingEndorsement()
+
+    fun endorse(option: PlanOption): Boolean {
+        if (!editsAllowed || !engine.endorse(option)) return false
+        commandCount++
+        interventionCount++
+        return true
+    }
+
+    fun cancelEndorsement(): Boolean {
+        if (state.tick != active.head.tick || !engine.cancelEndorsement()) return false
+        commandCount--
+        interventionCount--
+        return true
     }
 
     fun renameActive(name: String): Boolean {
@@ -155,6 +185,11 @@ internal class Timeline private constructor(
                 for (site in head.settlements?.sites.orEmpty()) {
                     moment(site.welfare?.firstShortage, HistoryMoment.Kind.Shortage)?.let(::add)
                     moment(site.welfare?.firstRecovery, HistoryMoment.Kind.Recovery)?.let(::add)
+                }
+                head.settlements?.village?.let { village ->
+                    village.petitions.mapTo(this) { HistoryMoment(it.raisedAt, HistoryMoment.Kind.Petition) }
+                    village.chronicle.filter { it.kind == VillageEventKind.HouseholdLeft }
+                        .mapTo(this) { HistoryMoment(it.tick, HistoryMoment.Kind.Departure) }
                 }
             }
             for (command in (interventionTrail(leftId, range.last) + interventionTrail(rightId, range.last)).distinct()) {
@@ -283,7 +318,7 @@ internal class Timeline private constructor(
     companion object {
         fun start(
             terrain: TerrainMap,
-            rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else ShapingRulesVersion,
+            rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else VillageRulesVersion,
         ): Timeline {
             val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false)
             return Timeline(terrain, root(engine.state, emptyList()), engine)

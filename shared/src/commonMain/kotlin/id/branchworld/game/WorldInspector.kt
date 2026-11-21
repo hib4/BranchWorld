@@ -120,6 +120,7 @@ private fun RegionalControls(island: IslandLoad.Ready) {
             Intervention.Reforest -> Res.string.plants_applied
             Intervention.Supplement -> Res.string.supplement_applied
             Intervention.Rain -> Res.string.shape_rain_arrived
+            Intervention.Plan -> continue
         }
         Text(stringResource(message, result.tick.toString(), regionName(result.region), result.amount), live)
     }

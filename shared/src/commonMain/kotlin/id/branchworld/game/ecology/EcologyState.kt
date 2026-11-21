@@ -97,6 +97,7 @@ internal data class EcologyState(
     val shaping: ShapingState? = null,
 ) {
     val rulesVersion: Int get() = when {
+        settlements?.village != null -> VillageRulesVersion
         shaping != null -> ShapingRulesVersion
         wildlife != null -> WildlifeRulesVersion
         environment?.recharge != null -> WatershedRulesVersion

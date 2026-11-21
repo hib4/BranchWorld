@@ -65,7 +65,8 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
                 val tint = when {
                     aqua && alternate -> Color(0.59f, 0.96f, 1f, 0.92f)
                     aqua -> Color(0.32f, 0.82f, 0.86f, 0.84f)
-                    site.kind == EchoKind.Grove -> Color(0.80f, 0.95f, 0.63f, 0.93f)
+                    site.kind == EchoKind.Grove || site.kind == EchoKind.Clearing -> Color(0.80f, 0.95f, 0.63f, 0.93f)
+                    site.kind == EchoKind.Household -> Color(1f, 0.90f, 0.70f, 0.92f)
                     else -> Color(1f, 0.82f, 0.41f, 0.92f)
                 }
                 fun ground(dx: Float, dz: Float): Vec3f {
@@ -89,35 +90,66 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
                         addTriIndices(c, d, b)
                     }
                 }
+                fun ghostPine(height: Float, crown: Float) {
+                    val base = ground(0f, 0f)
+                    fun bough(low: Float, high: Float, breadth: Float) {
+                        val tip = Vec3f(base.x, base.y + height * high, base.z)
+                        val rim = List(8) { index ->
+                            val angle = index * PI / 4
+                            Vec3f(base.x + cos(angle).toFloat() * crown * breadth, base.y + height * low,
+                                base.z + sin(angle).toFloat() * crown * breadth)
+                        }
+                        for (index in rim.indices) {
+                            val edge = rim[index]
+                            val next = rim[(index + 1) % rim.size]
+                            color = tint.withAlpha(if (index in 1..4) 0.37f else 0.24f)
+                            addTriIndices(vertex(tip, Vec3f.Y_AXIS), vertex(edge, Vec3f.Y_AXIS), vertex(next, Vec3f.Y_AXIS))
+                            color = tint.withAlpha(0.72f)
+                            ribbon(edge, next, 0.008f)
+                        }
+                    }
+                    bough(0.35f, 0.81f, 1f)
+                    bough(0.63f, 1f, 0.68f)
+                    color = tint.withAlpha(0.83f)
+                    ribbon(base, Vec3f(base.x, base.y + height * 0.43f, base.z), 0.012f)
+                }
+                /** A pale house: translucent walls, a gabled roof and bright edges, standing only in the other history. */
+                fun ghostHouse(half: Float, wall: Float, roof: Float) {
+                    val base = ground(0f, 0f)
+                    val corners = listOf(-1f to -1f, 1f to -1f, 1f to 1f, -1f to 1f).map { (x, z) ->
+                        Vec3f(base.x + x * half, base.y, base.z + z * half)
+                    }
+                    val tops = corners.map { Vec3f(it.x, it.y + wall, it.z) }
+                    for (index in corners.indices) {
+                        val next = (index + 1) % corners.size
+                        color = tint.withAlpha(if (index % 2 == 0) 0.30f else 0.20f)
+                        val a = vertex(corners[index], Vec3f.Y_AXIS)
+                        val b = vertex(corners[next], Vec3f.Y_AXIS)
+                        val c = vertex(tops[next], Vec3f.Y_AXIS)
+                        val d = vertex(tops[index], Vec3f.Y_AXIS)
+                        addTriIndices(a, b, c)
+                        addTriIndices(a, c, d)
+                        color = tint.withAlpha(0.78f)
+                        ribbon(corners[index], tops[index], 0.006f)
+                        ribbon(tops[index], tops[next], 0.006f)
+                    }
+                    val ridgeA = Vec3f(base.x - half, base.y + wall + roof, base.z)
+                    val ridgeB = Vec3f(base.x + half, base.y + wall + roof, base.z)
+                    color = tint.withAlpha(0.42f)
+                    for ((edgeA, edgeB) in listOf(tops[0] to tops[1], tops[3] to tops[2])) {
+                        addTriIndices(vertex(edgeA, Vec3f.Y_AXIS), vertex(edgeB, Vec3f.Y_AXIS), vertex(ridgeB, Vec3f.Y_AXIS))
+                        addTriIndices(vertex(edgeA, Vec3f.Y_AXIS), vertex(ridgeB, Vec3f.Y_AXIS), vertex(ridgeA, Vec3f.Y_AXIS))
+                    }
+                    color = tint.withAlpha(0.85f)
+                    ribbon(ridgeA, ridgeB, 0.007f)
+                }
                 color = tint
                 when (site.kind) {
                     EchoKind.Grove -> {
                         contour(0.125f, 24, alternate, 0.018f)
                         if (alternate) {
-                            val base = ground(0f, 0f)
                             val rooted = site.other == 2
-                            val height = if (rooted) 0.63f else 0.32f
-                            val crown = if (rooted) 0.19f else 0.10f
-                            fun bough(low: Float, high: Float, breadth: Float) {
-                                val tip = Vec3f(base.x, base.y + height * high, base.z)
-                                val rim = List(8) { index ->
-                                    val angle = index * PI / 4
-                                    Vec3f(base.x + cos(angle).toFloat() * crown * breadth, base.y + height * low,
-                                        base.z + sin(angle).toFloat() * crown * breadth)
-                                }
-                                for (index in rim.indices) {
-                                    val edge = rim[index]
-                                    val next = rim[(index + 1) % rim.size]
-                                    color = tint.withAlpha(if (index in 1..4) 0.37f else 0.24f)
-                                    addTriIndices(vertex(tip, Vec3f.Y_AXIS), vertex(edge, Vec3f.Y_AXIS), vertex(next, Vec3f.Y_AXIS))
-                                    color = tint.withAlpha(0.72f)
-                                    ribbon(edge, next, 0.008f)
-                                }
-                            }
-                            bough(0.35f, 0.81f, 1f)
-                            bough(0.63f, 1f, 0.68f)
-                            color = tint.withAlpha(0.83f)
-                            ribbon(base, Vec3f(base.x, base.y + height * 0.43f, base.z), 0.012f)
+                            ghostPine(if (rooted) 0.63f else 0.32f, if (rooted) 0.19f else 0.10f)
                         }
                     }
                     EchoKind.Bank -> {
@@ -133,7 +165,30 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
                             ribbon(ground(-0.13f, offset), ground(0.13f, offset), 0.009f)
                         }
                     }
-                    EchoKind.Homes -> contour(0.24f, 4, false, 0.026f, PI / 4)
+                    EchoKind.Homes -> {
+                        contour(0.21f, 4, alternate, 0.024f, PI / 4)
+                        // Only the other history has this home (or its larger form): draw it as a pale house.
+                        if (alternate && site.other >= 2) ghostHouse(0.10f, if (site.other == 3) 0.20f else 0.15f, 0.08f)
+                    }
+                    EchoKind.Well -> {
+                        contour(0.15f, 16, alternate, 0.02f)
+                        if (alternate && site.other >= 2) ghostHouse(0.07f, 0.10f, 0.06f)
+                    }
+                    EchoKind.Clearing -> {
+                        contour(0.22f, 6, alternate, 0.02f)
+                        // Woods that still stand in the other history.
+                        if (!alternate) ghostPine(0.55f, 0.17f)
+                    }
+                    EchoKind.Household -> {
+                        contour(0.08f, 12, alternate, 0.014f)
+                        if (alternate) {
+                            val base = ground(0.12f, 0.10f)
+                            color = tint.withAlpha(0.9f)
+                            ribbon(base, Vec3f(base.x, base.y + 0.17f, base.z), 0.01f)
+                            color = Color(1f, 0.74f, 0.38f, 0.75f)
+                            ribbon(Vec3f(base.x, base.y + 0.17f, base.z), Vec3f(base.x, base.y + 0.20f, base.z), 0.022f)
+                        }
+                    }
                     EchoKind.WetGround -> {
                         color = tint.withAlpha(if (alternate) 0.63f else 0.52f)
                         contour(0.12f, 18, alternate, 0.015f)

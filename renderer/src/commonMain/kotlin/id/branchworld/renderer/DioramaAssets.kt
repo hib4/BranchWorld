@@ -8,9 +8,6 @@ internal enum class DioramaAsset(val file: String) {
     Bunny("animal-bunny.glb"),
     Deer("animal-deer.glb"),
     Fox("animal-fox.glb"),
-    SettlementHome("building_home_A_green.gltf"),
-    SettlementFarm("building_windmill_green.gltf"),
-    Settler("Ranger.glb"),
     ;
 
     val path: String get() = "diorama/$file"

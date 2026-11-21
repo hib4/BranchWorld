@@ -16,5 +16,7 @@ data class WorldCamera(
         data class Landmark(val kind: LandmarkKind) : Focus
         data class WildlifeLocation(val ground: GroundPoint) : Focus
         data class EchoSite(val grounds: List<GroundPoint>, val sideDock: Boolean) : Focus
+        /** A close, storybook framing of a settlement's homes, fields and stores. */
+        data class Village(val grounds: List<GroundPoint>) : Focus
     }
 }

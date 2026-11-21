@@ -10,6 +10,12 @@ import id.branchworld.game.ecology.Species
 import id.branchworld.game.ecology.Season
 import id.branchworld.game.ecology.Weather
 import id.branchworld.game.ecology.WildlifeMilestone
+import id.branchworld.game.ecology.ForagePatch
+import id.branchworld.game.ecology.Settlement
+import id.branchworld.game.ecology.StructureKind
+import id.branchworld.game.ecology.VillageState
+import id.branchworld.game.ecology.VillageTask
+import id.branchworld.game.ecology.region
 import id.branchworld.game.ecology.cropPerWorker
 import id.branchworld.game.ecology.seasonAt
 import id.branchworld.game.ecology.soilMoisture
@@ -47,6 +53,40 @@ data class SettlementPose(
     val id: Int, val homes: List<GroundPoint>, val field: GroundPoint, val resident: GroundPoint?,
     val waterBank: GroundPoint? = null,
     val haulingWater: Boolean = false,
+    /** Rules v9 village detail; null for earlier histories. */
+    val village: VillagePose? = null,
+)
+
+/** Read-only village scene: authoritative structures, stocks and each household's current work. */
+data class VillagePose(
+    val center: GroundPoint,
+    val structures: List<StructurePose>,
+    val villagers: List<VillagerPose>,
+    /** Stock tiers 0..3 for the stores beside the centre. */
+    val food: Int,
+    val wood: Int,
+    val stone: Int,
+    /** Last harvest tier 0..3 shown as standing crops. */
+    val harvest: Int,
+)
+
+data class StructurePose(
+    val id: Int,
+    val kind: StructureKind,
+    val ground: GroundPoint,
+    /** Construction progress in quarters, 4 when standing. */
+    val stage: Int,
+    val level: Int,
+    val household: Int?,
+)
+
+data class VillagerPose(
+    val id: Long,
+    val household: Int,
+    val body: Int,
+    val task: VillageTask,
+    val home: GroundPoint,
+    val work: GroundPoint,
 )
 
 data class ShapingPose(
@@ -210,6 +250,8 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         })
     },
     settlements = settlements?.sites?.map { site ->
+        val village = settlements.village
+        if (village != null) return@map villagePose(site, village, terrain)
         SettlementPose(
             site.id,
             site.lots.take(site.homes).map { it.project(terrain) },
@@ -233,6 +275,83 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         })
     },
 )
+
+private fun EcologyState.villagePose(site: Settlement, village: VillageState, terrain: TerrainMap): SettlementPose {
+    val households = village.active(site.id)
+    val structures = village.structures.filter { it.siteId == site.id }
+    val occupied = households.mapNotNull { household -> structures.firstOrNull { it.id == household.home }?.let { it.id to household.id } }.toMap()
+    val homes = structures.filter { it.kind == StructureKind.Home && it.completedAt != null && it.id in occupied }
+    val underway = village.underway(site.id)
+    val fields = village.fields(site.id).map { it.cell }.ifEmpty { listOf(site.field) }
+    val local = patches.filter { it.cell.region() == site.center.region() }
+    fun nearest(kind: ForageKind) = local.filter { it.kind == kind && !it.planted }
+        .sortedWith(compareBy<ForagePatch> { abs(it.cell.x - site.center.x) + abs(it.cell.z - site.center.z) }.thenBy { it.id })
+        .map { it.cell }
+    val meadow = nearest(ForageKind.Meadow)
+    val browse = nearest(ForageKind.Browse)
+    val quarry = quarryCell(site.center, terrain)
+    val villagers = buildList {
+        for (household in households) {
+            val home = structures.firstOrNull { it.id == household.home }?.cell ?: site.center
+            // At most two figures per household keep the scene readable on phones.
+            for (member in 0 until minOf(household.members, 2)) {
+                val pick = household.id + member
+                val work = when (household.task) {
+                    VillageTask.Farming -> fields[pick % fields.size]
+                    VillageTask.Gathering -> meadow.getOrNull(pick % maxOf(1, minOf(3, meadow.size))) ?: site.field
+                    VillageTask.Woodcutting -> browse.getOrNull(pick % maxOf(1, minOf(3, browse.size))) ?: site.center
+                    VillageTask.Quarrying -> quarry ?: site.center
+                    VillageTask.Building, VillageTask.Settling -> underway?.cell ?: home
+                    VillageTask.HaulingWater -> checkNotNull(site.welfare).bank
+                    VillageTask.Idle -> home
+                }
+                add(VillagerPose(household.id * 8L + member, household.id, (household.name + member) % 3, household.task,
+                    home.project(terrain), work.project(terrain)))
+            }
+        }
+    }
+    fun tier(amount: Int, full: Int) = when {
+        amount <= 0 -> 0
+        amount < full / 3 -> 1
+        amount < full -> 2
+        else -> 3
+    }
+    return SettlementPose(
+        site.id,
+        homes.map { it.cell.project(terrain) },
+        site.field.project(terrain),
+        null,
+        site.welfare?.bank?.project(terrain),
+        households.isNotEmpty() && (site.welfare?.unmet ?: 0) > 0,
+        VillagePose(
+            site.center.project(terrain),
+            structures.map {
+                StructurePose(it.id, it.kind, it.cell.project(terrain),
+                    if (it.complete) 4 else (it.progress * 4 / it.required).coerceIn(0, 3), it.level, occupied[it.id])
+            },
+            villagers,
+            tier(site.food, site.residents * 6),
+            tier(site.wood, 24),
+            tier(site.stone, 12),
+            tier(site.welfare?.cropYield ?: 0, maxOf(1, site.residents * 2)),
+        ),
+    )
+}
+
+/** Nearest upland rock to a settlement, where its masons quarry. */
+private fun quarryCell(center: GridCell, terrain: TerrainMap): GridCell? {
+    var best: GridCell? = null
+    var bestDistance = Int.MAX_VALUE
+    for (dz in -12..12) for (dx in -12..12) {
+        val distance = abs(dx) + abs(dz)
+        if (distance > 12 || distance >= bestDistance) continue
+        val ground = terrain.cellAt(center.x + dx, center.z + dz) ?: continue
+        if (!ground.walkable || ground.biome != Biome.RockyUpland) continue
+        best = GridCell(center.x + dx, center.z + dz)
+        bestDistance = distance
+    }
+    return best
+}
 
 internal fun climatePose(tick: Long, weather: Weather): ClimatePose {
     val phase = tick % DayLength

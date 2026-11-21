@@ -23,7 +23,7 @@ class WorldShapingTest {
     @Test
     fun droughtHasThreeDistinctHistoriesAndNaturalRecovery(): Unit = runBlocking {
         val terrain = terrain()
-        val timeline = Timeline.start(terrain)
+        val timeline = Timeline.start(terrain, ShapingRulesVersion)
         assertEquals(ShapeBlock.AwaitWarning, timeline.preview(Intervention.Rain, 5)?.blocked)
         assertFalse(timeline.intervene(Intervention.Reforest, 9))
         repeat(900) { timeline.advance() }
@@ -131,7 +131,7 @@ class WorldShapingTest {
 
     @Test
     fun queueCanBeCancelledAndHistoricalForkInheritsTheSpend(): Unit = runBlocking {
-        val timeline = Timeline.start(terrain())
+        val timeline = Timeline.start(terrain(), ShapingRulesVersion)
         repeat(240) { timeline.advance() }
         assertFalse(timeline.intervene(Intervention.Rain, -1))
         assertFalse(timeline.intervene(Intervention.Supplement, 9))

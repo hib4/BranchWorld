@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.echo_branch_start
+import branchworld.shared.generated.resources.plan_marker
 import branchworld.shared.generated.resources.echo_past_fork
 import branchworld.shared.generated.resources.echo_warning
 import branchworld.shared.generated.resources.grove_applied
@@ -112,7 +113,7 @@ internal fun TimelineControls(island: IslandLoad.Ready, diagnostics: Boolean = f
         shape = MaterialTheme.shapes.large,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TimelinePanel(island, view, diagnostics || island.key.rules != ShapingRulesVersion, onForked)
+            TimelinePanel(island, view, diagnostics || island.key.rules < ShapingRulesVersion, onForked)
         }
     }
 }
@@ -383,6 +384,7 @@ internal fun TimelineScrubber(
 
 @Composable
 internal fun InterventionMarker.label(showTicks: Boolean = true): String {
+    plan?.let { return stringResource(Res.string.plan_marker, stringResource(it.title())) }
     if (kind == Intervention.Rain) return stringResource(Res.string.shape_rain_marker, regionName(region))
     if (!showTicks && kind == Intervention.Reforest) return stringResource(Res.string.shape_grove_marker, regionName(region))
     val resource = if (kind == Intervention.Reforest) Res.string.timeline_reforest_event else Res.string.timeline_supplement_event

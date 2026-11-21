@@ -5,8 +5,11 @@ import id.branchworld.game.ecology.ForageKind
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.Species
 import id.branchworld.game.ecology.SettlementEvent
+import id.branchworld.game.ecology.VillageState
 import id.branchworld.game.ecology.canonicalHash
+import id.branchworld.game.ecology.PlanOption
 import id.branchworld.game.simulation.CallRainRegion
+import id.branchworld.game.simulation.EndorsePlan
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
 import id.branchworld.game.simulation.WorldCommand
@@ -49,6 +52,7 @@ internal data class InterventionMarker(
     val kind: Intervention,
     val region: Int,
     val queued: Boolean,
+    val plan: PlanOption? = null,
 )
 
 internal data class OwnedIntervention(val branchId: Int, val marker: InterventionMarker)
@@ -56,13 +60,14 @@ internal data class OwnedIntervention(val branchId: Int, val marker: Interventio
 internal data class SharedPast(val branchId: Int, val tick: Long)
 
 internal data class HistoryMoment(val tick: Long, val kind: Kind, val intervention: OwnedIntervention? = null) {
-    enum class Kind { Fork, Warning, Intervention, Shortage, Recovery, AfterRain }
+    enum class Kind { Fork, Warning, Intervention, Shortage, Recovery, AfterRain, Petition, Departure }
 }
 
 internal fun WorldCommand.marker(queued: Boolean): InterventionMarker? = when (this) {
     is CallRainRegion -> InterventionMarker(tick, sequence, Intervention.Rain, region, queued)
     is ReforestRegion -> InterventionMarker(tick, sequence, Intervention.Reforest, region, queued)
     is SupplementForage -> InterventionMarker(tick, sequence, Intervention.Supplement, region, queued)
+    is EndorsePlan -> InterventionMarker(tick, sequence, Intervention.Plan, -1, queued, option)
     else -> null
 }
 
@@ -85,6 +90,7 @@ internal data class ComparedBranch(
     val events: List<InterventionMarker>,
     val settlement: SettlementMetrics?,
     val settlementEvents: List<SettlementEvent>,
+    val village: VillageState? = null,
 )
 
 internal data class SettlementMetrics(val residents: Long, val food: Long, val homes: Long, val wood: Long)
@@ -129,6 +135,7 @@ internal data class ComparisonReplay(
                 it.sumOf { site -> site.food.toLong() }, it.sumOf { site -> site.homes.toLong() },
                 it.sumOf { site -> site.wood.toLong() }) },
             state.settlements?.events.orEmpty(),
+            state.settlements?.village,
         )
     }
 }

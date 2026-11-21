@@ -51,6 +51,7 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
     private var previousProjection: WorldRenderProjection? = null
     private var homes = emptyList<GroundPoint>()
     private var smokeStep = -1
+    private var chimney = 0.245f
 
     fun show(world: WorldRenderProjection, light: CoastalLight, seconds: Float, reducedMotion: Boolean) {
         if (world !== previousProjection) {
@@ -62,6 +63,8 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
                 previousCreatures = creatures
                 previousSites = sites
                 homes = sites.flatMap { it.homes }
+                // Rules v9 homes are drawn slightly larger.
+                chimney = if (sites.any { it.village != null }) 0.36f else 0.245f
                 val fields = sites.map { it.field }
                 shadow.populate(creatures.size + homes.size + fields.size) { instance ->
                     for ((ground, species, juvenile) in creatures) {
@@ -73,7 +76,8 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
                         val bodyScale = if (world.wildlife != null) WildlifeBodyScale else 1f
                         instance(onGround(ground, radius * bodyScale * if (juvenile) 0.73f else 1f))
                     }
-                    for (ground in homes) instance(onGround(ground, 0.23f))
+                    val homeShadow = if (sites.any { it.village != null }) 0.29f else 0.23f
+                    for (ground in homes) instance(onGround(ground, homeShadow))
                     for (ground in fields) instance(onGround(ground, 0.18f))
                 }
             }
@@ -97,7 +101,7 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
                     val phase = (step / 95f + index * 0.14f + puff / 3f) % 1f
                     val size = (0.025f + phase * 0.040f) * (sin(phase * 3.141593f) * 0.65f + 0.2f)
                     instance(transform.setIdentity()
-                        .translate(base.x + phase * 0.20f, base.y + 0.245f + phase * 0.31f, base.z - 0.091f + phase * 0.09f)
+                        .translate(base.x + phase * 0.20f, base.y + chimney + phase * 0.31f, base.z - 0.091f + phase * 0.09f)
                         .scale(Vec3f(size, size * 0.85f, size)))
                 }
             }
