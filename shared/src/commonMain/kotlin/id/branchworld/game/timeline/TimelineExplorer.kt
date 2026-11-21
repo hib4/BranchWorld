@@ -11,6 +11,7 @@ import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
 import id.branchworld.game.simulation.WorldCommand
 import id.branchworld.game.simulation.WorldRenderProjection
+import id.branchworld.game.simulation.livingEcho
 import id.branchworld.game.simulation.renderProjection
 
 internal const val RecentInterventions = 5
@@ -50,6 +51,14 @@ internal data class InterventionMarker(
     val queued: Boolean,
 )
 
+internal data class OwnedIntervention(val branchId: Int, val marker: InterventionMarker)
+
+internal data class SharedPast(val branchId: Int, val tick: Long)
+
+internal data class HistoryMoment(val tick: Long, val kind: Kind, val intervention: OwnedIntervention? = null) {
+    enum class Kind { Fork, Warning, Intervention, Shortage, Recovery, AfterRain }
+}
+
 internal fun WorldCommand.marker(queued: Boolean): InterventionMarker? = when (this) {
     is CallRainRegion -> InterventionMarker(tick, sequence, Intervention.Rain, region, queued)
     is ReforestRegion -> InterventionMarker(tick, sequence, Intervention.Reforest, region, queued)
@@ -80,23 +89,42 @@ internal data class ComparedBranch(
 
 internal data class SettlementMetrics(val residents: Long, val food: Long, val homes: Long, val wood: Long)
 
-internal data class TimelinePair(val tick: Long, val left: ComparedBranch, val right: ComparedBranch)
+internal data class TimelinePair(
+    val tick: Long,
+    val left: ComparedBranch,
+    val right: ComparedBranch,
+    val leftTrail: List<OwnedIntervention>,
+    val rightTrail: List<OwnedIntervention>,
+    val sharedTrail: List<OwnedIntervention>,
+)
 
 internal data class ComparisonReplay(
     val left: ReplayRequest,
     val right: ReplayRequest,
-    val leftEvents: List<InterventionMarker>,
-    val rightEvents: List<InterventionMarker>,
+    val leftEvents: List<OwnedIntervention>,
+    val rightEvents: List<OwnedIntervention>,
 ) {
-    suspend fun replay(): TimelinePair = TimelinePair(
-        left.tick, left.read(leftEvents), right.read(rightEvents),
-    )
+    suspend fun replay(): TimelinePair {
+        val a = left.replay().engine.state
+        val b = right.replay().engine.state
+        val shared = leftEvents.intersect(rightEvents.toSet())
+        val echo = livingEcho(left.terrain, a, b)
+        return TimelinePair(left.tick,
+            left.read(a, leftEvents).let { it.copy(projection = it.projection.copy(livingEcho = echo)) },
+            right.read(b, rightEvents).let { side ->
+                side.copy(projection = side.projection.copy(livingEcho = echo.copy(sites = echo.sites.map {
+                    it.copy(here = it.other, other = it.here)
+                })))
+            },
+            leftEvents.filterNot { it in shared }, rightEvents.filterNot { it in shared }, shared.toList())
+    }
 
-    private suspend fun ReplayRequest.read(events: List<InterventionMarker>): ComparedBranch {
-        val state = replay().engine.state
+    private fun ReplayRequest.read(state: EcologyState, events: List<OwnedIntervention>): ComparedBranch {
         val occupied = state.settlements?.sites?.filter { it.residents > 0 }
         return ComparedBranch(
-            state.renderProjection(terrain).copy(branchId = branchId), state.canonicalHash(), state.metrics(), events,
+            state.renderProjection(terrain).copy(branchId = branchId), state.canonicalHash(), state.metrics(),
+            events.asSequence().filter { it.branchId == branchId }.toList()
+                .takeLast(RecentInterventions).asReversed().map { it.marker },
             occupied?.let { SettlementMetrics(it.sumOf { site -> site.residents.toLong() },
                 it.sumOf { site -> site.food.toLong() }, it.sumOf { site -> site.homes.toLong() },
                 it.sumOf { site -> site.wood.toLong() }) },

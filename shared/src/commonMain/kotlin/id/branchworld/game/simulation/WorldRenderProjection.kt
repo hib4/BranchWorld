@@ -36,6 +36,7 @@ data class WorldRenderProjection(
     val interpolateCreatures: Boolean = false,
     val wildlife: WildlifeReadout? = null,
     val shaping: ShapingPose? = null,
+    val livingEcho: LivingEchoProjection? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }

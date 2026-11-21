@@ -67,7 +67,11 @@ Use **Focus island**, or `Home` in the focused Desktop viewport, to return to th
 
 **Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** restores the world in a paused state. Older saves retain their original rules and geography, and an existing single-island save opens as **Main** at its saved tick.
 
-For the drought walkthrough, select **Begin story** and let Hollowmere reach its warning. Use **Timeline** → **Watch the river recover** to see how the untreated village fares. Then choose **Return to the drought warning** → **Fork here**. Through **Shape**, call a shower over the suggested field and drinking bank and watch the next two harvests. **Compare branches** matches that history to Main. **Show left** and **Show right** keep the camera aligned, and **Compare details** reveals harvest and reserve differences on narrow screens. Return to the warning again and fork a third history. Restore the grove at C2, then watch through the recovery. Save and relaunch with **Continue** to revisit all three histories.
+In **The Fading Grove**, let Hollowmere reach its warning. Use **Timeline** → **Watch the river recover** to see how Main fares. Choose **Return to the drought warning** → **Fork here**, name a rain history, and use **Shape** to call a shower over the suggested field and drinking bank. Watch two harvests, then watch through recovery. Return to the warning again, name a grove history, and restore the grove at C2. Watch through recovery in that history too.
+
+From either fork, open **Timeline** → **Compare branches**. Living Echo matches the two histories to the same moment. Select a history by name to switch the world in place. In **Details**, choose the two forks, then return to **Island view**. Select **Harvest** and focus **Drinking bank** or **Farm field** to see where the rain helped. Select **After rain** and focus **Grove sites**. Pale trees show where the grove grew in the other history. **Details** shows the recorded events and actual values. Pick an intervention there to replay its result. **Continue this history** opens the view you chose at that moment. **Back** returns to where you entered.
+
+Save through **Menu** and relaunch with **Continue** to reopen all three histories.
 
 The shared fixture starts each fork at tick `240`. It compares water and crops at `360`, then rooted habitat and wildlife use at `900`.
 
@@ -77,7 +81,7 @@ Run the common replay fixture and the Android gesture, world clock, and Activity
 
 - `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
 - `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
-- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The bunny, deer, and fox GLBs are from Kenney Cube Pets.
+- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The Living Echo layer draws sites from an immutable comparison of two matching shared snapshots. The bunny, deer, and fox GLBs are from Kenney Cube Pets.
 - Shared Kotlin generates terrain, drainage, soils, props, and traversability from the seed and worldgen version. Kool builds chunk meshes, fills the generated channels and basins, and instances the bundled trees from a read-only terrain projection.
 - Rules v8 adds branch-local interventions, soil retention, and settlement water welfare. Rules v7 introduced local habitat, competition for forage, and fox pursuits. Each history records wildlife milestones alongside its commands and snapshots. Rules v6 introduced seasonal recharge and soil moisture. Saved histories retain their original rules and terrain.
 

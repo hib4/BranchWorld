@@ -43,6 +43,9 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.echo_branch_start
+import branchworld.shared.generated.resources.echo_past_fork
+import branchworld.shared.generated.resources.echo_warning
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.shape_timeline_position_percent
 import branchworld.shared.generated.resources.shape_return_warning
@@ -90,6 +93,7 @@ import branchworld.shared.generated.resources.settlement_inspector
 import androidx.compose.ui.semantics.contentDescription
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
+import id.branchworld.game.timeline.FadingGroveRecovery
 import id.branchworld.game.timeline.InterventionMarker
 import id.branchworld.game.timeline.MaxBranchNameLength
 import id.branchworld.game.timeline.RecentInterventions
@@ -191,7 +195,14 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
     }
     TimelineScrubber(
         branch.start..branch.head, view.tick, !view.seeking,
-        markers = markedTicks, onStart = island.clock::pause, showTicks = showTicks,
+        markers = markedTicks, onStart = island.clock::pause, showTicks = showTicks, snapToMarkers = !showTicks,
+        previewLabel = if (showTicks) null else { tick ->
+            when (tick) {
+                warning -> stringResource(Res.string.echo_warning)
+                branch.start -> stringResource(Res.string.echo_branch_start)
+                else -> executed.lastOrNull { it.tick == tick }?.label(false) ?: echoDay(tick)
+            }
+        },
     ) { requested ->
         if (requested != view.tick) operations.launch { island.seek(requested) }
     }
@@ -216,8 +227,8 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
             OutlinedButton(onClick = { island.playTo(if (watchWarning) 240L else nextHarvest) }, enabled = !view.seeking) {
                 Text(stringResource(if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest))
             }
-            if (chapter && warning != null && view.tick < 900) {
-                OutlinedButton(onClick = { island.playTo(900L) }, enabled = !view.seeking) {
+            if (chapter && warning != null && view.tick < FadingGroveRecovery) {
+                OutlinedButton(onClick = { island.playTo(FadingGroveRecovery) }, enabled = !view.seeking) {
                     Text(stringResource(Res.string.shape_watch_recovery))
                 }
             }
@@ -233,7 +244,7 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
     val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
     if (view.seeking) Text(stringResource(Res.string.timeline_seeking), live)
     if (view.failed) Text(stringResource(Res.string.timeline_seek_failed), live)
-    if (view.tick < branch.head) Text(stringResource(Res.string.timeline_past))
+    if (view.tick < branch.head) Text(stringResource(if (showTicks) Res.string.timeline_past else Res.string.echo_past_fork))
     if (!view.canFork) Text(stringResource(Res.string.timeline_branch_limit))
     if (view.commandLimitReached) Text(stringResource(Res.string.timeline_command_limit))
     val previousEvents = executed.indexOfLast { it.tick <= view.tick } + 1
@@ -325,13 +336,23 @@ internal fun TimelineScrubber(
     markers: List<Long> = emptyList(),
     onStart: () -> Unit = {},
     showTicks: Boolean = true,
+    snapToMarkers: Boolean = false,
+    previewLabel: (@Composable (Long) -> String)? = null,
     onSeek: (Long) -> Unit,
 ) {
     var drag by remember(range.first, range.last) { mutableStateOf<Float?>(null) }
     val value = drag ?: range.fractionAt(tick)
     val label = stringResource(Res.string.timeline_scrubber)
+    fun target(fraction: Float): Long {
+        val unsnapped = range.tickAt(fraction)
+        if (!snapToMarkers || fraction <= 0f || fraction >= 1f) return unsnapped
+        val closest = markers.filter { it in range }.minByOrNull { kotlin.math.abs(range.fractionAt(it) - fraction) }
+        return closest?.takeIf { kotlin.math.abs(range.fractionAt(it) - fraction) <= 0.022f } ?: unsnapped
+    }
     val position = if (showTicks) stringResource(Res.string.world_tick, range.tickAt(value).toString())
         else stringResource(Res.string.shape_timeline_position_percent, (value * 100).toInt())
+    val preview = previewLabel?.invoke(drag?.let(::target) ?: tick)
+    if (preview != null) Text(preview, style = MaterialTheme.typography.labelLarge)
     Slider(
         value = value,
         onValueChange = {
@@ -339,13 +360,13 @@ internal fun TimelineScrubber(
             drag = it
         },
         onValueChangeFinished = {
-            val target = drag
+            val released = drag
             drag = null
-            if (target != null) onSeek(range.tickAt(target))
+            if (released != null) onSeek(target(released))
         },
         modifier = Modifier.fillMaxWidth().semantics {
             contentDescription = label
-            stateDescription = position
+            stateDescription = preview ?: position
         },
         enabled = enabled && range.first < range.last,
     )
@@ -353,6 +374,7 @@ internal fun TimelineScrubber(
         val ink = MaterialTheme.colorScheme.tertiary
         Canvas(Modifier.fillMaxWidth().height(7.dp).padding(horizontal = 10.dp)) {
             for (tick in markers) {
+                if (tick !in range) continue
                 drawCircle(ink, 2.5.dp.toPx(), Offset(range.fractionAt(tick) * size.width, size.height / 2))
             }
         }

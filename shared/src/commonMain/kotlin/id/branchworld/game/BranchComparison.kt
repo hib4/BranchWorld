@@ -129,7 +129,10 @@ internal fun ComparisonHeader(
 }
 
 @Composable
-private fun BranchPicker(label: String, branches: List<BranchSummary>, selected: Int, opposite: Int, onSelect: (Int) -> Unit) {
+internal fun BranchPicker(
+    label: String, branches: List<BranchSummary>, selected: Int, opposite: Int,
+    showTicks: Boolean = true, onSelect: (Int) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         OutlinedButton(onClick = { open = true }) { Text(label) }
@@ -139,7 +142,7 @@ private fun BranchPicker(label: String, branches: List<BranchSummary>, selected:
                     text = {
                         Column {
                             Text(branch.name)
-                            Text(
+                            if (showTicks) Text(
                                 stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()),
                                 style = MaterialTheme.typography.bodySmall,
                             )
@@ -216,7 +219,7 @@ internal fun ComparisonDetails(island: IslandLoad.Ready, view: ComparisonView, d
 }
 
 @Composable
-private fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: ComparedBranch) {
+internal fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: ComparedBranch) {
     val labels = listOf(
         Res.string.comparison_saplings, Res.string.comparison_browse, Res.string.comparison_forage,
         Res.string.comparison_rabbits, Res.string.comparison_deer, Res.string.comparison_births, Res.string.comparison_deaths,

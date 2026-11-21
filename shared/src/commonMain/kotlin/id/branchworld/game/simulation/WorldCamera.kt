@@ -15,5 +15,6 @@ data class WorldCamera(
         data class Creature(val id: Long) : Focus
         data class Landmark(val kind: LandmarkKind) : Focus
         data class WildlifeLocation(val ground: GroundPoint) : Focus
+        data class EchoSite(val grounds: List<GroundPoint>, val sideDock: Boolean) : Focus
     }
 }

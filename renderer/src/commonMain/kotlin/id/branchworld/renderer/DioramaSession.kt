@@ -59,6 +59,7 @@ internal class DioramaSession(
     private var fineGrass: Node? = null
     private var rain: Node? = null
     private var shapingDetails: ShapingDetails? = null
+    private var livingEcho: LivingEcho? = null
     private var localDetails: LocalDetails? = null
     private var light = coastalLight(null, false)
     private var previousClimate: ClimatePose? = null
@@ -71,6 +72,7 @@ internal class DioramaSession(
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
     private val timing = FrameTiming("renderer", measureDraws = true)
+    private var echoVisible = false
 
     init {
         context.onRender += { update() }
@@ -96,6 +98,7 @@ internal class DioramaSession(
             val opening = world.poses.value
             forage = ForageMeshes(it, world.terrain, opening.springs, opening.wildlife != null, opening.shaping != null)
             localDetails = LocalDetails(it, world.terrain)
+            livingEcho = LivingEcho(it, world.terrain)
             if (opening.shaping != null) shapingDetails = ShapingDetails(it, world.terrain, compact = output == null)
             controller.status.value = "Loading island…"
             output?.attach(it)
@@ -173,6 +176,20 @@ internal class DioramaSession(
                     previous.copy(targetX = center.x, targetZ = center.z,
                         targetY = center.y + if (narrow) -0.65f else 0.15f, distance = if (narrow) 4.7f else 3.9f)
                 }
+                is WorldCamera.Focus.EchoSite -> focus.grounds.takeIf { it.isNotEmpty() }?.let { grounds ->
+                    val minX = grounds.minOf { it.x }
+                    val maxX = grounds.maxOf { it.x }
+                    val minZ = grounds.minOf { it.z }
+                    val maxZ = grounds.maxOf { it.z }
+                    val x = (minX + maxX + 1) * CellSize / 2f
+                    val z = (minZ + maxZ + 1) * CellSize / 2f
+                    val span = maxOf(maxX - minX, maxZ - minZ) * CellSize
+                    val offset = if (focus.sideDock) 0.88f else 0f
+                    previous.copy(targetX = x + cos(previous.yaw) * offset,
+                        targetZ = z - sin(previous.yaw) * offset,
+                        targetY = world.terrain.heightAt(x, z).coerceAtLeast(0f) + if (narrow) -0.72f else 0.13f,
+                        distance = (if (narrow) 4.9f else 4.4f) + span * 1.1f)
+                }
                 null -> null
             }
             if (target != null) {
@@ -198,6 +215,12 @@ internal class DioramaSession(
             }
             previousClimate = snapshot.climate
             previousOpening = request.opening
+        }
+        livingEcho?.show(snapshot.livingEcho)
+        val echoNow = snapshot.livingEcho?.sites?.isNotEmpty() == true
+        if (echoNow != echoVisible) {
+            echoVisible = echoNow
+            timing.reset()
         }
         val shower = shapingDetails?.show(snapshot.shaping, request.targetSites, time, request.reducedMotion)
         water?.time = time
@@ -234,7 +257,7 @@ internal class DioramaSession(
                 println("BranchWorldRenderer activeBytes buffers=${BackendStats.totalBufferSize} textures=${BackendStats.totalTextureSize}")
             }
             if (Time.frameCount > assetFrame) controller.status.value = "Island ready"
-            timing.frame()
+            timing.frame(if (echoVisible) "echo-on" else "echo-off")
         }
     }
 
@@ -259,6 +282,8 @@ internal class DioramaSession(
         fineGrass = null
         rain = null
         shapingDetails = null
+        livingEcho = null
+        echoVisible = false
         localDetails = null
         propModels = emptyList()
         settlements = null
@@ -455,7 +480,7 @@ internal class FrameTiming(private val kind: String, private val measureDraws: B
         maximumDraws = 0
     }
 
-    fun frame() {
+    fun frame(mode: String? = null) {
         if (reported) return
         val first = start ?: TimeSource.Monotonic.markNow().also { start = it }
         val prior = previous
@@ -469,7 +494,8 @@ internal class FrameTiming(private val kind: String, private val measureDraws: B
         }
         if (elapsed < 12_000) return
         samples.sort()
-        println("BranchWorldRenderer $kind frames=${samples.size} p50Ms=${samples[samples.lastIndex / 2]} p95Ms=${samples[(samples.lastIndex * 95) / 100]}")
+        val label = if (mode == null) kind else "$kind $mode"
+        println("BranchWorldRenderer $label frames=${samples.size} p50Ms=${samples[samples.lastIndex / 2]} p95Ms=${samples[(samples.lastIndex * 95) / 100]}")
         if (measureDraws) {
             println("BranchWorldRenderer drawCommands=$minimumDraws..$maximumDraws buffers=${BackendStats.totalBufferSize} textures=${BackendStats.totalTextureSize}")
         }

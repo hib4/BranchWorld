@@ -2,9 +2,12 @@ package id.branchworld.game.ecology
 
 import id.branchworld.game.save.TimelineSaveCodec
 import id.branchworld.game.simulation.CallRainRegion
+import id.branchworld.game.simulation.EchoKind
 import id.branchworld.game.simulation.ReforestRegion
+import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
+import id.branchworld.game.timeline.ReplayRequest
 import id.branchworld.game.timeline.Timeline
 import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
@@ -19,7 +22,8 @@ class WorldShapingTest {
 
     @Test
     fun droughtHasThreeDistinctHistoriesAndNaturalRecovery(): Unit = runBlocking {
-        val timeline = Timeline.start(terrain())
+        val terrain = terrain()
+        val timeline = Timeline.start(terrain)
         assertEquals(ShapeBlock.AwaitWarning, timeline.preview(Intervention.Rain, 5)?.blocked)
         assertFalse(timeline.intervene(Intervention.Reforest, 9))
         repeat(900) { timeline.advance() }
@@ -98,6 +102,31 @@ class WorldShapingTest {
         assertEquals(rain.canonicalHash(), comparison.left.hash)
         assertEquals(grove.canonicalHash(), comparison.right.hash)
         assertEquals(untreated.canonicalHash(), assertNotNull(restored.seek(1, 900)).replay().engine.state.canonicalHash())
+        val echo = assertNotNull(comparison.left.projection.livingEcho)
+        val groveSites = echo.sites.filter { it.kind == EchoKind.Grove }
+        assertEquals(sites.toSet(), groveSites.map { GridCell(it.ground.x, it.ground.z) }.toSet())
+        assertEquals(3, groveSites.count { it.here == 0 && it.other == 2 })
+        assertEquals(echo.sites.map { it.copy(here = it.other, other = it.here) },
+            comparison.right.projection.livingEcho?.sites)
+        val warning = assertNotNull(restored.compare(2, 3, forkTick)).replay()
+        assertTrue(assertNotNull(warning.left.projection.livingEcho).sites.isEmpty())
+        assertTrue(warning.sharedTrail.isEmpty())
+        val harvest = assertNotNull(restored.compare(2, 3, 360)).replay()
+        val wet = assertNotNull(harvest.right.projection.livingEcho).sites
+        assertEquals(6, wet.single { it.kind == EchoKind.Field }.other)
+        assertEquals(2, wet.single { it.kind == EchoKind.Field }.here)
+        assertEquals(12, wet.single { it.kind == EchoKind.Bank }.other)
+        assertTrue(wet.any { it.kind == EchoKind.WetGround && it.other > it.here })
+        assertEquals(5, harvest.leftTrail.single().marker.region)
+        assertEquals(9, harvest.rightTrail.single().marker.region)
+        assertEquals(1, restored.sharedPast(2, 3)?.branchId)
+        assertEquals(forkTick, restored.sharedPast(2, 3)?.tick)
+        val checkpoint = restored.checkpoint()
+        for (branch in checkpoint.branches) {
+            val rebuilt = ReplayRequest(terrain, branch.id, branch.head.tick, branch.start, branch.commands)
+                .replay().engine.state
+            assertEquals(branch.head.canonicalHash(), rebuilt.canonicalHash())
+        }
     }
 
     @Test

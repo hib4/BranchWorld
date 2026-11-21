@@ -100,14 +100,14 @@ class DesktopTimelineUiTest {
         waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
         val stableViewport = checkNotNull(viewport)
         click("Compare branches")
-        awaitText("Viewing Main at tick 60")
+        awaitText("Viewing Branch 2 at tick 60")
         click("Compare details")
         onNodeWithContentDescription("Timeline position").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(0f) }
-        awaitText("Viewing Main at tick 20")
-        click("Show right")
         awaitText("Viewing Branch 2 at tick 20")
-        assertEquals(2, stableViewport.poses.value.branchId)
+        click("Show left")
+        awaitText("Viewing Main at tick 20")
+        assertEquals(1, stableViewport.poses.value.branchId)
         assertEquals(20L, stableViewport.poses.value.tick)
         assertEquals(stableViewport, viewport)
         click("Close comparison")

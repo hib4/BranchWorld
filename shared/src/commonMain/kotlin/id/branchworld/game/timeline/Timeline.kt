@@ -3,6 +3,7 @@ package id.branchworld.game.timeline
 import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
+import id.branchworld.game.ecology.FadingGroveSeed
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
@@ -21,6 +22,7 @@ internal const val MaxCommands = 16_384
 internal const val SnapshotInterval = 300L
 internal const val RetainedSnapshots = 8
 internal const val MaxBranchNameLength = 40
+internal const val FadingGroveRecovery = 900L
 
 @Serializable
 internal data class BranchCheckpoint(
@@ -113,18 +115,55 @@ internal class Timeline private constructor(
         val right = seek(rightId, tick) ?: return null
         return ComparisonReplay(
             left.throughTarget(), right.throughTarget(),
-            recentInterventions(leftId, tick), recentInterventions(rightId, tick),
+            interventionTrail(leftId, tick), interventionTrail(rightId, tick),
         )
     }
 
-    private fun recentInterventions(branchId: Int, tick: Long): List<InterventionMarker> {
-        val commands = branches.getValue(branchId).commands
-        return buildList {
-            for (index in commands.firstAfter(tick) - 1 downTo 0) {
-                commands[index].marker(queued = false)?.let(::add)
-                if (size == RecentInterventions) break
-            }
+    private fun lineage(branchId: Int, through: Long): List<SharedPast> = buildList {
+        var current = branches[branchId]
+        var limit = through
+        while (current != null) {
+            add(SharedPast(current.id, limit))
+            limit = minOf(limit, current.start.tick)
+            current = current.parentId?.let(branches::get)
         }
+    }
+
+    private fun interventionTrail(branchId: Int, through: Long): List<OwnedIntervention> =
+        lineage(branchId, through).asReversed().flatMap { origin ->
+            interventionMarkers(origin.branchId, origin.tick).map { OwnedIntervention(origin.branchId, it) }
+        }
+
+    fun sharedPast(leftId: Int, rightId: Int): SharedPast? {
+        val right = lineage(rightId, Long.MAX_VALUE).associateBy { it.branchId }
+        for (left in lineage(leftId, Long.MAX_VALUE)) {
+            val other = right[left.branchId] ?: continue
+            return left.copy(tick = minOf(left.tick, other.tick))
+        }
+        return null
+    }
+
+    fun comparisonMoments(leftId: Int, rightId: Int, range: LongRange): List<HistoryMoment> {
+        if (range.isEmpty()) return emptyList()
+        val left = branches.getValue(leftId).head
+        val right = branches.getValue(rightId).head
+        fun moment(tick: Long?, kind: HistoryMoment.Kind) = tick?.let { HistoryMoment(it, kind) }
+        return buildList {
+            moment(sharedPast(leftId, rightId)?.tick, HistoryMoment.Kind.Fork)?.let(::add)
+            for (head in listOf(left, right)) {
+                moment(head.shaping?.warningAt, HistoryMoment.Kind.Warning)?.let(::add)
+                for (site in head.settlements?.sites.orEmpty()) {
+                    moment(site.welfare?.firstShortage, HistoryMoment.Kind.Shortage)?.let(::add)
+                    moment(site.welfare?.firstRecovery, HistoryMoment.Kind.Recovery)?.let(::add)
+                }
+            }
+            for (command in (interventionTrail(leftId, range.last) + interventionTrail(rightId, range.last)).distinct()) {
+                add(HistoryMoment(command.marker.tick, HistoryMoment.Kind.Intervention, command))
+            }
+            if (left.shaping != null && terrain.key.seed == FadingGroveSeed) {
+                add(HistoryMoment(FadingGroveRecovery, HistoryMoment.Kind.AfterRain))
+            }
+        }.filter { it.tick in range }.distinct().sortedBy { it.tick }
     }
 
     fun inspectRegions() = engine.inspectRegions()

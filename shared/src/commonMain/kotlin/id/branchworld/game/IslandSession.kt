@@ -3,6 +3,7 @@ package id.branchworld.game
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.InterventionResult
+import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.canonicalHash
 import id.branchworld.game.save.IncompatibleSave
 import id.branchworld.game.save.SaveFileTooLarge
@@ -19,7 +20,9 @@ import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.timeline.BranchSummary
+import id.branchworld.game.timeline.HistoryMoment
 import id.branchworld.game.timeline.InterventionMarker
+import id.branchworld.game.timeline.SharedPast
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.TimelinePair
 import id.branchworld.game.timeline.commonTicks
@@ -160,6 +163,7 @@ internal sealed interface IslandLoad {
         private val timelineState = MutableStateFlow(timelineStatus())
         val timelineView = timelineState.asStateFlow()
         private val comparisonState = MutableStateFlow<ComparisonView?>(null)
+        private var comparisonRevision = 0
         val comparison = comparisonState.asStateFlow()
         private val navigationAvailable get() = !timelineState.value.seeking && comparisonState.value == null
         private val display = MutableStateFlow(timeline.state.renderProjection(terrain).copy(branchId = timeline.branchId))
@@ -263,8 +267,10 @@ internal sealed interface IslandLoad {
             return true
         }
 
-        private suspend fun navigate(branch: Int, tick: Long, inspectEvent: Boolean = false) {
-            if (!navigationAvailable) return
+        private suspend fun navigate(
+            branch: Int, tick: Long, inspectEvent: Boolean = false, fromComparison: ComparisonView? = null,
+        ) {
+            if (fromComparison == null && !navigationAvailable || timelineState.value.seeking) return
             val request = (if (inspectEvent) timeline.eventReplay(branch, tick) else timeline.seek(branch, tick)) ?: return
             clock.pause()
             timelineState.value = timelineStatus(seeking = true)
@@ -273,7 +279,12 @@ internal sealed interface IslandLoad {
                 val replayed = withContext(Dispatchers.Default) {
                     request.replay().also { if (inspectEvent) it.engine.advance() }
                 }
+                if (fromComparison != null && comparisonState.value !== fromComparison) {
+                    timelineState.value = timelineStatus()
+                    return
+                }
                 timeline.show(replayed)
+                if (fromComparison != null) comparisonState.value = null
                 publishNavigation()
                 if (inspectEvent) {
                     feedback.value = feedback.value.copy(applied = replayed.engine.interventionResults)
@@ -319,24 +330,63 @@ internal sealed interface IslandLoad {
         }
 
         fun selectComparison(leftId: Int, rightId: Int) {
-            if (leftId == rightId) return
+            if (leftId == rightId || timelineState.value.seeking) return
             val branches = timelineState.value.branches
             val left = branches.firstOrNull { it.id == leftId } ?: return
             val right = branches.firstOrNull { it.id == rightId } ?: return
             val range = commonTicks(left, right)
-            comparisonState.value = ComparisonView(left, right, range, range.last.takeUnless { range.isEmpty() })
+            val previous = comparisonState.value
+            val current = previous?.tick ?: timeline.state.tick.takeIf { key.rules == ShapingRulesVersion }
+            comparisonState.value = ComparisonView(left, right, range,
+                current?.takeIf { it in range } ?: range.last.takeUnless { range.isEmpty() },
+                showRight = (previous?.visibleBranchId ?: timeline.branchId.takeIf { key.rules == ShapingRulesVersion }) == rightId,
+                echoEnabled = previous?.echoEnabled ?: true,
+                sharedPast = timeline.sharedPast(leftId, rightId),
+                moments = timeline.comparisonMoments(leftId, rightId, range),
+                revision = ++comparisonRevision)
         }
 
         fun compareAt(tick: Long) {
             val prior = comparisonState.value ?: return
-            if (tick !in prior.range || tick == prior.tick) return
-            comparisonState.value = prior.copy(tick = tick, pair = null, failed = false, event = null, outcomes = null)
+            if (tick !in prior.range || tick == prior.tick || timelineState.value.seeking) return
+            comparisonState.value = prior.copy(tick = tick, pair = null, failed = false, event = null, outcomes = null,
+                outcomeFailed = false, revision = ++comparisonRevision)
+        }
+
+        fun retryComparison() {
+            val prior = comparisonState.value?.takeIf { it.failed } ?: return
+            comparisonState.value = prior.copy(failed = false, revision = ++comparisonRevision)
+        }
+
+        suspend fun continueComparison() {
+            val view = comparisonState.value ?: return
+            val pair = view.pair ?: return
+            navigate(view.visibleBranchId, pair.tick, fromComparison = view)
+        }
+
+        suspend fun revisitSharedPast() {
+            val view = comparisonState.value ?: return
+            val shared = view.sharedPast ?: return
+            navigate(shared.branchId, shared.tick, fromComparison = view)
+        }
+
+        fun toggleEcho() {
+            val prior = comparisonState.value?.takeUnless { timelineState.value.seeking } ?: return
+            val next = prior.copy(echoEnabled = !prior.echoEnabled)
+            comparisonState.value = next
+            next.pair?.let { showPair(next, it) }
         }
 
         fun showComparisonSide(right: Boolean) {
-            val prior = comparisonState.value ?: return
-            comparisonState.value = prior.copy(showRight = right)
-            prior.pair?.let { display.value = if (right) it.right.projection else it.left.projection }
+            val prior = comparisonState.value?.takeUnless { timelineState.value.seeking } ?: return
+            val next = prior.copy(showRight = right)
+            comparisonState.value = next
+            next.pair?.let { showPair(next, it) }
+        }
+
+        private fun showPair(view: ComparisonView, pair: TimelinePair) {
+            val pose = if (view.showRight) pair.right.projection else pair.left.projection
+            display.value = if (view.echoEnabled) pose else pose.copy(livingEcho = null)
         }
 
         suspend fun loadComparison(target: ComparisonTarget) {
@@ -347,7 +397,7 @@ internal sealed interface IslandLoad {
                 val started = TimeSource.Monotonic.markNow()
                 val pair = withContext(Dispatchers.Default) { request.replay() }
                 val current = comparisonState.value?.takeIf { it.target == target } ?: return
-                display.value = if (current.showRight) pair.right.projection else pair.left.projection
+                showPair(current, pair)
                 comparisonState.value = current.copy(pair = pair)
                 println("BranchWorldComparison tick=${pair.tick} left=${pair.left.hash} right=${pair.right.hash} compareMs=${started.elapsedNow().inWholeMilliseconds}")
             } catch (error: CancellationException) {
@@ -360,7 +410,8 @@ internal sealed interface IslandLoad {
 
         fun inspectComparisonEvent(branchId: Int, marker: InterventionMarker) {
             val current = comparisonState.value ?: return
-            val event = ComparisonEvent(branchId, marker.tick)
+            if (timelineState.value.seeking) return
+            val event = ComparisonEvent(branchId, marker.tick, marker.sequence, current.revision)
             if (current.event != event) {
                 comparisonState.value = current.copy(event = event, outcomes = null, outcomeFailed = false)
             }
@@ -370,11 +421,13 @@ internal sealed interface IslandLoad {
             val prior = comparisonState.value
             if (prior?.event != event || prior.outcomes != null) return
             val request = timeline.eventReplay(event.branchId, event.tick) ?: return
+            val index = timeline.interventionMarkers(event.branchId, event.tick)
+                .filter { it.tick == event.tick }.indexOfFirst { it.sequence == event.sequence }
             try {
                 val outcomes = withContext(Dispatchers.Default) {
                     request.replay().engine.run {
                         advance()
-                        interventionResults
+                        listOfNotNull(interventionResults.getOrNull(index))
                     }
                 }
                 val current = comparisonState.value?.takeIf { it.event == event } ?: return
@@ -414,8 +467,8 @@ internal data class ShapeTarget(
 
 internal data class InterventionFeedback(val queued: Int, val applied: List<InterventionResult> = emptyList())
 
-internal data class ComparisonTarget(val leftId: Int, val rightId: Int, val tick: Long)
-internal data class ComparisonEvent(val branchId: Int, val tick: Long)
+internal data class ComparisonTarget(val leftId: Int, val rightId: Int, val tick: Long, val revision: Int)
+internal data class ComparisonEvent(val branchId: Int, val tick: Long, val sequence: Long, val revision: Int)
 
 internal data class ComparisonView(
     val left: BranchSummary,
@@ -428,8 +481,13 @@ internal data class ComparisonView(
     val event: ComparisonEvent? = null,
     val outcomes: List<InterventionResult>? = null,
     val outcomeFailed: Boolean = false,
+    val echoEnabled: Boolean = true,
+    val sharedPast: SharedPast? = null,
+    val moments: List<HistoryMoment> = emptyList(),
+    val revision: Int,
 ) {
-    val target get() = tick?.let { ComparisonTarget(left.id, right.id, it) }
+    val target get() = tick?.let { ComparisonTarget(left.id, right.id, it, revision) }
+    val visibleBranchId get() = if (showRight) right.id else left.id
 }
 
 internal sealed interface SaveStatus {

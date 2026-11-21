@@ -121,6 +121,10 @@ class TimelineExplorerTest {
         val live = island.world.poses.value
         island.openComparison()
         val before = assertNotNull(island.comparison.value?.target)
+        island.closeComparison()
+        island.openComparison()
+        island.loadComparison(before)
+        assertNull(island.comparison.value?.pair)
         island.compareAt(400)
         island.compareAt(350)
         island.loadComparison(before)
@@ -134,6 +138,51 @@ class TimelineExplorerTest {
         island.closeComparison()
         assertEquals(live, island.world.poses.value)
         assertEquals(450L, island.checkpoint().viewedTick)
+        island.openComparison()
+        island.compareAt(350)
+        island.loadComparison(assertNotNull(island.comparison.value?.target))
+        assertNotNull(island.world.poses.value.livingEcho)
+        island.toggleEcho()
+        assertNull(island.world.poses.value.livingEcho)
+        island.continueComparison()
+        assertEquals(1, island.checkpoint().activeBranchId)
+        assertEquals(350L, island.checkpoint().viewedTick)
+        assertNull(island.comparison.value)
+        assertEquals(false, island.clock.playback.value.playing)
+    }
+
+    @Test
+    fun sharedTrailClipsAtTheForkAndAuditsOnlyTheSelectedCommand(): Unit = runBlocking {
+        val terrain = terrain()
+        val initial = Timeline.start(terrain).state
+        val timeline = Timeline.restore(terrain, Timeline.root(initial, listOf(
+            SupplementForage(1, 0, 6), ReforestRegion(1, 1, 6), ReforestRegion(3, 0, 9),
+        )))
+        timeline.advanceTo(4)
+        timeline.goTo(1, 2)
+        assertTrue(timeline.fork("Left"))
+        timeline.advanceTo(4)
+        timeline.goTo(1, 2)
+        assertTrue(timeline.fork("Right"))
+        timeline.advanceTo(4)
+        val branchPair = assertNotNull(timeline.compare(2, 3, 4)).replay()
+        assertEquals(listOf(1, 1), branchPair.sharedTrail.map { it.branchId })
+        assertEquals(listOf(0L, 1L), branchPair.sharedTrail.map { it.marker.sequence })
+        assertTrue(branchPair.leftTrail.isEmpty())
+        assertTrue(branchPair.rightTrail.isEmpty())
+        val againstParent = assertNotNull(timeline.compare(1, 3, 4)).replay()
+        assertEquals(3L, againstParent.leftTrail.single().marker.tick)
+        val island = IslandLoad.Ready(terrain, timeline)
+        island.openComparison()
+        island.selectComparison(2, 3)
+        val saved = island.checkpoint()
+        val command = branchPair.sharedTrail.last()
+        island.inspectComparisonEvent(command.branchId, command.marker)
+        island.loadComparisonEvent(assertNotNull(island.comparison.value?.event))
+        val results = assertNotNull(island.comparison.value?.outcomes)
+        assertEquals(Intervention.Reforest, results.single().kind)
+        assertEquals(6, results.single().amount)
+        assertEquals(saved, island.checkpoint())
     }
 
     private fun terrain() = IslandGenerator.generate(TerrainKey(104729))

@@ -128,8 +128,8 @@ private class WorldSession : ViewModel() {
     val islands = IslandSession()
 }
 
-private val NightGreen = Color(0xFF102D28)
-private val Parchment = Color(0xFFF8F0DC)
+internal val NightGreen = Color(0xFF102D28)
+internal val Parchment = Color(0xFFF8F0DC)
 private val BranchWorldColors = lightColorScheme(
     primary = Color(0xFF285648), onPrimary = Color.White,
     secondaryContainer = Color(0xFFDCE7CF), onSecondaryContainer = NightGreen,
@@ -238,7 +238,7 @@ fun App(
             }
         }
     }
-    LaunchedEffect(session, pose?.branchId, comparison != null) {
+    LaunchedEffect(session, pose?.branchId?.takeIf { comparison == null }, comparison != null) {
         focus = null
         if (comparison == null) comparisonDetailsOpen = false
     }
@@ -364,7 +364,7 @@ fun App(
             }
             if (isWorld && session != null) {
                 val compactTargeting = !wide && panel == WorldPanel.Grove && pose?.shaping != null
-                if (!compactTargeting) Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeContentPadding().padding(12.dp),
+                if (!compactTargeting && comparison == null) Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeContentPadding().padding(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
                         Column(Modifier.widthIn(max = 310.dp)) {
@@ -390,7 +390,7 @@ fun App(
                                     else -> Res.string.island_opening
                                 }
                                 Text(stringResource(concern), style = MaterialTheme.typography.bodySmall)
-                                if (panel != WorldPanel.Grove && comparison == null) {
+                                if (panel != WorldPanel.Grove) {
                                     plantingNotice?.let { amount ->
                                         Text(stringResource(Res.string.grove_applied, amount),
                                             Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodySmall)
@@ -399,7 +399,7 @@ fun App(
                             }
                         }
                     }
-                    if (viewportHud != null && (!sidePanel || (panel == null && comparison == null))) {
+                    if (viewportHud != null && (!sidePanel || panel == null)) {
                         Box(Modifier.widthIn(max = if (wide) 265.dp else 124.dp)) { viewportHud() }
                     }
                 }
@@ -415,8 +415,17 @@ fun App(
                         }
                     }
                 }
-                if (comparison != null) ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp),
-                    diagnostics = state.diagnosticsVisible || session.key.rules != ShapingRulesVersion)
+                if (comparison != null) {
+                    ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp),
+                        diagnostics = state.diagnosticsVisible)
+                    if (!state.diagnosticsVisible && !comparisonDetailsOpen) {
+                        LivingEchoPlaces(session, comparison,
+                            Modifier.align(Alignment.TopStart).safeContentPadding().padding(12.dp)
+                                .widthIn(max = if (sidePanel) (maxWidth * 0.54f).coerceAtMost(480.dp) else 340.dp)) {
+                            requestFocus(WorldCamera.Focus.EchoSite(it, sidePanel))
+                        }
+                    }
+                }
             }
             if (!isWorld && viewportHud != null && session != null) {
                 Box(Modifier.align(Alignment.TopEnd).safeContentPadding().padding(10.dp)) { viewportHud() }
@@ -434,7 +443,8 @@ fun App(
             if (activePanel != null) {
                 val panelSize = if (sidePanel) {
                     Modifier.widthIn(max = if (shortLandscape) 310.dp else 370.dp).fillMaxWidth().heightIn(max = height - 32.dp)
-                } else Modifier.fillMaxWidth().heightIn(max = height * 0.65f)
+                } else Modifier.fillMaxWidth().heightIn(max = height *
+                    if (comparison != null && !comparisonDetailsOpen && !state.diagnosticsVisible) 0.40f else 0.65f)
                 Surface(Modifier.align(if (sidePanel) Alignment.CenterEnd else Alignment.BottomCenter)
                     .safeContentPadding().padding(10.dp).then(panelSize),
                     shape = MaterialTheme.shapes.large, shadowElevation = 8.dp) {
@@ -494,16 +504,21 @@ fun App(
                                     if (comparison == null) TimelineControls(session, state.diagnosticsVisible) { if (soundEnabled) playSound?.invoke(WorldSound.Fork) }
                                     else {
                                         val timeline by session.timelineView.collectAsStateWithLifecycle()
-                                        val showDetails = wide || comparisonDetailsOpen
-                                        ComparisonHeader(session, comparison, timeline.branches, showBranchPickers = showDetails, diagnostics = state.diagnosticsVisible)
-                                        if (!wide) {
-                                            TextButton(onClick = { comparisonDetailsOpen = !comparisonDetailsOpen }) {
-                                                val label = if (comparisonDetailsOpen) Res.string.hide_comparison_details
-                                                else Res.string.show_comparison_details
-                                                Text(stringResource(label))
+                                        if (state.diagnosticsVisible) {
+                                            val showDetails = wide || comparisonDetailsOpen
+                                            ComparisonHeader(session, comparison, timeline.branches, showBranchPickers = showDetails, diagnostics = true)
+                                            if (!wide) {
+                                                TextButton(onClick = { comparisonDetailsOpen = !comparisonDetailsOpen }) {
+                                                    val label = if (comparisonDetailsOpen) Res.string.hide_comparison_details
+                                                    else Res.string.show_comparison_details
+                                                    Text(stringResource(label))
+                                                }
                                             }
+                                            if (showDetails) ComparisonDetails(session, comparison, diagnostics = true)
+                                        } else {
+                                            LivingEchoDock(session, comparison, timeline, comparisonDetailsOpen,
+                                                onDetails = { comparisonDetailsOpen = it })
                                         }
-                                        if (showDetails) ComparisonDetails(session, comparison, state.diagnosticsVisible)
                                     }
                                 }
                                 WorldPanel.Save -> saveStore?.let { store ->
