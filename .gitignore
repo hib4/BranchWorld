@@ -22,6 +22,10 @@ node_modules/
 skills-lock.json
 
 /assets/*
+!/assets/fonts/
 !/assets/audio/
 /assets/audio/*
+!/assets/fonts/
 !/assets/audio/branchworld/
+
+.impeccable/

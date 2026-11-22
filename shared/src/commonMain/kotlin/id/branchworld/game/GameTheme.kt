@@ -1,10 +1,10 @@
 package id.branchworld.game
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -14,32 +14,64 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import branchworld.shared.generated.resources.Res
-import branchworld.shared.generated.resources.fraunces_semibold
+import branchworld.shared.generated.resources.fredoka_bold
+import branchworld.shared.generated.resources.fredoka_medium
+import branchworld.shared.generated.resources.fredoka_semibold
 import branchworld.shared.generated.resources.nunito_bold
 import branchworld.shared.generated.resources.nunito_extrabold
 import branchworld.shared.generated.resources.nunito_medium
+import id.branchworld.game.ecology.Chapter
 import org.jetbrains.compose.resources.Font
 
-/** The Keeper's Atlas palette: night-forest ink, moss, vellum and a warm ember gold. */
-internal object Atlas {
-    val Ink = Color(0xFF0E241F)
-    val InkGlass = Color(0xE6102A24)
-    val Moss = Color(0xFF2B5A4B)
-    val Fern = Color(0xFF3F7A63)
-    val Vellum = Color(0xFFF7F0DE)
-    val VellumDeep = Color(0xFFEDE2C6)
-    val Gold = Color(0xFFE8B45C)
-    val Ember = Color(0xFFC7832C)
-    val Rust = Color(0xFF9C4A2A)
-    val Mist = Color(0xFFD6E2D8)
-    val Faded = Color(0xFF9FB3A9)
-    val InkText = Color(0xFF15302A)
-    val InkSoft = Color(0xFF4A5F57)
-    val Hairline = Color(0x66E8B45C)
+/**
+ * The painted wooden toy set: oiled beech pieces in plant-dye paint, set down on the diorama.
+ * Bare wood is available but quiet; paint marks the chosen or primary piece.
+ */
+internal object Wood {
+    val Beech = Color(0xFFE9CDA2)
+    val BeechLight = Color(0xFFF6E2C2)
+    val PaleInk = Color(0xFFFFFAF2)
+    val BeechEdge = Color(0xFFC99F6B)
+    val BeechGrain = Color(0x22704A22)
+    val Walnut = Color(0xFF2B1D12)
+    val WalnutSoft = Color(0xFF5B4330)
+    val Weld = Color(0xFFE2B13C)
+    val Madder = Color(0xFFB5462F)
+    val Woad = Color(0xFF2F5D8A)
+    val Leaf = Color(0xFF4E7B3A)
+    val Umber = Color(0xFF7A5A3C)
+    val Shadow = Color(0x59201208)
+
+    /** The text a paint carries: walnut on weld, beech light on the darker dyes. */
+    fun inkOn(paint: Color): Color = when (paint) {
+        Beech, BeechLight, Weld -> Walnut
+        Leaf, Madder -> PaleInk
+        else -> BeechLight
+    }
+
+    /** The darker band under a piece's face: the block's own thickness. */
+    fun edgeOf(paint: Color): Color = when (paint) {
+        Beech, BeechLight -> BeechEdge
+        Weld -> Color(0xFFB08423)
+        Madder -> Color(0xFF7E2C1C)
+        Woad -> Color(0xFF1C3C5C)
+        Leaf -> Color(0xFF30521F)
+        Umber -> Color(0xFF4F3824)
+        else -> Color(paint.red * 0.62f, paint.green * 0.62f, paint.blue * 0.62f, paint.alpha)
+    }
+}
+
+/** One paint per chapter, used wherever that chapter appears. */
+internal fun chapterPaint(chapter: Chapter?, sandbox: Boolean = false): Color = when {
+    chapter == Chapter.FadingGrove -> Wood.Weld
+    chapter == Chapter.LastCrossing -> Wood.Woad
+    sandbox -> Wood.Leaf
+    else -> Wood.Umber
 }
 
 /** Presentation preferences every component can read. */
@@ -51,9 +83,25 @@ internal data class UiPreferences(val sounds: Boolean = true, val reducedMotion:
 
 internal val LocalUi = staticCompositionLocalOf { UiPreferences() }
 
+/**
+ * How far wooden pieces sit from the screen edge and how much room boards keep inside. Phones (under 600 dp wide)
+ * keep pieces 12 dp from the edge so the island and the boards get the width; larger windows keep each surface's
+ * own gutter.
+ */
+internal data class Spacing(val compact: Boolean) {
+    fun edge(regular: Dp): Dp = if (compact) 12.dp else regular
+    val board: Dp get() = if (compact) 12.dp else 16.dp
+}
+
+internal val LocalSpacing = staticCompositionLocalOf { Spacing(compact = false) }
+
 @Composable
-private fun storyFamilies(): Pair<FontFamily, FontFamily> {
-    val display = FontFamily(Font(Res.font.fraunces_semibold, FontWeight.SemiBold))
+internal fun GameTheme(textScale: Int, preferences: UiPreferences, content: @Composable () -> Unit) {
+    val stamp = FontFamily(
+        Font(Res.font.fredoka_medium, FontWeight.Medium),
+        Font(Res.font.fredoka_semibold, FontWeight.SemiBold),
+        Font(Res.font.fredoka_bold, FontWeight.Bold),
+    )
     val body = FontFamily(
         Font(Res.font.nunito_medium, FontWeight.Normal),
         Font(Res.font.nunito_medium, FontWeight.Medium),
@@ -61,48 +109,44 @@ private fun storyFamilies(): Pair<FontFamily, FontFamily> {
         Font(Res.font.nunito_bold, FontWeight.Bold),
         Font(Res.font.nunito_extrabold, FontWeight.ExtraBold),
     )
-    return display to body
-}
-
-@Composable
-internal fun GameTheme(textScale: Int, preferences: UiPreferences, content: @Composable () -> Unit) {
-    val (display, body) = storyFamilies()
-    val base = Typography()
-    fun TextStyle.body(weight: FontWeight = FontWeight.Medium) = copy(fontFamily = body, fontWeight = weight)
-    fun TextStyle.story(spacing: Double = -0.01) = copy(fontFamily = display, fontWeight = FontWeight.SemiBold, letterSpacing = spacing.em)
+    fun stamped(size: Int, line: Int, weight: FontWeight = FontWeight.SemiBold) =
+        TextStyle(fontFamily = stamp, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp, letterSpacing = 0.em)
+    fun reading(size: Int, line: Int, weight: FontWeight = FontWeight.Medium) =
+        TextStyle(fontFamily = body, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp)
     val typography = Typography(
-        displayLarge = base.displayLarge.story(-0.03).copy(fontSize = 60.sp, lineHeight = 62.sp),
-        displayMedium = base.displayMedium.story(-0.025),
-        displaySmall = base.displaySmall.story(-0.02),
-        headlineLarge = base.headlineLarge.story(),
-        headlineMedium = base.headlineMedium.story(),
-        headlineSmall = base.headlineSmall.story(),
-        titleLarge = base.titleLarge.story(),
-        titleMedium = base.titleMedium.body(FontWeight.Bold),
-        titleSmall = base.titleSmall.body(FontWeight.Bold),
-        bodyLarge = base.bodyLarge.body(),
-        bodyMedium = base.bodyMedium.body(),
-        bodySmall = base.bodySmall.body().copy(fontSize = 13.sp, lineHeight = 18.sp),
-        labelLarge = base.labelLarge.body(FontWeight.ExtraBold).copy(letterSpacing = 0.02.em),
-        labelMedium = base.labelMedium.body(FontWeight.Bold).copy(letterSpacing = 0.06.em),
-        labelSmall = base.labelSmall.body(FontWeight.ExtraBold).copy(letterSpacing = 0.12.em),
+        displayLarge = stamped(52, 54, FontWeight.Bold),
+        displayMedium = stamped(42, 46, FontWeight.Bold),
+        displaySmall = stamped(34, 38, FontWeight.Bold),
+        headlineLarge = stamped(30, 34),
+        headlineMedium = stamped(26, 30),
+        headlineSmall = stamped(23, 28),
+        titleLarge = stamped(20, 24),
+        titleMedium = stamped(17, 22),
+        titleSmall = stamped(15, 20),
+        bodyLarge = reading(17, 24),
+        bodyMedium = reading(15, 21),
+        bodySmall = reading(14, 19),
+        labelLarge = stamped(17, 20),
+        labelMedium = stamped(15, 18, FontWeight.Medium),
+        labelSmall = stamped(13, 16, FontWeight.Medium),
     )
     val colors = lightColorScheme(
-        primary = Atlas.Moss, onPrimary = Atlas.Vellum,
-        primaryContainer = Atlas.Gold, onPrimaryContainer = Atlas.Ink,
-        secondary = Atlas.Ember, onSecondary = Atlas.Ink,
-        secondaryContainer = Color(0xFFDDE6CF), onSecondaryContainer = Atlas.InkText,
-        tertiary = Atlas.Fern,
-        background = Atlas.Vellum, onBackground = Atlas.InkText,
-        surface = Atlas.Vellum, onSurface = Atlas.InkText,
-        surfaceVariant = Atlas.VellumDeep, onSurfaceVariant = Atlas.InkSoft,
-        surfaceContainer = Atlas.VellumDeep, surfaceContainerHigh = Color(0xFFEFE5CB), surfaceContainerHighest = Color(0xFFE6D9B8),
-        outline = Color(0xFF8A7F62), outlineVariant = Color(0xFFCDBF99),
-        error = Atlas.Rust,
+        primary = Wood.Woad, onPrimary = Wood.BeechLight,
+        primaryContainer = Wood.Weld, onPrimaryContainer = Wood.Walnut,
+        secondary = Wood.Madder, onSecondary = Wood.PaleInk,
+        secondaryContainer = Color(0xFFF1DCB5), onSecondaryContainer = Wood.Walnut,
+        tertiary = Wood.Leaf, onTertiary = Wood.PaleInk,
+        background = Wood.Beech, onBackground = Wood.Walnut,
+        surface = Wood.Beech, onSurface = Wood.Walnut,
+        surfaceVariant = Color(0xFFE0BF8D), onSurfaceVariant = Wood.WalnutSoft,
+        surfaceContainerLowest = Wood.BeechLight, surfaceContainerLow = Color(0xFFF0D9B3),
+        surfaceContainer = Wood.Beech, surfaceContainerHigh = Color(0xFFE3C493), surfaceContainerHighest = Color(0xFFDDB985),
+        outline = Color(0xFF9C7448), outlineVariant = Color(0xFFCBA676),
+        error = Wood.Madder, onError = Wood.PaleInk,
     )
     val shapes = Shapes(
-        extraSmall = RoundedCornerShape(6.dp), small = RoundedCornerShape(10.dp), medium = RoundedCornerShape(14.dp),
-        large = RoundedCornerShape(18.dp), extraLarge = RoundedCornerShape(26.dp),
+        extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(14.dp),
+        large = RoundedCornerShape(18.dp), extraLarge = RoundedCornerShape(24.dp),
     )
     val density = LocalDensity.current
     CompositionLocalProvider(

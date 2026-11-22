@@ -6,7 +6,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import id.branchworld.game.WorldCameraReset
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
 import kotlinx.coroutines.CoroutineScope
@@ -128,10 +128,10 @@ internal fun PreviewHud(controller: PreviewController) {
     val opening by controller.presentation.collectAsState()
     if (opening.opening && status == "Island ready") return
     val motion = rememberCoroutineScope()
-    Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.padding(horizontal = 6.dp)) {
-            if (status != "Island ready") Text(status, Modifier.padding(6.dp), style = MaterialTheme.typography.labelLarge)
-            if (!opening.opening) TextButton(onClick = { controller.focus(motion) }) { Text("Focus island") }
+    Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
+        if (status != "Island ready") Surface(shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface) {
+            Text(status, Modifier.padding(6.dp), style = MaterialTheme.typography.labelLarge)
         }
+        if (!opening.opening) WorldCameraReset { controller.focus(motion) }
     }
 }

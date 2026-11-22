@@ -1,12 +1,17 @@
 package id.branchworld.game
 
-import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.draw.rotate
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -22,24 +27,27 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -47,353 +55,378 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.close_panel
+import branchworld.shared.generated.resources.focus_island
 import id.branchworld.game.terrain.Biome
-import org.jetbrains.compose.resources.stringResource
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.jetbrains.compose.resources.stringResource
 
-/** Dark glass over the world, edged with a gold hairline and small corner diamonds. */
-@Composable
-internal fun GlassPanel(
-    modifier: Modifier = Modifier,
-    padding: Dp = 16.dp,
-    corners: Boolean = true,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    val shape = RoundedCornerShape(16.dp)
-    Column(
-        modifier.clip(shape).background(Atlas.InkGlass).border(1.dp, Atlas.Hairline, shape)
-            .then(if (corners) Modifier.drawBehind { cornerDiamonds(Atlas.Gold.copy(alpha = 0.7f), 6.dp.toPx()) } else Modifier)
-            .padding(padding),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        CompositionLocalProvider(LocalContentColor provides Atlas.Vellum) { content() }
+private val Thickness = 6.dp
+
+/**
+ * Draws one wooden piece: a contact shadow on the table, the block's thickness band, then its painted or bare face
+ * with a soft top highlight and, on bare wood, a few lines of grain. [sink] lowers the face into its thickness.
+ */
+private fun DrawScope.woodPiece(face: Color, radius: Float, thickness: Float, sink: Float, grain: Boolean) {
+    val r = CornerRadius(radius)
+    val bodyHeight = (size.height - thickness).coerceAtLeast(1f)
+    val faceSize = Size(size.width, bodyHeight)
+    // Two translucent skirts feather the contact edge without the cost of a blur layer.
+    for (spread in listOf(3.dp, 1.5.dp)) {
+        val px = spread.toPx()
+        drawRoundRect(Wood.Shadow.copy(alpha = if (spread == 3.dp) 0.10f else 0.18f),
+            Offset(-px / 2f, thickness + px), Size(size.width + px, bodyHeight), CornerRadius(radius + px))
+    }
+    drawRoundRect(Wood.edgeOf(face), Offset(0f, thickness), faceSize, r)
+    drawRoundRect(face, Offset(0f, sink), faceSize, r)
+    drawRoundRect(Color.White.copy(alpha = 0.21f), Offset(radius * 0.55f, sink + 1.dp.toPx()),
+        Size((size.width - radius * 1.1f).coerceAtLeast(1f), 1.dp.toPx()), CornerRadius(1.dp.toPx()))
+    // Reading boards stay quiet: grain only on pieces short enough to carry a label, not paragraphs.
+    if (grain && bodyHeight < 150.dp.toPx()) {
+        // Faint, uneven lengths flow across the face, not a ruled grid through the lettering.
+        for (index in 0..7) {
+            val fraction = GrainStrands[index]
+            val y = sink + bodyHeight * fraction
+            val wave = 1.5.dp.toPx() * (index % 3 + 1)
+            val from = size.width * (0.025f + (index % 4) * 0.047f)
+            val to = size.width * (0.97f - (index % 3) * 0.06f)
+            val path = Path().apply {
+                moveTo(from, y)
+                cubicTo(size.width * 0.41f, y - wave, size.width * 0.62f, y + wave * 0.45f, to, y + wave)
+            }
+            drawPath(path, Wood.BeechGrain.copy(alpha = if (index % 3 == 0) 0.11f else 0.055f), style = Stroke(0.65.dp.toPx()))
+        }
     }
 }
 
-/** A vellum reading sheet with an ornamented title row. Used for every in-world panel. */
+private val GrainStrands = floatArrayOf(0.12f, 0.20f, 0.25f, 0.46f, 0.50f, 0.72f, 0.84f, 0.89f)
+
+/** A piece is set down when it first appears: a short drop that settles from an already-visible start. */
 @Composable
-internal fun VellumSheet(
+private fun Modifier.setDown(): Modifier {
+    val ui = LocalUi.current
+    val drop = remember { Animatable(if (ui.reducedMotion) 0f else -10f) }
+    LaunchedEffect(ui.reducedMotion) {
+        if (ui.reducedMotion) drop.snapTo(0f)
+        else drop.animateTo(0f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow))
+    }
+    val density = LocalDensity.current.density
+    return graphicsLayer { translationY = drop.value * density }
+}
+
+/** A beech board laid on the island: the surface for cards, sheets and menus. */
+@Composable
+internal fun Board(
+    modifier: Modifier = Modifier,
+    padding: Dp = LocalSpacing.current.board,
+    gap: Dp = 8.dp,
+    face: Color = Wood.Beech,
+    depth: Dp = Thickness,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val density = LocalDensity.current
+    val radius = with(density) { 18.dp.toPx() }
+    val thickness = with(density) { depth.toPx() }
+    Column(
+        modifier.setDown().drawBehind { woodPiece(face, radius, thickness, 0f, grain = face == Wood.Beech) }
+            .padding(start = padding, end = padding, top = padding, bottom = padding + depth),
+        verticalArrangement = Arrangement.spacedBy(gap),
+    ) {
+        CompositionLocalProvider(LocalContentColor provides Wood.inkOn(face)) { content() }
+    }
+}
+
+/** A titled board for in-world panels, with one round peg to put it away. */
+@Composable
+internal fun BoardSheet(
     title: String,
     modifier: Modifier = Modifier,
-    kicker: String? = null,
     onClose: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val shape = RoundedCornerShape(18.dp)
-    Surface(modifier, shape = shape, color = Atlas.Vellum, contentColor = Atlas.InkText, shadowElevation = 10.dp) {
-        Column(
-            Modifier.border(1.dp, Atlas.VellumDeep, shape).drawBehind {
-                drawRoundRect(Atlas.Ember.copy(alpha = 0.35f), Offset(5.dp.toPx(), 5.dp.toPx()),
-                    Size(size.width - 10.dp.toPx(), size.height - 10.dp.toPx()), CornerRadius(14.dp.toPx()), style = Stroke(1.dp.toPx()))
-                cornerDiamonds(Atlas.Ember.copy(alpha = 0.8f), 5.dp.toPx(), inset = 5.dp.toPx())
-            }.padding(horizontal = 18.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    kicker?.let { SectionLabel(it, color = Atlas.Ember) }
-                    Text(title, Modifier.semantics { heading() }, style = MaterialTheme.typography.headlineSmall,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis)
-                }
-                if (onClose != null) IconAction(GameIcons.Close, closeLabel(), onClose, tint = Atlas.InkSoft)
-            }
-            OrnamentRule(Atlas.Ember.copy(alpha = 0.55f))
-            content()
+    Board(modifier) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.headlineSmall,
+                maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (onClose != null) PegButton(GameIcons.Close, closeLabel(), onClose)
         }
+        content()
     }
 }
 
-/** A thin rule with a diamond at its centre. */
-@Composable
-internal fun OrnamentRule(color: Color = Atlas.Hairline, modifier: Modifier = Modifier) {
-    Canvas(modifier.fillMaxWidth().height(9.dp)) {
-        val y = size.height / 2
-        val gap = 9.dp.toPx()
-        drawLine(color, Offset(0f, y), Offset(size.width / 2 - gap, y), 1.dp.toPx())
-        drawLine(color, Offset(size.width / 2 + gap, y), Offset(size.width, y), 1.dp.toPx())
-        diamond(Offset(size.width / 2, y), 4.dp.toPx(), color)
-    }
-}
-
-@Composable
-internal fun SectionLabel(text: String, modifier: Modifier = Modifier, color: Color = Atlas.Gold) {
-    Text(text.uppercase(), modifier, color = color, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+internal enum class BlockSize(val height: Dp, val radius: Dp, val horizontal: Dp) {
+    Large(78.dp, 18.dp, 20.dp), Medium(56.dp, 14.dp, 18.dp), Small(52.dp, 14.dp, 12.dp), Compact(48.dp, 10.dp, 8.dp),
 }
 
 /**
- * A title-menu entry: large story type, an optional line beneath, and a gold diamond that slides in when the entry is
- * hovered, focused or pressed. Keyboard and touch reach it the same way.
+ * A wooden block: painted when [paint] is set (the primary or chosen piece), bare beech otherwise. Pressing sinks the
+ * face into its thickness; keyboard focus draws a walnut outline around the face.
  */
 @Composable
-internal fun MenuItem(
+internal fun Block(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    paint: Color? = null,
     detail: String? = null,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    large: Boolean = true,
+    size: BlockSize = BlockSize.Medium,
+    iconOnly: Boolean = false,
+    sound: WorldSound = WorldSound.UiSelect,
+    selected: Boolean? = null,
+    checked: Boolean? = null,
 ) {
     val ui = LocalUi.current
     val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
     val pressed by interaction.collectIsPressedAsState()
-    val lit = enabled && (hovered || focused || pressed)
-    val reveal by animateFloatAsState(if (lit) 1f else 0f)
-    val color by animateColorAsState(when {
-        !enabled -> Atlas.Faded.copy(alpha = 0.6f)
-        lit -> Atlas.Gold
-        else -> Atlas.Vellum
-    })
-    Row(
-        modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp))
-            .background(Atlas.Gold.copy(alpha = 0.10f * reveal))
-            .hoverable(interaction, enabled)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button) {
-                ui.click(WorldSound.UiConfirm)
-                onClick()
-            }
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Canvas(Modifier.width(16.dp).height(16.dp).alpha(0.25f + 0.75f * reveal)) {
-            diamond(Offset(size.width / 2 + (reveal - 1f) * 6.dp.toPx(), size.height / 2), 5.dp.toPx(), Atlas.Gold)
-        }
-        Spacer(Modifier.width(10.dp))
-        if (icon != null) {
-            Icon(icon, null, Modifier.size(22.dp), tint = color)
-            Spacer(Modifier.width(12.dp))
-        }
-        Column(Modifier.weight(1f)) {
-            Text(label, color = color, style = if (large) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            detail?.let {
-                Text(it, color = if (enabled) Atlas.Mist else Atlas.Faded.copy(alpha = 0.6f), style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-/** A labelled icon button for the action dock. [primary] marks the one action the moment is about. */
-@Composable
-internal fun DockButton(
-    icon: ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    enabled: Boolean = true,
-    primary: Boolean = false,
-    selected: Boolean = false,
-    compact: Boolean = false,
-) {
-    val ui = LocalUi.current
-    val interaction = remember { MutableInteractionSource() }
     val hovered by interaction.collectIsHoveredAsState()
     val focused by interaction.collectIsFocusedAsState()
-    val lit = enabled && (hovered || focused || selected)
-    val iconOnly = compact && !primary
-    val container = when {
-        primary -> if (lit) Color(0xFFF3C677) else Atlas.Gold
-        lit -> Atlas.Vellum.copy(alpha = 0.12f)
-        else -> Color.Transparent
+    val face = when {
+        !enabled -> Color(0xFFD9C3A0)
+        paint != null -> if (hovered) lerp(paint, if (Wood.inkOn(paint) == Wood.Walnut) Color.White else Color.Black, 0.07f) else paint
+        hovered -> Wood.BeechLight
+        else -> Wood.Beech
     }
-    val content = when {
-        !enabled -> Atlas.Faded.copy(alpha = 0.5f)
-        primary -> Atlas.Ink
-        lit -> Atlas.Gold
-        else -> Atlas.Vellum
+    val ink = if (!enabled) Wood.WalnutSoft else Wood.inkOn(paint ?: Wood.Beech)
+    val targetSink = if (pressed && enabled) Thickness - 1.dp else 0.dp
+    val animatedSink by animateDpAsState(targetSink, spring(stiffness = Spring.StiffnessHigh))
+    val sink = if (ui.reducedMotion) targetSink else animatedSink
+    val activate = { ui.click(sound); onClick() }
+    val input = when {
+        selected != null -> Modifier.selectable(selected, interaction, indication = null, enabled = enabled,
+            role = Role.RadioButton, onClick = activate)
+        checked != null -> Modifier.toggleable(checked, interaction, indication = null, enabled = enabled,
+            role = Role.Checkbox, onValueChange = { activate() })
+        else -> Modifier.clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClick = activate)
     }
+    val density = LocalDensity.current
+    val radius = with(density) { size.radius.toPx() }
+    val thickness = with(density) { Thickness.toPx() }
     Row(
-        Modifier.heightIn(min = 44.dp).clip(RoundedCornerShape(22.dp)).background(container)
-            .hoverable(interaction, enabled)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button) {
-                ui.click()
-                onClick()
+        modifier.setDown().heightIn(min = size.height)
+            .drawBehind {
+                woodPiece(face, radius, thickness, sink.toPx(), grain = paint == null)
+                if (focused) drawRoundRect(Wood.Walnut, Offset(-3f, -3f + sink.toPx()),
+                    Size(this.size.width + 6f, this.size.height - thickness + 6f), CornerRadius(radius + 3f), style = Stroke(2.5f))
             }
-            .padding(horizontal = if (primary) 16.dp else if (iconOnly) 12.dp else 11.dp, vertical = 8.dp),
+            .hoverable(interaction, enabled)
+            .then(input)
+            .offset(y = sink)
+            .padding(start = size.horizontal, end = size.horizontal, top = 6.dp, bottom = 6.dp + Thickness),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(7.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Icon(icon, if (iconOnly) label else null, Modifier.size(20.dp), tint = content)
-        if (!iconOnly) Text(label, color = content, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        if (icon != null) {
+            Icon(icon, if (iconOnly) label else null, Modifier.size(if (size == BlockSize.Large) 26.dp else 22.dp), tint = ink)
+        }
+        if (!iconOnly) Column(Modifier.weight(1f, fill = false)) {
+            Text(label, color = ink, style = when (size) {
+                BlockSize.Large -> MaterialTheme.typography.headlineSmall
+                BlockSize.Medium -> MaterialTheme.typography.titleLarge
+                BlockSize.Small -> MaterialTheme.typography.labelLarge
+                BlockSize.Compact -> MaterialTheme.typography.titleSmall
+            }, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            detail?.let {
+                Text(it, color = ink, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
+        }
     }
 }
 
-/** A square icon-only action with an accessible label. */
+/** A round wooden peg with one icon: close, back and other small actions. Always 48 dp to touch. */
 @Composable
-internal fun IconAction(icon: ImageVector, label: String, onClick: () -> Unit, tint: Color = Atlas.Vellum, enabled: Boolean = true) {
+internal fun PegButton(icon: ImageVector, label: String, onClick: () -> Unit, enabled: Boolean = true) {
     val ui = LocalUi.current
     val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
     val hovered by interaction.collectIsHoveredAsState()
+    val focused by interaction.collectIsFocusedAsState()
+    val targetSink = if (pressed) 3.dp else 0.dp
+    val animatedSink by animateDpAsState(targetSink)
+    val sink = if (ui.reducedMotion) targetSink else animatedSink
     Box(
-        Modifier.size(44.dp).clip(RoundedCornerShape(22.dp))
-            .background(if (hovered && enabled) tint.copy(alpha = 0.12f) else Color.Transparent)
-            .hoverable(interaction, enabled)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button, onClickLabel = label) {
+        Modifier.size(48.dp).hoverable(interaction, enabled)
+            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button) {
                 ui.click(WorldSound.UiBack)
                 onClick()
             },
         contentAlignment = Alignment.Center,
-    ) { Icon(icon, label, Modifier.size(20.dp), tint = if (enabled) tint else tint.copy(alpha = 0.4f)) }
-}
-
-/** A gold primary or quiet secondary button for sheets and dialogs. */
-@Composable
-internal fun StoryButton(
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    primary: Boolean = true,
-    enabled: Boolean = true,
-    icon: ImageVector? = null,
-    onDark: Boolean = false,
-) {
-    val ui = LocalUi.current
-    val interaction = remember { MutableInteractionSource() }
-    val hovered by interaction.collectIsHoveredAsState()
-    val focused by interaction.collectIsFocusedAsState()
-    val lit = hovered || focused
-    val shape = RoundedCornerShape(24.dp)
-    val quiet = if (onDark) Atlas.Vellum else Atlas.Moss
-    val container = when {
-        !enabled -> if (primary) Atlas.Faded.copy(alpha = 0.35f) else Color.Transparent
-        primary -> if (lit) Color(0xFFF3C677) else Atlas.Gold
-        lit -> quiet.copy(alpha = 0.10f)
-        else -> Color.Transparent
-    }
-    val content = when {
-        !enabled -> quiet.copy(alpha = 0.45f)
-        primary -> Atlas.Ink
-        else -> quiet
-    }
-    Row(
-        modifier.heightIn(min = 44.dp).clip(shape).background(container)
-            .then(if (primary) Modifier else Modifier.border(1.dp, quiet.copy(alpha = if (enabled) 0.45f else 0.2f), shape))
-            .hoverable(interaction, enabled)
-            .focusable(enabled, interaction)
-            .clickable(interaction, indication = null, enabled = enabled, role = Role.Button) {
-                ui.click(if (primary) WorldSound.UiConfirm else WorldSound.UiSelect)
-                onClick()
-            }
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
     ) {
-        icon?.let { Icon(it, null, Modifier.size(18.dp), tint = content) }
-        Text(label, color = content, style = MaterialTheme.typography.labelLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Canvas(Modifier.size(40.dp)) {
+            woodPiece(if (hovered) Wood.BeechLight else Wood.Beech, size.minDimension / 2, 4.dp.toPx(), sink.toPx(), grain = false)
+            if (focused) drawCircle(Wood.Walnut, radius = size.minDimension / 2 - 3.dp.toPx(), style = Stroke(2.dp.toPx()))
+        }
+        Icon(icon, label, Modifier.offset(y = sink - 2.dp).size(18.dp), tint = if (enabled) Wood.Walnut else Wood.WalnutSoft.copy(alpha = 0.4f))
     }
 }
 
-/** A small capsule of quiet information, such as the day or a status. */
+/** The game-styled camera reset used by the platform render adapter. */
 @Composable
-internal fun InfoChip(text: String, modifier: Modifier = Modifier, color: Color = Atlas.Mist, background: Color = Atlas.Vellum.copy(alpha = 0.10f)) {
-    Text(text, modifier.clip(RoundedCornerShape(12.dp)).background(background).padding(horizontal = 10.dp, vertical = 4.dp),
-        color = color, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+fun WorldCameraReset(onClick: () -> Unit) {
+    PegButton(GameIcons.Compass, stringResource(Res.string.focus_island), onClick)
 }
 
-/** A selectable row for settings: label, explanation and an on/off lantern. */
+/** A small stamped peg of quiet information, such as the day. */
 @Composable
-internal fun SettingRow(label: String, detail: String?, on: Boolean, onToggle: (Boolean) -> Unit) {
+internal fun Peg(text: String, modifier: Modifier = Modifier, paint: Color? = null) {
+    val ground = paint ?: Wood.BeechLight
+    Text(text, modifier.clip(RoundedCornerShape(12.dp)).background(ground).padding(horizontal = 10.dp, vertical = 4.dp),
+        color = Wood.inkOn(ground), style = MaterialTheme.typography.labelMedium, maxLines = 1)
+}
+
+/** The chapter's inlaid numeral: flip the token from its bare back to its painted face. */
+@Composable
+internal fun ChapterStamp(numeral: String, paint: Color, unlocked: Boolean, modifier: Modifier = Modifier) {
+    val reduced = LocalUi.current.reducedMotion
+    val turn = remember { Animatable(if (reduced && unlocked) 1f else 0f) }
+    LaunchedEffect(unlocked, reduced) {
+        if (reduced || !unlocked) turn.snapTo(if (unlocked) 1f else 0f)
+        else turn.animateTo(1f, tween(durationMillis = 340))
+    }
+    val phase = if (reduced || !unlocked) if (unlocked) 1f else 0f else turn.value
+    Peg(numeral, modifier.graphicsLayer {
+        rotationX = if (phase < 0.5f) phase * 160f else (phase - 1f) * 160f
+    }, if (phase >= 0.5f) paint else Wood.BeechLight)
+}
+
+/** A setting: its name, one line of what it does, and a wooden slider in a groove. */
+@Composable
+internal fun WoodSwitchRow(label: String, detail: String?, on: Boolean, onToggle: (Boolean) -> Unit) {
     val ui = LocalUi.current
+    val targetSlide = if (on) 1f else 0f
+    val animatedSlide by animateFloatAsState(targetSlide)
+    val slide = if (ui.reducedMotion) targetSlide else animatedSlide
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).clip(RoundedCornerShape(10.dp))
-            .clickable(role = Role.Switch) {
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clip(RoundedCornerShape(12.dp))
+            .toggleable(value = on, role = Role.Switch) {
                 ui.click()
-                onToggle(!on)
-            }.padding(horizontal = 6.dp, vertical = 6.dp),
+                onToggle(it)
+            }.padding(horizontal = 4.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
             Text(label, style = MaterialTheme.typography.titleMedium)
-            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Atlas.InkSoft) }
+            detail?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft) }
         }
         Spacer(Modifier.width(12.dp))
-        Lantern(on)
+        Canvas(Modifier.width(54.dp).height(30.dp)) {
+            val groove = size.height / 2
+            drawRoundRect(Color(0xFFB98F5C), cornerRadius = CornerRadius(groove))
+            drawRoundRect(Color(0x33000000), Offset.Zero, Size(size.width, 4f), CornerRadius(groove))
+            val knob = size.height - 6f
+            translate(3f + (size.width - knob - 6f) * slide, 2f) {
+                val piece = Size(knob, knob)
+                drawRoundRect(Wood.Shadow, Offset(1f, 3f), piece, CornerRadius(knob / 2))
+                drawRoundRect(lerp(Wood.BeechLight, Wood.Woad, slide), Offset.Zero, piece, CornerRadius(knob / 2))
+            }
+        }
     }
 }
 
+/** Mutually exclusive choices as a row of blocks: the chosen one painted, the others bare wood. */
 @Composable
-private fun Lantern(on: Boolean) {
-    val knob by animateFloatAsState(if (on) 1f else 0f)
-    Canvas(Modifier.width(46.dp).height(26.dp)) {
-        val radius = size.height / 2
-        drawRoundRect(lerp(Color(0xFFCFC3A3), Atlas.Moss, knob), cornerRadius = CornerRadius(radius))
-        val x = radius + (size.width - 2 * radius) * knob
-        drawCircle(lerp(Atlas.Vellum, Atlas.Gold, knob), radius - 3.dp.toPx(), Offset(x, radius))
-    }
-}
-
-/** A row of mutually exclusive choices, such as the text size. */
-@Composable
-internal fun ChoiceRow(options: List<Pair<String, Boolean>>, onSelect: (Int) -> Unit) {
-    val ui = LocalUi.current
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+internal fun BlockChoice(options: List<Pair<String, Boolean>>, onSelect: (Int) -> Unit) {
+    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         options.forEachIndexed { index, (label, selected) ->
-            val shape = RoundedCornerShape(18.dp)
-            Text(label, Modifier.clip(shape).background(if (selected) Atlas.Moss else Color.Transparent)
-                .border(1.dp, if (selected) Atlas.Moss else Atlas.InkSoft.copy(alpha = 0.4f), shape)
-                .clickable(role = Role.RadioButton) {
-                    ui.click()
-                    onSelect(index)
-                }.padding(horizontal = 14.dp, vertical = 8.dp),
-                color = if (selected) Atlas.Vellum else Atlas.InkText, style = MaterialTheme.typography.labelLarge)
+            Block(label, { onSelect(index) }, Modifier.weight(1f), paint = if (selected) Wood.Woad else Wood.BeechLight,
+                size = BlockSize.Small, selected = selected)
         }
     }
 }
 
 /**
- * A painted map of an island, drawn from its real generated terrain: water, beaches, meadows, forests, uplands and
- * wetlands, shaded by height. Generated off the main thread and cached for the session.
+ * Scrolling contents of a beech board. While more lies below, a small chevron sits under the content (never over
+ * it), so a piece cut by the board's edge never looks like the end of the list.
  */
 @Composable
-internal fun IslandMiniMap(key: TerrainKey, modifier: Modifier = Modifier, highlight: List<Pair<Int, Int>> = emptyList()) {
-    val terrain by produceState<TerrainMap?>(MiniMaps[key], key) {
+internal fun ScrollColumn(modifier: Modifier = Modifier, spacing: Dp = 8.dp, content: @Composable ColumnScope.() -> Unit) {
+    val scroll = rememberScrollState()
+    Column(modifier) {
+        Column(Modifier.weight(1f, fill = false).fillMaxWidth().verticalScroll(scroll),
+            verticalArrangement = Arrangement.spacedBy(spacing), content = content)
+        if (scroll.canScrollForward) {
+            Box(Modifier.fillMaxWidth().height(22.dp), contentAlignment = Alignment.Center) {
+                Icon(GameIcons.Back, null, Modifier.rotate(-90f).size(18.dp), tint = Wood.WalnutSoft)
+            }
+        }
+    }
+}
+
+/** The shelf the action pieces rest on. */
+@Composable
+internal fun Shelf(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
+    Row(modifier.widthIn(max = 980.dp), verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
+}
+
+@Composable
+internal fun Scrim(modifier: Modifier = Modifier) {
+    Box(modifier.background(Color(0x8C1A120A)))
+}
+
+/** Text set straight onto the island, with a soft walnut shadow so it reads over grass and water. */
+@Composable
+internal fun IslandText(text: String, style: TextStyle, modifier: Modifier = Modifier, color: Color = Wood.BeechLight, maxLines: Int = Int.MAX_VALUE) {
+    Text(text, modifier, color = color, maxLines = maxLines, softWrap = maxLines > 1,
+        style = style.copy(shadow = Shadow(Color(0xCC1A120A), Offset(0f, 2f), 10f)))
+}
+
+/**
+ * A painted map of an island, drawn from its real generated terrain and inlaid in a beech frame: water, beaches,
+ * meadows, forests, uplands and wetlands, shaded by height. Generated off the main thread and cached for the session.
+ */
+@Composable
+internal fun IslandMiniMap(key: TerrainKey, modifier: Modifier = Modifier, muted: Boolean = false) {
+    val terrain by produceState(MiniMaps[key], key) {
         value = MiniMaps[key] ?: withContext(Dispatchers.Default) { IslandGenerator.generate(key) }.also { MiniMaps[key] = it }
     }
     Canvas(modifier) {
-        drawRoundRect(Color(0xFF1F4E55), cornerRadius = CornerRadius(12.dp.toPx()))
+        val inset = 5.dp.toPx()
+        drawRoundRect(Wood.BeechEdge, cornerRadius = CornerRadius(12.dp.toPx()))
+        drawRoundRect(Color(0xFF2F6E78), Offset(inset, inset), Size(size.width - inset * 2, size.height - inset * 2), CornerRadius(8.dp.toPx()))
         val map = terrain ?: return@Canvas
-        val cell = minOf(size.width, size.height) / TerrainMap.Size
+        val cell = minOf(size.width - inset * 2, size.height - inset * 2) / TerrainMap.Size
         val left = (size.width - cell * TerrainMap.Size) / 2
         val top = (size.height - cell * TerrainMap.Size) / 2
         for (z in TerrainMap.MinCell..TerrainMap.MaxCell) for (x in TerrainMap.MinCell..TerrainMap.MaxCell) {
             val tile = map.cellAt(x, z) ?: continue
             val water = map.watershed?.waterAt(x, z)
             val base = when {
-                water != null -> Color(0xFF3F8C8C)
+                water != null -> Color(0xFF4C9AA0)
                 !tile.land -> continue
                 else -> when (tile.biome) {
                     Biome.Water -> continue
-                    Biome.Beach -> Color(0xFFE2D2A2)
-                    Biome.Meadow -> Color(0xFF9CBF6E)
-                    Biome.PineForest -> Color(0xFF3F6E4C)
-                    Biome.RockyUpland -> Color(0xFFA9A48C)
-                    Biome.Wetland -> Color(0xFF6F9F7C)
+                    Biome.Beach -> Color(0xFFE6D3A0)
+                    Biome.Meadow -> Color(0xFF9DC06C)
+                    Biome.PineForest -> Color(0xFF41704A)
+                    Biome.RockyUpland -> Color(0xFFB0A98E)
+                    Biome.Wetland -> Color(0xFF73A07C)
                 }
             }
-            val shade = (tile.elevationTwice.coerceIn(0, 60) / 60f) * 0.22f
-            drawRect(lerp(base, Color.White, shade), Offset(left + (x - TerrainMap.MinCell) * cell, top + (z - TerrainMap.MinCell) * cell),
-                Size(cell + 0.6f, cell + 0.6f))
-        }
-        for ((x, z) in highlight) {
-            diamond(Offset(left + (x - TerrainMap.MinCell + 0.5f) * cell, top + (z - TerrainMap.MinCell + 0.5f) * cell), cell * 1.6f, Atlas.Gold)
+            val shaded = lerp(base, Color.White, (tile.elevationTwice.coerceIn(0, 60) / 60f) * 0.2f)
+            val color = if (muted) lerp(shaded, Wood.BeechEdge, 0.6f) else shaded
+            drawRect(color, Offset(left + (x - TerrainMap.MinCell) * cell, top + (z - TerrainMap.MinCell) * cell), Size(cell + 0.6f, cell + 0.6f))
         }
     }
 }
@@ -409,30 +442,5 @@ internal suspend fun warmMiniMaps(keys: List<TerrainKey>) {
     }
 }
 
-internal fun DrawScope.diamond(center: Offset, radius: Float, color: Color) {
-    val path = Path().apply {
-        moveTo(center.x, center.y - radius)
-        lineTo(center.x + radius, center.y)
-        lineTo(center.x, center.y + radius)
-        lineTo(center.x - radius, center.y)
-        close()
-    }
-    drawPath(path, color)
-}
-
-private fun DrawScope.cornerDiamonds(color: Color, radius: Float, inset: Float = 0f) {
-    val pad = inset + radius * 1.6f
-    for (center in listOf(Offset(pad, pad), Offset(size.width - pad, pad), Offset(pad, size.height - pad), Offset(size.width - pad, size.height - pad))) {
-        diamond(center, radius * 0.55f, color)
-    }
-}
-
 @Composable
 internal fun closeLabel(): String = stringResource(Res.string.close_panel)
-
-/** A horizontal row that spaces its children for the action dock and keeps them inside the safe width. */
-@Composable
-internal fun DockRow(modifier: Modifier = Modifier, content: @Composable RowScope.() -> Unit) {
-    Row(modifier.widthIn(max = 980.dp), verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp), content = content)
-}

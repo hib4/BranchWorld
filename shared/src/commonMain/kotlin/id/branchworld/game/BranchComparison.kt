@@ -171,8 +171,8 @@ internal fun ComparisonOverlay(view: ComparisonView, modifier: Modifier = Modifi
         view.pair == null -> if (diagnostics) stringResource(Res.string.comparison_loading, view.tick.toString()) else stringResource(Res.string.shape_compare_loading)
         else -> return
     }
-    Surface(modifier = modifier, shape = MaterialTheme.shapes.medium) {
-        Text(message, Modifier.padding(14.dp).semantics { liveRegion = LiveRegionMode.Polite })
+    Board(modifier, padding = 12.dp) {
+        Text(message, Modifier.semantics { liveRegion = LiveRegionMode.Polite })
     }
 }
 

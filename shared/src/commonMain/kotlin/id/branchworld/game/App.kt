@@ -6,18 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeContentPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -36,7 +34,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -96,8 +93,6 @@ private class WorldSession : ViewModel() {
     val profile = MutableStateFlow<PlayerProfile?>(null)
 }
 
-internal val NightGreen = Atlas.Ink
-internal val Parchment = Atlas.Vellum
 
 private enum class WorldPanel { Inspect, Grove, Village, Timeline, Diagnostics, Settings }
 private enum class Overlay { Pause, Photo, Closing }
@@ -316,37 +311,29 @@ fun App(
         }) {
             val wide = maxWidth >= 760.dp && maxHeight >= 420.dp
             val sideIntroduction = maxWidth >= 760.dp && maxWidth > maxHeight * 1.3f
+            val tightDock = maxWidth < 460.dp
             val shortLandscape = !wide && maxWidth >= 640.dp && maxWidth > maxHeight * 1.45f
             val sidePanel = wide || shortLandscape
             val height = maxHeight
+            val spacing = Spacing(compact = maxWidth < 600.dp)
+            CompositionLocalProvider(LocalSpacing provides spacing) {
             if (viewport == null && session != null) {
                 WorldViewport(Modifier.matchParentSize())
             } else {
                 viewport?.invoke(Modifier.matchParentSize(), session?.world)
             }
-            // In the world the kicker already says story, sandbox or earlier rules; the card names the place itself.
             val title = Story.of(islandKey)?.let { stringResource(it.title) } ?: stringResource(islandTitle(islandKey.terrain))
             val failed = (load as? IslandLoad.Failed)?.key == islandKey
             val story = Story.of(session?.chapter)
 
             if (!isWorld) {
-                val menu = state.screen != HomeScreen.Title
-                Box(Modifier.matchParentSize().background(if (sideIntroduction) {
-                    Brush.horizontalGradient(0f to Atlas.Ink.copy(alpha = 0.95f), (if (menu) 0.55f else 0.36f) to Atlas.Ink.copy(alpha = 0.78f),
-                        (if (menu) 0.85f else 0.62f) to Color.Transparent)
-                } else {
-                    Brush.verticalGradient((if (menu) 0.05f else 0.38f) to Color.Transparent, 0.62f to Atlas.Ink.copy(alpha = 0.72f),
-                        1f to Atlas.Ink.copy(alpha = 0.96f))
-                }))
                 val page = Modifier.align(if (sideIntroduction) Alignment.CenterStart else Alignment.BottomStart)
-                    .safeContentPadding().padding(if (sideIntroduction) 36.dp else 18.dp)
-                    .heightIn(max = height - 24.dp)
+                    .safeDrawingPadding().padding(if (sideIntroduction) 24.dp else spacing.edge(16.dp))
                 val current = profile ?: PlayerProfile()
                 when (state.screen) {
-                    HomeScreen.Title, HomeScreen.Settings -> TitleMenu(current, profileReady && !failed,
-                        onContinue = { enter(it.key(), start = false) },
-                        onScreen = { state = state.show(it) },
-                        modifier = page.widthIn(max = 430.dp).verticalScroll(rememberScrollState()))
+                    HomeScreen.Title -> TitleMenu(current, profileReady && !failed, ::enter,
+                        onScreen = { state = state.show(it) }, modifier = Modifier.matchParentSize().safeDrawingPadding())
+                    HomeScreen.Settings -> Unit
                     HomeScreen.Stories -> StoriesScreen(current, onBegin = { enter(it.key, start = true) },
                         onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 740.dp))
                     HomeScreen.Atlas -> AtlasScreen(current, onOpen = { enter(it.key(), start = false) },
@@ -355,36 +342,40 @@ fun App(
                         onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 640.dp))
                 }
                 if (failed) {
-                    GlassPanel(Modifier.align(Alignment.TopCenter).safeContentPadding().padding(16.dp)) {
+                    Board(Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(spacing.edge(16.dp))) {
                         Text(stringResource(Res.string.island_generation_failed))
-                        StoryButton(stringResource(Res.string.retry_island), { operations.launch { islands.open(islandKey, saveStore) } })
+                        Block(stringResource(Res.string.retry_island), { operations.launch { islands.open(islandKey, saveStore) } })
                     }
                 }
                 if (state.screen == HomeScreen.Settings) {
-                    MenuScrim(Modifier.matchParentSize())
+                    Scrim(Modifier.matchParentSize())
                     SettingsSheet(settings, worldSounds = setAmbience != null || playSound != null,
                         onChange = { next -> updateProfile { it.copy(settings = next) } },
                         onClose = { state = state.show(HomeScreen.Title) },
-                        modifier = Modifier.align(Alignment.Center).safeContentPadding().padding(16.dp).widthIn(max = 480.dp)
+                        modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)).widthIn(max = 480.dp)
                             .heightIn(max = height - 40.dp))
                 }
                 if (viewportHud != null && session != null && state.screen == HomeScreen.Title) {
-                    Box(Modifier.align(Alignment.TopEnd).safeContentPadding().padding(10.dp)) { viewportHud() }
+                    Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(10.dp))) { viewportHud() }
                 }
             }
 
             if (isWorld && session != null && overlay == Overlay.Photo) {
-                PhotoControls({ overlayName = null }, Modifier.align(Alignment.TopEnd).safeContentPadding().padding(12.dp))
+                PhotoControls({ overlayName = null }, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(12.dp)))
             } else if (isWorld && session != null) {
                 val state0 = session.clock.state
+                val paint = chapterPaint(session.chapter, session.key.sandbox)
+                val asking = pose?.let { state0.settlements?.village?.openPetition() }
                 val compactTargeting = !wide && panel == WorldPanel.Grove && pose?.shaping != null
-                if (!compactTargeting && comparison == null) Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeContentPadding().padding(12.dp),
+                if (!compactTargeting && comparison == null && overlay == null && closed == null) Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().safeDrawingPadding().padding(spacing.edge(12.dp)),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Box(Modifier.weight(1f)) {
-                        GlassPanel(Modifier.widthIn(max = 330.dp), padding = 13.dp) {
-                            SectionLabel(Kicker(islandKey))
-                            Text(title, style = if (wide) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
-                                modifier = Modifier.semantics { heading() })
+                        Board(Modifier.widthIn(max = 330.dp), padding = 13.dp) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                story?.let { Peg(it.numeral, paint = paint) }
+                                Text(title, style = if (wide) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.titleLarge,
+                                    modifier = Modifier.weight(1f, fill = false).semantics { heading() })
+                            }
                             val climate = pose?.climate
                             val watershed = climate?.watershed
                             val isHollowmere = session.chapter == Chapter.FadingGrove
@@ -405,29 +396,27 @@ fun App(
                                 climate?.weather == Weather.Dry -> Res.string.world_dry_note
                                 else -> Res.string.island_opening
                             }
-                            val asking = pose?.let { state0.settlements?.village?.openPetition() }
-                            if (asking != null) {
-                                Text(stringResource(Res.string.petition_open, settlementName(asking.siteId, session.chapter)),
-                                    style = MaterialTheme.typography.bodySmall, color = Atlas.Gold)
-                            } else Text(stringResource(concern), style = MaterialTheme.typography.bodySmall, color = Atlas.Mist)
+                            val note = if (wide && asking != null) stringResource(Res.string.petition_open, settlementName(asking.siteId, session.chapter))
+                                else stringResource(concern)
+                            Text(note, style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
                             if (panel != WorldPanel.Grove) {
                                 plantingNotice?.let { amount ->
                                     Text(stringResource(Res.string.grove_applied, amount),
                                         Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodySmall)
                                 }
                             }
-                            pose?.let { InfoChip(dayLabel(it.tick, it.climate?.dayPhase)) }
+                            pose?.let { Peg(dayLabel(it.tick, it.climate?.dayPhase)) }
                             val route = session.world.herdRoute
                             if (session.chapter == Chapter.LastCrossing && route.isNotEmpty()) {
-                                StoryButton(stringResource(Res.string.crossing_show_way), {
+                                Block(stringResource(Res.string.crossing_show_way), {
                                     requestFocus(WorldCamera.Focus.EchoSite(route, false))
-                                }, primary = false, icon = GameIcons.Eye, onDark = true)
+                                }, size = BlockSize.Small, icon = GameIcons.Eye, paint = Wood.BeechLight)
                             }
                             if (story != null && session.canCloseChapter && timelineView?.seeking == false) {
-                                StoryButton(stringResource(Res.string.close_chapter), {
+                                Block(stringResource(Res.string.close_chapter), {
                                     clock?.pause()
                                     overlayName = Overlay.Closing.name
-                                }, icon = GameIcons.Seal)
+                                }, icon = GameIcons.Seal, paint = paint, size = BlockSize.Small)
                             }
                         }
                     }
@@ -435,48 +424,59 @@ fun App(
                         Box(Modifier.widthIn(max = if (wide) 265.dp else 124.dp)) { viewportHud() }
                     }
                 }
-                if (comparison == null && panel == null && overlay == null) {
-                    Column(Modifier.align(Alignment.BottomStart).safeContentPadding().padding(10.dp),
+                if (comparison == null && panel == null && overlay == null && closed == null) {
+                    val guide = profile?.let { guideFor(it, session, timelineView, pose?.tick) }
+                    if (shortLandscape) {
+                        val side = Modifier.align(Alignment.CenterEnd).safeDrawingPadding().padding(spacing.edge(10.dp))
+                            .widthIn(max = (maxWidth * 0.42f).coerceAtMost(332.dp)).heightIn(max = height - 105.dp)
+                        if (asking != null) PetitionCard(session, side, compact = true)
+                        else guide?.let { (id, text) -> KeeperGuide(text, { updateProfile { it.see(id) } }, side) }
+                    }
+                    Column(Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(spacing.edge(10.dp)),
                         verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val current = profile
-                        val guide = current?.let { guideFor(it, session, timelineView, pose?.tick) }
-                        guide?.let { (id, text) -> KeeperGuide(text, { updateProfile { it.see(id) } }) }
-                        PetitionCard(session, compact = !wide)
-                        GlassPanel(padding = 5.dp, corners = false) {
-                            DockRow {
+                        if (!shortLandscape && asking == null) guide?.let { (id, text) -> KeeperGuide(text, { updateProfile { it.see(id) } }) }
+                        if (!shortLandscape) PetitionCard(session, compact = !wide,
+                            modifier = Modifier.heightIn(max = height * if (wide) 0.52f else 0.40f))
+                        Board(padding = if (tightDock) 4.dp else 6.dp, depth = 4.dp) {
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 val playback by session.clock.playback.collectAsStateWithLifecycle()
                                 val playing = playback.playing
                                 val compact = !wide
-                                DockButton(if (playing) GameIcons.Pause else GameIcons.Play,
+                                @Composable fun action(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String,
+                                                       enabled: Boolean = true, onClick: () -> Unit) {
+                                    if (compact) PegButton(icon, label, onClick, enabled)
+                                    else Block(label, onClick, icon = icon, enabled = enabled, size = BlockSize.Small, paint = Wood.BeechLight)
+                                }
+                                action(if (playing) GameIcons.Pause else GameIcons.Play,
                                     stringResource(if (playing) Res.string.pause_world else Res.string.play_world),
-                                    session.clock::togglePlaying, enabled = timelineView?.seeking != true, compact = compact)
-                                DockButton(GameIcons.Leaf, stringResource(if (session.key.rules >= ShapingRulesVersion) Res.string.shape_world else Res.string.restore_grove), {
+                                    enabled = timelineView?.seeking != true, onClick = session.clock::togglePlaying)
+                                Block(stringResource(if (session.key.rules >= ShapingRulesVersion) Res.string.shape_world else Res.string.restore_grove), {
                                     if (pose?.shaping != null) session.clock.pause()
                                     showPanel(WorldPanel.Grove)
-                                }, primary = true)
+                                }, icon = if (compact) null else GameIcons.Leaf, paint = paint, size = if (compact) BlockSize.Compact else BlockSize.Small)
                                 if (session.key.rules >= VillageRulesVersion) {
-                                    DockButton(GameIcons.Home, settlementName(1, session.chapter), {
+                                    action(GameIcons.Home, settlementName(1, session.chapter)) {
                                         showPanel(WorldPanel.Village)
                                         val home = pose?.settlements?.firstOrNull()?.village
                                         if (home != null) requestFocus(WorldCamera.Focus.Village(home.structures.map { it.ground } + home.center))
-                                    }, compact = compact)
+                                    }
                                 }
-                                DockButton(GameIcons.Eye, stringResource(Res.string.inspect_story), { showPanel(WorldPanel.Inspect) }, compact = compact)
-                                DockButton(GameIcons.Branches, stringResource(Res.string.open_timeline), { showPanel(WorldPanel.Timeline) }, compact = compact)
-                                DockButton(GameIcons.Menu, stringResource(Res.string.world_menu), {
+                                action(GameIcons.Eye, stringResource(Res.string.inspect_story)) { showPanel(WorldPanel.Inspect) }
+                                action(GameIcons.Branches, stringResource(Res.string.open_timeline)) { showPanel(WorldPanel.Timeline) }
+                                action(GameIcons.Menu, stringResource(Res.string.world_menu)) {
                                     clock?.pause()
                                     overlayName = Overlay.Pause.name
-                                }, compact = compact)
+                                }
                             }
                         }
                     }
                 }
                 if (comparison != null) {
-                    ComparisonOverlay(comparison, Modifier.align(Alignment.Center).padding(16.dp),
+                    ComparisonOverlay(comparison, Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)),
                         diagnostics = diagnostics)
                     if (!diagnostics && !comparisonDetailsOpen) {
                         LivingEchoPlaces(session, comparison,
-                            Modifier.align(Alignment.TopStart).safeContentPadding().padding(12.dp)
+                            Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(spacing.edge(12.dp))
                                 .widthIn(max = if (sidePanel) (maxWidth * 0.54f).coerceAtMost(480.dp) else 340.dp)) {
                             requestFocus(WorldCamera.Focus.EchoSite(it, sidePanel))
                         }
@@ -484,28 +484,28 @@ fun App(
                 }
             }
             if (isWorld && session == null) {
-                GlassPanel(Modifier.align(Alignment.Center).padding(16.dp)) {
+                Board(Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp))) {
                     Text(stringResource(if (failed) Res.string.island_generation_failed else Res.string.island_generating))
                     if (failed) TextButton(onClick = { operations.launch { islands.open(islandKey, saveStore) } }) {
-                        Text(stringResource(Res.string.retry_island), color = Atlas.Gold)
+                        Text(stringResource(Res.string.retry_island), color = Wood.Woad)
                     }
                 }
             }
 
             val activePanel = if (comparison != null) WorldPanel.Timeline else panel
-            if (isWorld && activePanel != null && overlay != Overlay.Photo) {
+            if (isWorld && activePanel != null && overlay == null && closed == null) {
                 val panelSize = if (sidePanel) {
                     Modifier.widthIn(max = if (shortLandscape) 320.dp else 390.dp).fillMaxWidth().heightIn(max = height - 32.dp)
                 } else Modifier.fillMaxWidth().heightIn(max = height *
                     if (comparison != null && !comparisonDetailsOpen && !diagnostics) 0.40f else 0.65f)
                 val placement = Modifier.align(if (sidePanel) Alignment.CenterEnd else Alignment.BottomCenter)
-                    .safeContentPadding().padding(10.dp).then(panelSize)
+                    .safeDrawingPadding().padding(spacing.edge(10.dp)).then(panelSize)
                 if (activePanel == WorldPanel.Settings) {
                     SettingsSheet(settings, worldSounds = setAmbience != null || playSound != null,
                         onChange = { next -> updateProfile { it.copy(settings = next) } }, onClose = { showPanel(null) }, modifier = placement)
                 } else {
                     val content: @Composable () -> Unit = {
-                        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        ScrollColumn(Modifier.fillMaxWidth(), spacing = 10.dp) {
                             PanelContent(activePanel, session, comparison, state, wide, comparisonDetailsOpen,
                                 onDetails = { comparisonDetailsOpen = it }, requestFocus = requestFocus,
                                 onShapeSites = { shapeSites = it }, closePanel = { showPanel(null) },
@@ -520,23 +520,23 @@ fun App(
                         }
                     }
                     if (comparison != null) {
-                        Surface(placement, shape = RoundedCornerShape(18.dp), color = Atlas.Vellum, contentColor = Atlas.InkText,
-                            shadowElevation = 10.dp) { Box(Modifier.padding(16.dp)) { content() } }
+                        Board(placement) { content() }
                     } else {
-                        VellumSheet(stringResource(activePanel.title(session?.chapter, (session?.key?.rules ?: 0) >= ShapingRulesVersion)),
-                            placement, kicker = title, onClose = { showPanel(null) }) { content() }
+                        BoardSheet(stringResource(activePanel.title(session?.chapter, (session?.key?.rules ?: 0) >= ShapingRulesVersion)),
+                            placement, onClose = { showPanel(null) }) { content() }
                     }
                 }
             }
 
             if (isWorld && session != null && overlay == Overlay.Pause) {
-                MenuScrim(Modifier.matchParentSize())
+                Scrim(Modifier.matchParentSize())
                 val tick = pose?.tick ?: session.clock.state.tick
                 val view = timelineView
                 val marked = view != null && profile?.bookmarks?.any {
                     it.slot == islandKey.slot && it.branchId == view.branchId && it.tick == tick
                 } == true
                 PauseMenu(
+                    paint = chapterPaint(session.chapter, session.key.sandbox),
                     saved = when {
                         saveStore == null -> stringResource(Res.string.autosave_off)
                         autosavedAt != null -> stringResource(Res.string.autosave_done, dayOf(checkNotNull(autosavedAt)))
@@ -554,19 +554,17 @@ fun App(
                     onAtlas = { leaveWorld(); state = state.show(HomeScreen.Atlas) },
                     onTitle = { leaveWorld() },
                     onDiagnostics = { overlayName = null; showPanel(WorldPanel.Diagnostics) },
-                    modifier = Modifier.align(Alignment.Center).safeContentPadding().padding(16.dp).heightIn(max = height - 32.dp),
+                    modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)).heightIn(max = height - 32.dp),
                 )
                 if (storage != null && storage != SaveStatus.Busy) {
-                    CompositionLocalProvider(LocalContentColor provides Atlas.Vellum) {
-                        Box(Modifier.align(Alignment.BottomCenter).safeContentPadding().padding(16.dp)) {
-                            SaveMessage(storage, diagnostics)
-                        }
+                    Board(Modifier.align(Alignment.BottomEnd).safeDrawingPadding().padding(spacing.edge(12.dp)), padding = 8.dp) {
+                        SaveMessage(storage, diagnostics)
                     }
                 }
             }
 
             if (isWorld && session != null && story != null && overlay == Overlay.Closing) {
-                MenuScrim(Modifier.matchParentSize())
+                Scrim(Modifier.matchParentSize())
                 val outcomes = remember(session, timelineView) { session.outcomes() }
                 ChapterClosing(story, outcomes, timelineView?.branchId ?: 1, onChoose = { outcome ->
                     updateProfile { it.record(outcome.record(story, islandKey.slot)) }
@@ -574,17 +572,18 @@ fun App(
                     overlayName = null
                     closed = story to outcome.branch.name
                 }, onCancel = { overlayName = null },
-                    modifier = Modifier.align(Alignment.Center).safeContentPadding().padding(16.dp).widthIn(max = 560.dp)
+                    modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)).widthIn(max = 560.dp)
                         .heightIn(max = height - 32.dp))
             }
             closed?.let { (story, name) ->
-                MenuScrim(Modifier.matchParentSize())
+                Scrim(Modifier.matchParentSize())
                 ChapterClosed(story, name, onNext = story.next?.let { next -> {
                     closed = null
                     leaveWorld()
                     enter(next.key, start = true)
                 } }, onStay = { closed = null },
-                    modifier = Modifier.align(Alignment.Center).safeContentPadding().padding(16.dp))
+                    modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)))
+            }
             }
         }
     }
@@ -672,7 +671,7 @@ private fun PanelContent(
         }
         WorldPanel.Diagnostics -> {
             val timeline by island.timelineView.collectAsStateWithLifecycle()
-            SettingRow(stringResource(Res.string.shape_tick_tools), null, diagnostics) { toggleDiagnostics() }
+            WoodSwitchRow(stringResource(Res.string.shape_tick_tools), null, diagnostics) { toggleDiagnostics() }
             WorldControls(island.clock, playbackEnabled = !timeline.seeking, editsEnabled = timeline.editsAllowed)
             Text(stringResource(Res.string.diagnostics_platform, remember { getPlatform().name }))
             Text(stringResource(Res.string.diagnostics_seed, state.seed.toString()))
@@ -687,16 +686,16 @@ private fun PanelContent(
 @Composable
 private fun MarkedMoments(bookmarks: List<Bookmark>, island: IslandLoad.Ready, onVisit: (Bookmark) -> Unit, onForget: (Bookmark) -> Unit) {
     val view by island.timelineView.collectAsStateWithLifecycle()
-    SectionLabel(stringResource(Res.string.timeline_marks), color = Atlas.Ember)
+    Text(stringResource(Res.string.timeline_marks), style = MaterialTheme.typography.titleMedium)
     for (mark in bookmarks.sortedWith(compareBy<Bookmark> { it.branchId }.thenBy { it.tick })) {
         val branch = view.branches.firstOrNull { it.id == mark.branchId } ?: continue
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(branch.name, style = MaterialTheme.typography.titleSmall)
-                Text(dayLabel(mark.tick, null), style = MaterialTheme.typography.bodySmall, color = Atlas.InkSoft)
+                Text(dayLabel(mark.tick, null), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
             }
-            StoryButton(stringResource(Res.string.timeline_mark_go), { onVisit(mark) }, primary = false, enabled = !view.seeking)
-            IconAction(GameIcons.Close, stringResource(Res.string.timeline_mark_forget), { onForget(mark) }, tint = Atlas.InkSoft)
+            Block(stringResource(Res.string.timeline_mark_go), { onVisit(mark) }, size = BlockSize.Small, enabled = !view.seeking)
+            PegButton(GameIcons.Close, stringResource(Res.string.timeline_mark_forget), { onForget(mark) })
         }
     }
 }
@@ -705,8 +704,8 @@ private fun MarkedMoments(bookmarks: List<Bookmark>, island: IslandLoad.Ready, o
 private fun PlaybackText(session: IslandLoad.Ready) {
     val playback by session.clock.playback.collectAsStateWithLifecycle()
     val navigation by session.timelineView.collectAsStateWithLifecycle()
-    StoryButton(stringResource(if (playback.playing) Res.string.pause_world else Res.string.play_world), session.clock::togglePlaying,
-        primary = false, enabled = !navigation.seeking, icon = if (playback.playing) GameIcons.Pause else GameIcons.Play)
+    Block(stringResource(if (playback.playing) Res.string.pause_world else Res.string.play_world), session.clock::togglePlaying,
+        size = BlockSize.Small, enabled = !navigation.seeking, icon = if (playback.playing) GameIcons.Pause else GameIcons.Play)
 }
 
 private fun WorldPanel.title(chapter: Chapter?, shaping: Boolean): StringResource = when (this) {

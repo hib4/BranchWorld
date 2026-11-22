@@ -142,6 +142,7 @@
     <string name="begin_story">Begin story</string>
     <string name="continue_story">Continue</string>
     <string name="world_menu">Menu</string>
+    <string name="focus_island">Focus island</string>
     <string name="close_panel">Close</string>
     <string name="other_islands">Explore islands</string>
     <string name="island_seed_named">Island %1$s</string>
@@ -258,7 +259,7 @@
     <string name="shape_compare_disjoint">These histories need a shared point in time. Play %1$s a little further.</string>
     <string name="shape_tick_tools">Timeline tick tools</string>
     <string name="shape_water_far">Hollowmere is outside this shower’s reach.</string>
-    <string name="shape_fork_to_act">Begin another history here to try this intervention.</string>
+    <string name="shape_fork_to_act">Open Timeline and choose Fork here to try this intervention.</string>
     <string name="shape_timeline_position_percent">%1$d percent through this history</string>
     <string name="shape_welfare">Water in reserve %1$d · Last harvest %2$d</string>
     <string name="shape_welfare_strain">Villagers are hauling water and spending less time in the fields.</string>
@@ -412,9 +413,10 @@
     <string name="echo_village_legend">Pale houses and dashed outlines belong to the other history.</string>
 
     <!-- Phase 08: title, stories, atlas, sandbox, settings, pause, closing and guide -->
+    <string name="title_tagline_short">Shape a world. Change its fate.</string>
     <string name="title_tagline">Shape a world. Change its fate. Discover what could have been.</string>
     <string name="menu_continue">Continue</string>
-    <string name="menu_continue_detail">%1$s · Day %2$d · %3$s</string>
+    <string name="menu_continue_detail">%1$s · day %2$d</string>
     <string name="menu_stories">Stories</string>
     <string name="menu_stories_detail">Crafted chapters, each with a turning point</string>
     <string name="menu_atlas">World Atlas</string>
@@ -424,26 +426,26 @@
     <string name="menu_settings">Settings</string>
     <string name="menu_settings_detail">Sound, motion, text size and controls</string>
     <string name="menu_back">Back</string>
-    <string name="next_begin">Begin with The Fading Grove: a valley entering its dry season.</string>
-    <string name="next_close_grove">See the Fading Grove through its drought, then close the chapter to open The Last Crossing.</string>
-    <string name="next_crossing">The Last Crossing is open. Cairnwater’s families are outgrowing their meadow.</string>
-    <string name="next_close_crossing">See the herd through a year on Cairnwater, then close The Last Crossing.</string>
-    <string name="next_all">Both chapters are closed. Revisit their histories in the Atlas, or shape an untold island.</string>
+    <string name="next_begin">Start with Chapter I</string>
+    <string name="next_close_grove">Close Chapter I to open II</string>
+    <string name="next_crossing">Chapter II is open</string>
+    <string name="next_close_crossing">Chapter II in progress</string>
+    <string name="next_all">Both chapters closed</string>
     <string name="loading_world">The island is taking shape…</string>
     <string name="stories_title">Stories</string>
-    <string name="stories_intro">Each chapter turns on one moment. Act, or watch; then rewind and find out what else could have happened.</string>
+    <string name="stories_intro">Each chapter turns on one moment. Act or watch, then rewind and try another way.</string>
     <string name="chapter_numeral">Chapter %1$s</string>
     <string name="story_crossing">The Last Crossing</string>
     <string name="story_grove_premise">A dry season comes early to a river valley. Hollowmere’s families, its deer and the old grove all need the same water.</string>
     <string name="story_crossing_premise">Cairnwater’s families are outgrowing their meadow. The richest grass in reach is the western pasture, where the herd spends the rains and raises its calves.</string>
     <string name="story_new">Not yet begun</string>
-    <string name="story_progress">In progress · Day %1$d · %2$d histories</string>
-    <string name="story_closed">Closed with “%1$s”</string>
-    <string name="story_locked">Close %1$s to open this chapter.</string>
+    <string name="story_progress">Day %1$d · %2$d histories</string>
+    <string name="story_closed">Ended with “%1$s”</string>
+    <string name="story_locked">Opens when %1$s is closed</string>
     <string name="story_begin">Begin</string>
     <string name="story_continue">Continue</string>
     <string name="atlas_title">World Atlas</string>
-    <string name="atlas_intro">Every island keeps all of its histories. Open one to continue where you left it.</string>
+    <string name="atlas_intro">Every island you played, with all its histories.</string>
     <string name="atlas_empty">Islands you play are kept here, each with every history you make.</string>
     <string name="atlas_story">Story</string>
     <string name="atlas_sandbox">Sandbox</string>
@@ -453,7 +455,7 @@
     <string name="atlas_open">Open</string>
     <string name="atlas_chapter_closed">Ended with “%1$s”: %2$d people, %3$d deer</string>
     <string name="sandbox_title">Sandbox</string>
-    <string name="sandbox_intro">Shape any island with every power the Keeper has. There is no story and no ending; the same rules still decide what happens.</string>
+    <string name="sandbox_intro">Any island, every power, no ending. The same rules decide what happens.</string>
     <string name="sandbox_untold">An untold island</string>
     <string name="sandbox_seed">Island seed</string>
     <string name="sandbox_roll">New island</string>
@@ -479,7 +481,7 @@
     <string name="settings_saved">Settings are kept on this device.</string>
     <string name="pause_title">Paused</string>
     <string name="pause_resume">Resume</string>
-    <string name="pause_timeline">Timeline and histories</string>
+    <string name="pause_timeline">Timeline</string>
     <string name="pause_photo">Photo mode</string>
     <string name="pause_mark">Mark this moment</string>
     <string name="pause_marked">Moment marked</string>
@@ -501,9 +503,6 @@
     <string name="close_remembered">You closed this chapter with “%1$s”.</string>
     <string name="outcome_people">%1$d people in %2$d homes</string>
     <string name="outcome_two_places">Families live in two places</string>
-    <string name="outcome_left_thirst">%1$d families left because of thirst</string>
-    <string name="outcome_left_hunger">%1$d families left because of hunger</string>
-    <string name="outcome_left_crowding">%1$d families left to find room elsewhere</string>
     <string name="outcome_nobody_left">No family left</string>
     <string name="outcome_well">A well was dug</string>
     <string name="outcome_groves">%1$d planted groves took root</string>
@@ -515,7 +514,7 @@
     <string name="outcome_village">The village decided for itself</string>
     <string name="guide_title">Keeper’s guide</string>
     <string name="guide_ok">Got it</string>
-    <string name="guide_look">Drag to look around, pinch or scroll to move closer, and tap an animal to follow it. Press Play when you are ready.</string>
+    <string name="guide_look">Drag to look around. Pinch or scroll to zoom. Select an animal to follow it.</string>
     <string name="guide_warning">A turning point. Shape the world now, or watch what happens without you; either way you can return here.</string>
     <string name="guide_petition">The village is asking you. Your answer becomes part of this history, and you can rewind it.</string>
     <string name="guide_rewind">Curious what else could have happened? Open the Timeline, return to the turning point and try another way.</string>
@@ -564,4 +563,21 @@
     <string name="crossing_wait_warning">Watch Cairnholt until its families need room.</string>
     <string name="return_turning_point">Return to the turning point</string>
     <string name="echo_pasture_request">The pasture request</string>
+    <string name="menu_begin">Begin</string>
+    <string name="menu_new_island">A new island</string>
+    <string name="story_revisit">Revisit island</string>
+    <string name="petition_past">This is a past moment. To answer differently, open Timeline and choose Fork here.</string>
+    <string name="shape_pasture_area">Western pasture</string>
+    <string name="close_current">Current history</string>
+    <string name="outcome_one_place">Families live in one place</string>
+    <string name="outcome_left">Families who left: %1$s</string>
+    <string name="outcome_cause_thirst">%1$d for water</string>
+    <string name="outcome_cause_hunger">%1$d for food</string>
+    <string name="outcome_cause_crowding">%1$d for room</string>
+    <string name="outcome_no_calves">No calves born on the island</string>
+    <string name="outcome_no_refuge">The western pasture is open land</string>
+    <string name="outcome_no_well">No well was dug</string>
+    <string name="outcome_no_groves">No planted grove took root</string>
+    <string name="outcome_no_plan">No plan for growth was settled</string>
+    <string name="outcome_no_answer">No village request was settled</string>
 </resources>

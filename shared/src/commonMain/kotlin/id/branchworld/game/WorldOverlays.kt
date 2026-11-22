@@ -4,9 +4,12 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -15,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +60,7 @@ internal fun crossingConcern(state: EcologyState): StringResource? {
 /** The pause menu: every way out of the moment, with the autosave state in plain words. */
 @Composable
 internal fun PauseMenu(
+    paint: Color,
     saved: String,
     marked: Boolean,
     diagnostics: Boolean,
@@ -69,20 +74,37 @@ internal fun PauseMenu(
     onDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    GlassPanel(modifier.widthIn(max = 380.dp), padding = 18.dp) {
-        Text(stringResource(Res.string.pause_title), Modifier.semantics { heading() }, style = MaterialTheme.typography.displaySmall)
-        Text(saved, style = MaterialTheme.typography.bodySmall, color = Atlas.Mist)
-        OrnamentRule()
-        Column(Modifier.verticalScroll(rememberScrollState())) {
-            MenuItem(stringResource(Res.string.pause_resume), onResume, icon = GameIcons.Play, large = false)
-            MenuItem(stringResource(Res.string.pause_timeline), onTimeline, icon = GameIcons.Branches, large = false)
-            MenuItem(stringResource(if (marked) Res.string.pause_marked else Res.string.pause_mark), onMark, icon = GameIcons.Bookmark,
-                large = false, enabled = !marked)
-            MenuItem(stringResource(Res.string.pause_photo), onPhoto, icon = GameIcons.Camera, large = false)
-            MenuItem(stringResource(Res.string.menu_settings), onSettings, icon = GameIcons.Gear, large = false)
-            MenuItem(stringResource(Res.string.menu_atlas), onAtlas, icon = GameIcons.Compass, large = false)
-            if (diagnostics) MenuItem(stringResource(Res.string.diagnostics_title), onDiagnostics, icon = GameIcons.Eye, large = false)
-            MenuItem(stringResource(Res.string.pause_title_screen), onTitle, icon = GameIcons.Back, large = false)
+    BoxWithConstraints(modifier) {
+        // A short, wide window gets one band of four columns so every action is visible without scrolling.
+        val band = maxWidth >= 620.dp && maxHeight < 440.dp
+        val columns = if (band) 4 else 2
+        val entries = buildList {
+            add(Triple(stringResource(Res.string.pause_timeline), onTimeline, true))
+            add(Triple(stringResource(if (marked) Res.string.pause_marked else Res.string.pause_mark), onMark, !marked))
+            add(Triple(stringResource(Res.string.pause_photo), onPhoto, true))
+            add(Triple(stringResource(Res.string.menu_settings), onSettings, true))
+            add(Triple(stringResource(Res.string.menu_atlas), onAtlas, true))
+            add(Triple(stringResource(Res.string.pause_title_screen), onTitle, true))
+            if (diagnostics) add(Triple(stringResource(Res.string.diagnostics_title), onDiagnostics, true))
+        }
+        val resume = stringResource(Res.string.pause_resume)
+        BoardSheet(stringResource(Res.string.pause_title), Modifier.widthIn(max = if (band) 820.dp else 428.dp)
+            .fillMaxWidth(), onClose = onResume) {
+            Text(saved, style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
+            ScrollColumn(spacing = 8.dp) {
+                if (!band) Block(resume, onResume, Modifier.fillMaxWidth(), paint = paint, icon = GameIcons.Play, size = BlockSize.Small)
+                val cells = if (band) listOf(Triple(resume, onResume, true)) + entries else entries
+                for (row in cells.chunked(columns)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        for ((label, action, enabled) in row) {
+                            val primary = band && label == resume && action == onResume
+                            Block(label, action, Modifier.weight(1f), enabled = enabled, paint = if (primary) paint else Wood.BeechLight,
+                                icon = if (primary) GameIcons.Play else null, size = BlockSize.Small)
+                        }
+                        repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+                    }
+                }
+            }
         }
     }
 }
@@ -90,10 +112,9 @@ internal fun PauseMenu(
 /** A short first-time explanation that appears once, at the moment it matters. */
 @Composable
 internal fun KeeperGuide(text: StringResource, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    GlassPanel(modifier.widthIn(max = 340.dp).semantics { liveRegion = LiveRegionMode.Polite }, padding = 14.dp) {
-        SectionLabel(stringResource(Res.string.guide_title))
+    Board(modifier.widthIn(max = 340.dp).semantics { liveRegion = LiveRegionMode.Polite }, padding = 14.dp) {
         Text(stringResource(text), style = MaterialTheme.typography.bodyMedium)
-        StoryButton(stringResource(Res.string.guide_ok), onDismiss, primary = false, onDark = true)
+        Block(stringResource(Res.string.guide_ok), onDismiss, paint = Wood.BeechLight, size = BlockSize.Small)
     }
 }
 
@@ -106,10 +127,10 @@ internal fun PhotoControls(onLeave: () -> Unit, modifier: Modifier = Modifier) {
         hint = false
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        StoryButton(stringResource(Res.string.photo_leave), onLeave, primary = false, icon = GameIcons.Close, onDark = true)
-        AnimatedVisibility(hint, enter = fadeIn(), exit = fadeOut()) {
-            InfoChip(stringResource(Res.string.photo_hint), background = Atlas.InkGlass)
-        }
+        Block(stringResource(Res.string.photo_leave), onLeave, icon = GameIcons.Close, size = BlockSize.Small)
+        if (LocalUi.current.reducedMotion) {
+            if (hint) Peg(stringResource(Res.string.photo_hint))
+        } else AnimatedVisibility(hint, enter = fadeIn(), exit = fadeOut()) { Peg(stringResource(Res.string.photo_hint)) }
     }
 }
 
@@ -124,19 +145,21 @@ internal fun ChapterClosing(
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    VellumSheet(stringResource(Res.string.close_title, stringResource(story.title)), modifier,
-        kicker = stringResource(Res.string.chapter_numeral, story.numeral), onClose = onCancel) {
-        Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(stringResource(Res.string.close_intro), style = MaterialTheme.typography.bodyMedium, color = Atlas.InkSoft)
+    BoardSheet(stringResource(Res.string.close_title, stringResource(story.title)), modifier.fillMaxWidth(), onClose = onCancel) {
+        ScrollColumn(spacing = 10.dp) {
+            Text(stringResource(Res.string.close_intro), style = MaterialTheme.typography.bodyMedium, color = Wood.WalnutSoft)
             for (outcome in outcomes.sortedByDescending { it.branch.id == activeBranch }) {
                 Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(outcome.branch.name, style = MaterialTheme.typography.titleLarge)
-                    Text(dayLabel(outcome.tick, null), style = MaterialTheme.typography.labelMedium, color = Atlas.Ember)
-                    for (line in outcomeLines(story.chapter, outcome)) Text("◆  $line", style = MaterialTheme.typography.bodyMedium)
-                    StoryButton(stringResource(Res.string.close_choose), { onChoose(outcome) }, Modifier.padding(top = 4.dp),
-                        icon = GameIcons.Seal)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(outcome.branch.name, style = MaterialTheme.typography.titleLarge)
+                        if (outcome.branch.id == activeBranch) Peg(stringResource(Res.string.close_current))
+                    }
+                    Text(dayLabel(outcome.tick, null), style = MaterialTheme.typography.labelMedium, color = Wood.WalnutSoft)
+                    for (line in outcomeLines(story.chapter, outcome)) Text(line, style = MaterialTheme.typography.bodyMedium)
+                    Block(stringResource(Res.string.close_choose), { onChoose(outcome) }, Modifier.padding(top = 4.dp),
+                        paint = Wood.BeechLight,
+                        icon = GameIcons.Seal, size = BlockSize.Small)
                 }
-                OrnamentRule(Atlas.Ember.copy(alpha = 0.35f))
             }
         }
     }
@@ -144,48 +167,50 @@ internal fun ChapterClosing(
 
 @Composable
 internal fun outcomeLines(chapter: Chapter, outcome: ChapterOutcome): List<String> = buildList {
+    // The same facts in the same order for every history, with explicit zeros, so histories compare row by row.
     add(stringResource(Res.string.outcome_people, outcome.people, outcome.homes))
-    if (outcome.settlements > 1) add(stringResource(Res.string.outcome_two_places))
-    if (outcome.departed.isEmpty()) add(stringResource(Res.string.outcome_nobody_left))
-    for ((cause, count) in outcome.departed.toList().sortedBy { it.first.ordinal }) add(stringResource(when (cause) {
-        Hardship.Thirst -> Res.string.outcome_left_thirst
-        Hardship.Hunger -> Res.string.outcome_left_hunger
-        Hardship.Crowding -> Res.string.outcome_left_crowding
-    }, count))
-    if (outcome.well) add(stringResource(Res.string.outcome_well))
-    if (chapter == Chapter.FadingGrove && outcome.groves > 0) add(stringResource(Res.string.outcome_groves, outcome.groves))
-    add(stringResource(Res.string.outcome_wildlife, outcome.deer, outcome.rabbits, outcome.foxes))
+    add(stringResource(if (outcome.settlements > 1) Res.string.outcome_two_places else Res.string.outcome_one_place))
+    val departures = outcome.departed.toList().filter { it.second > 0 }.sortedBy { it.first.ordinal }
+    if (departures.isEmpty()) add(stringResource(Res.string.outcome_nobody_left)) else {
+        val causes = departures.map { (cause, count) ->
+            stringResource(when (cause) {
+                Hardship.Thirst -> Res.string.outcome_cause_thirst
+                Hardship.Hunger -> Res.string.outcome_cause_hunger
+                Hardship.Crowding -> Res.string.outcome_cause_crowding
+            }, count)
+        }
+        add(stringResource(Res.string.outcome_left, causes.joinToString(", ")))
+    }
     if (chapter == Chapter.LastCrossing) {
-        add(stringResource(Res.string.outcome_calves, outcome.calves))
-        if (outcome.refuges > 0) add(stringResource(Res.string.outcome_refuge))
+        add(if (outcome.calves > 0) stringResource(Res.string.outcome_calves, outcome.calves) else stringResource(Res.string.outcome_no_calves))
+        add(stringResource(if (outcome.refuges > 0) Res.string.outcome_refuge else Res.string.outcome_no_refuge))
+    } else {
+        add(stringResource(if (outcome.well) Res.string.outcome_well else Res.string.outcome_no_well))
+        add(if (outcome.groves > 0) stringResource(Res.string.outcome_groves, outcome.groves) else stringResource(Res.string.outcome_no_groves))
     }
-    outcome.growthPlan?.let { add(stringResource(Res.string.outcome_plan, stringResource(it.title()))) }
-    if (outcome.growthPlan != null || outcome.waterPlan != null) {
-        add(stringResource(if (outcome.keeperChose) Res.string.outcome_keeper else Res.string.outcome_village))
-    }
+    add(stringResource(Res.string.outcome_wildlife, outcome.deer, outcome.rabbits, outcome.foxes))
+    add(outcome.growthPlan?.let { stringResource(Res.string.outcome_plan, stringResource(it.title())) }
+        ?: stringResource(Res.string.outcome_no_plan))
+    add(stringResource(when {
+        outcome.growthPlan == null && outcome.waterPlan == null -> Res.string.outcome_no_answer
+        outcome.keeperChose -> Res.string.outcome_keeper
+        else -> Res.string.outcome_village
+    }))
 }
 
 /** After closing: what opened, and where to go next. */
 @Composable
 internal fun ChapterClosed(story: Story, branchName: String, onNext: (() -> Unit)?, onStay: () -> Unit, modifier: Modifier = Modifier) {
-    GlassPanel(modifier.widthIn(max = 420.dp), padding = 20.dp) {
-        SectionLabel(stringResource(Res.string.chapter_numeral, story.numeral))
+    Board(modifier.widthIn(max = 420.dp), padding = 20.dp) {
         Text(stringResource(Res.string.close_done), Modifier.semantics { heading() }, style = MaterialTheme.typography.displaySmall)
         Text(stringResource(Res.string.close_remembered, branchName), style = MaterialTheme.typography.bodyLarge)
-        story.next?.let { Text(stringResource(Res.string.close_unlocked, stringResource(it.title)), color = Atlas.Gold,
+        story.next?.let { Text(stringResource(Res.string.close_unlocked, stringResource(it.title)), color = Wood.Walnut,
             style = MaterialTheme.typography.titleMedium) }
-        OrnamentRule()
         FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             val next = story.next
-            if (next != null && onNext != null) StoryButton(stringResource(Res.string.close_begin_next, stringResource(next.title)), onNext,
-                icon = GameIcons.Play)
-            StoryButton(stringResource(Res.string.close_keep), onStay, primary = next == null || onNext == null, onDark = true)
+            if (next != null && onNext != null) Block(stringResource(Res.string.close_begin_next, stringResource(next.title)), onNext,
+                paint = chapterPaint(next.chapter), icon = GameIcons.Play)
+            Block(stringResource(Res.string.close_keep), onStay, paint = if (onNext == null) chapterPaint(story.chapter) else Wood.BeechLight)
         }
     }
-}
-
-@Composable
-internal fun Kicker(key: IslandSessionKey): String {
-    val story = Story.of(key)
-    return if (story != null) stringResource(Res.string.chapter_numeral, story.numeral) else stringResource(sessionKind(key))
 }

@@ -66,12 +66,13 @@ internal fun heroCamera(aspect: Float, opening: Boolean, terrain: TerrainMap? = 
     val distance = camera.distance + if (narrow) ((0.83f - aspect) * 8f).coerceAtMost(3f) else 0f
     if (!opening) return camera.copy(distance = distance)
     return if (aspect > 1.3f) {
-        // Shift the look-at point left so the foreground clears the chapter introduction.
-        camera.copy(distance = distance, targetX = camera.targetX - 1.75f * cos(camera.yaw),
-            targetZ = camera.targetZ + 1.75f * sin(camera.yaw))
+        // Leave a little water under the tray while keeping the shore inside the opening frame.
+        camera.copy(distance = distance + if (aspect >= 2.0f) 3.4f else if (aspect >= 1.9f) 2.3f else 1.8f,
+            targetX = camera.targetX - 0.9f * cos(camera.yaw), targetZ = camera.targetZ + 0.9f * sin(camera.yaw))
     } else {
-        camera.copy(distance = distance, targetX = camera.targetX + 0.95f * sin(camera.yaw),
-            targetZ = camera.targetZ + 0.95f * cos(camera.yaw))
+        val reveal = ((0.90f - aspect) * 9f).coerceIn(0.6f, 4.2f)
+        camera.copy(distance = distance + reveal, targetX = camera.targetX + 0.60f * sin(camera.yaw),
+            targetZ = camera.targetZ + 0.60f * cos(camera.yaw))
     }
 }
 

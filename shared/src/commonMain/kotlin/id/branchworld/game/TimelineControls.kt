@@ -4,17 +4,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -111,15 +110,7 @@ import org.jetbrains.compose.resources.stringResource
 @Composable
 internal fun TimelineControls(island: IslandLoad.Ready, diagnostics: Boolean = false, onForked: () -> Unit) {
     val view by island.timelineView.collectAsStateWithLifecycle()
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = MaterialTheme.shapes.large,
-    ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            TimelinePanel(island, view, diagnostics || island.key.rules < ShapingRulesVersion, onForked)
-        }
-    }
+    TimelinePanel(island, view, diagnostics || island.key.rules < ShapingRulesVersion, onForked)
 }
 
 @Composable
@@ -165,32 +156,25 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
     val tree = remember(view.branches) { view.branches.inTreeOrder() }
 
     Text(stringResource(Res.string.timeline_branch, branch.name), style = MaterialTheme.typography.titleMedium)
-    for ((entry, depth) in tree) {
-        FilterChip(
-            selected = entry.id == branch.id,
-            onClick = { if (entry.id != branch.id) operations.launch { island.switchBranch(entry.id) } },
-            enabled = !view.seeking,
-            modifier = Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(5) * 12).dp),
-            label = {
-                Column(Modifier.padding(vertical = 6.dp)) {
-                    Text(entry.name, style = MaterialTheme.typography.labelLarge)
-                    val detail = if (entry.parentId == null) {
-                        stringResource(Res.string.timeline_range, entry.start.toString(), entry.head.toString())
-                    } else {
-                        stringResource(Res.string.timeline_forked_at, entry.start.toString(), entry.head.toString())
-                    }
-                    if (showTicks) Text(detail, style = MaterialTheme.typography.bodySmall)
-                }
-            },
-        )
+    Column(Modifier.fillMaxWidth().selectableGroup(), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        for ((entry, depth) in tree) {
+            val active = entry.id == branch.id
+            val detail = if (!showTicks) null else stringResource(
+                if (entry.parentId == null) Res.string.timeline_range else Res.string.timeline_forked_at,
+                entry.start.toString(), entry.head.toString(),
+            )
+            Block(entry.name, { if (!active) operations.launch { island.switchBranch(entry.id) } },
+                Modifier.fillMaxWidth().padding(start = (depth.coerceAtMost(5) * 9).dp),
+                selected = active, enabled = !view.seeking, detail = detail,
+                paint = if (active) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact)
+        }
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         OutlinedButton(onClick = { renameDialog = true }, enabled = !view.seeking) {
             Text(stringResource(Res.string.timeline_rename))
         }
-        OutlinedButton(onClick = island::openComparison, enabled = !view.seeking && tree.size > 1) {
-            Text(stringResource(Res.string.comparison_open))
-        }
+        Block(stringResource(Res.string.comparison_open), island::openComparison, enabled = !view.seeking && tree.size > 1,
+            paint = Wood.Woad, size = BlockSize.Small)
     }
     if (tree.size == 1) Text(stringResource(Res.string.comparison_needs_fork))
     if (showTicks) Text(stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()))
@@ -371,7 +355,7 @@ internal fun TimelineScrubber(
             drag = null
             if (released != null) onSeek(target(released))
         },
-        modifier = Modifier.fillMaxWidth().semantics {
+        modifier = Modifier.fillMaxWidth().keepFromSystemGestures().semantics {
             contentDescription = label
             stateDescription = preview ?: position
         },

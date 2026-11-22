@@ -32,6 +32,24 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class DesktopEcologyUiTest {
     @Test
+    fun titleBeginsTheFirstStoryWithoutVisitingTheStoryShelf() = runDesktopComposeUiTest(width = 390, height = 720) {
+        val owner = object : LifecycleOwner {
+            override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
+        }
+        var viewport: WorldRenderSource? = null
+        setContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                App(viewport = { _, world -> SideEffect { viewport = world } })
+            }
+        }
+        waitUntil(timeoutMillis = 10_000) { viewport != null }
+        val island = viewport
+        onNodeWithText("Begin").performClick()
+        onNodeWithText("Shape").assertExists()
+        assertSame(island, viewport)
+    }
+
+    @Test
     fun namedGalleryLoadsEachLandscapeAndLandmarkFocus() = runComposeUiTest {
         val owner = object : LifecycleOwner {
             override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }

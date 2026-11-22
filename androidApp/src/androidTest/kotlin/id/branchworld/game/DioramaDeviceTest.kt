@@ -31,7 +31,9 @@ class DioramaDeviceTest {
         )
         try {
             openStory()
-            tap(bounds("Pause"))
+            // A new story starts playing; a continued one opens paused. Either way, pause before measuring.
+            waitUntil("Play or Pause") { findVisible { it.contentDescription?.toString() in setOf("Play", "Pause") } != null }
+            findVisible { it.contentDescription?.toString() == "Pause" }?.let { tap(Rect().also(it::getBoundsInScreen)) }
             bounds("Play")
             bounds("Focus island")
             assertTrue(findVisible { it.text == "Send bunny left" } == null)
@@ -81,7 +83,11 @@ class DioramaDeviceTest {
 
             tap(bounds("Menu"))
             tap(bounds("Settings"))
-            tap(bounds("Timeline tick tools"))
+            tap(revealed("Timeline tick tools"))
+            waitUntil("tick tools switched on") {
+                // The label is a child of the switch row, which carries the checked state.
+                findVisible { it.text?.toString()?.trim() == "Timeline tick tools" }?.parent?.isChecked == true
+            }
             tap(bounds("Close"))
             tap(bounds("Menu"))
             tap(bounds("Diagnostics"))
@@ -260,6 +266,28 @@ class DioramaDeviceTest {
     private fun currentTick(): Long =
         findVisible { it.text?.startsWith("Tick ") == true }?.text?.toString()?.removePrefix("Tick ")?.toLongOrNull() ?: -1
 
+    /** Scrolls the open sheet the way a player would until [label] is on screen, then returns its bounds. */
+    private fun revealed(label: String): Rect {
+        fun where(): Rect? = findVisible { it.text?.toString()?.trim() == label || it.contentDescription?.toString()?.trim() == label }
+            ?.let { Rect().also(it::getBoundsInScreen) }
+        repeat(8) {
+            if (where() != null) {
+                // Accessibility scrolling animates; only tap once the row has stopped moving.
+                var last: Rect? = null
+                waitUntil("$label to settle") {
+                    val now = where()
+                    val settled = now != null && now == last
+                    last = now
+                    settled
+                }
+                return requireNotNull(last)
+            }
+            findVisible { it.isScrollable }?.performAction(AccessibilityNodeInfo.ACTION_SCROLL_FORWARD)
+            SystemClock.sleep(300)
+        }
+        return bounds(label)
+    }
+
     private fun currentForage(): Int =
         findVisible { it.text?.startsWith("Forage ") == true }?.text?.toString()?.removePrefix("Forage ")?.toIntOrNull() ?: -1
 
@@ -283,7 +311,17 @@ class DioramaDeviceTest {
             SystemClock.sleep(100)
         }
         val root = input.rootInActiveWindow
-        error("Timed out waiting for $description. Active window package: ${root?.packageName}")
+        val visible = buildList {
+            fun walk(node: AccessibilityNodeInfo?) {
+                if (node == null) return
+                val text = (node.text ?: node.contentDescription)?.toString()
+                if (node.isVisibleToUser && node.isCheckable) add("<switch checked=${node.isChecked}>")
+                if (node.isVisibleToUser && !text.isNullOrBlank()) add(text)
+                for (index in 0 until node.childCount) walk(node.getChild(index))
+            }
+            walk(root)
+        }
+        error("Timed out waiting for $description. Active window package: ${root?.packageName}. Visible: $visible")
     }
 
     private data class Point(val x: Float, val y: Float) {

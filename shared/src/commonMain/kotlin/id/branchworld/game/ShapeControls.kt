@@ -2,10 +2,8 @@ package id.branchworld.game
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -27,6 +25,7 @@ import branchworld.shared.generated.resources.restore_grove
 import branchworld.shared.generated.resources.shape_already_raining
 import branchworld.shared.generated.resources.shape_call_rain
 import branchworld.shared.generated.resources.shape_cancel
+import branchworld.shared.generated.resources.shape_pasture_area
 import branchworld.shared.generated.resources.shape_choose_region
 import branchworld.shared.generated.resources.shape_confirm_rain
 import branchworld.shared.generated.resources.shape_exact_sites
@@ -95,13 +94,14 @@ internal fun ShapeControls(
     } ?: return
     LaunchedEffect(timeline.branchId, power, region, target.highlights) { onTarget(region, power == Intervention.Rain, target.highlights) }
 
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        FilterChip(power == Intervention.Rain, { power = Intervention.Rain },
-            label = { Text(stringResource(Res.string.shape_call_rain)) })
-        FilterChip(power == Intervention.Reforest, { power = Intervention.Reforest },
-            label = { Text(stringResource(Res.string.restore_grove)) })
-        if (refuges) FilterChip(power == Intervention.Protect, { power = Intervention.Protect },
-            label = { Text(stringResource(Res.string.shape_protect)) })
+    FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        for ((choice, label) in listOf(Intervention.Rain to Res.string.shape_call_rain, Intervention.Reforest to Res.string.restore_grove,
+            Intervention.Protect to Res.string.shape_protect)) {
+            if (choice == Intervention.Protect && !refuges) continue
+            val selected = power == choice
+            Block(stringResource(label), { power = choice }, paint = if (selected) Wood.Woad else Wood.BeechLight,
+                size = BlockSize.Compact, selected = selected)
+        }
     }
     Text(stringResource(when (power) {
         Intervention.Rain -> Res.string.shape_rain_forecast
@@ -127,9 +127,11 @@ internal fun ShapeControls(
     ) {
         Text(stringResource(Res.string.shape_water_far))
     }
-    FilterChip(picking, { picking = !picking }, label = {
-        Text(stringResource(Res.string.shape_choose_region) + " · " + regionName(region))
-    })
+    val targetName = if (power == Intervention.Protect && region == island.pastureRegion()) {
+        stringResource(Res.string.shape_pasture_area)
+    } else regionName(region)
+    Block(stringResource(Res.string.shape_choose_region) + " · " + targetName, { picking = !picking },
+        paint = if (picking) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact, checked = picking)
     if (picking) RegionPicker(region) {
         when (power) {
             Intervention.Rain -> rainRegion = it
@@ -155,27 +157,23 @@ internal fun ShapeControls(
     }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (pending != null) {
-            OutlinedButton(onClick = island::cancelShape, enabled = !timeline.seeking) {
-                Text(stringResource(Res.string.shape_cancel))
-            }
+            Block(stringResource(Res.string.shape_cancel), island::cancelShape, enabled = !timeline.seeking,
+                paint = Wood.BeechLight, size = BlockSize.Compact)
         } else {
-            Button(onClick = { island.intervene(power, region) }, enabled = target.blocked == null && timeline.editsAllowed) {
-                Text(stringResource(when (power) {
-                    Intervention.Rain -> Res.string.shape_confirm_rain
-                    Intervention.Protect -> Res.string.shape_confirm_protect
-                    else -> Res.string.grove_choose_region
-                }))
-            }
+            Block(stringResource(when (power) {
+                Intervention.Rain -> Res.string.shape_confirm_rain
+                Intervention.Protect -> Res.string.shape_confirm_protect
+                else -> Res.string.grove_choose_region
+            }), { island.intervene(power, region) }, enabled = target.blocked == null && timeline.editsAllowed,
+                paint = chapterPaint(island.chapter, island.key.sandbox), size = BlockSize.Small)
         }
         if (!timeline.seeking && timeline.tick < Long.MAX_VALUE - SettlementTurn) {
             val watchWarning = hollowmere && target.blocked == ShapeBlock.AwaitWarning && timeline.tick < 240
-            OutlinedButton(onClick = {
+            Block(stringResource(if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest), {
                 val next = if (watchWarning) 240L else (timeline.tick / SettlementTurn + 1) * SettlementTurn
                 island.playTo(next)
                 onObserve()
-            }) {
-                Text(stringResource(if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest))
-            }
+            }, paint = Wood.BeechLight, size = BlockSize.Compact)
         }
     }
 }

@@ -3,11 +3,10 @@ package id.branchworld.game
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -74,15 +73,15 @@ internal fun WorldInspector(
     if (!compact && settlements != null) SettlementInspector(settlements)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (watershed != null && water != null) {
-            FilterChip(selected = landmarksOpen, onClick = { landmarksOpen = !landmarksOpen },
-                label = { Text(stringResource(Res.string.landmarks)) })
+            Block(stringResource(Res.string.landmarks), { landmarksOpen = !landmarksOpen },
+                paint = if (landmarksOpen) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact, checked = landmarksOpen)
         }
         if (compact && settlements != null) {
-            FilterChip(selected = settlementsOpen, onClick = { settlementsOpen = !settlementsOpen },
-                label = { Text(stringResource(Res.string.settlement_inspector)) })
+            Block(stringResource(Res.string.settlement_inspector), { settlementsOpen = !settlementsOpen },
+                paint = if (settlementsOpen) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact, checked = settlementsOpen)
         }
-        if (pose.shaping == null) FilterChip(selected = regionsOpen, onClick = { regionsOpen = !regionsOpen },
-            label = { Text(stringResource(Res.string.regional_ecology)) })
+        if (pose.shaping == null) Block(stringResource(Res.string.regional_ecology), { regionsOpen = !regionsOpen },
+                paint = if (regionsOpen) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact, checked = regionsOpen)
     }
     if (landmarksOpen && watershed != null && water != null) LandscapeGuide(watershed, water, onLandmarkFocus)
     if (compact && settlements != null && settlementsOpen) SettlementInspector(settlements, showHeading = false)
@@ -152,10 +151,8 @@ internal fun GroveControls(island: IslandLoad.Ready, onRegionFocus: (Int) -> Uni
         else -> Res.string.grove_forage_absent
     }
     Text(stringResource(forageMessage))
-    Button(
-        onClick = { island.intervene(Intervention.Reforest, selected) },
-        enabled = timeline.editsAllowed && region.canPlant && !scheduled,
-    ) { Text(stringResource(Res.string.grove_choose_region)) }
+    Block(stringResource(Res.string.grove_choose_region), { island.intervene(Intervention.Reforest, selected) },
+        enabled = timeline.editsAllowed && region.canPlant && !scheduled, paint = chapterPaint(island.chapter, island.key.sandbox))
     val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
     when {
         scheduled -> Text(stringResource(Res.string.grove_pending), live)
@@ -168,17 +165,14 @@ internal fun GroveControls(island: IslandLoad.Ready, onRegionFocus: (Int) -> Uni
 @Composable
 internal fun RegionPicker(selected: Int, onSelect: (Int) -> Unit) {
     Text(stringResource(Res.string.region_instructions))
-    Column(Modifier.widthIn(max = 360.dp)) {
+    Column(Modifier.widthIn(max = 360.dp).selectableGroup(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         repeat(RegionWidth) { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 repeat(RegionWidth) { column ->
                     val region = row * RegionWidth + column
-                    FilterChip(
-                        modifier = Modifier.weight(1f),
-                        selected = region == selected,
-                        onClick = { onSelect(region) },
-                        label = { Text(regionName(region)) },
-                    )
+                    val active = region == selected
+                    Block(regionName(region), { onSelect(region) }, Modifier.weight(1f), selected = active,
+                        paint = if (active) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact)
                 }
             }
         }

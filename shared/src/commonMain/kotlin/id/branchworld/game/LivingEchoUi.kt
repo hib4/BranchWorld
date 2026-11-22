@@ -3,18 +3,16 @@ package id.branchworld.game
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,6 +21,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
@@ -62,20 +61,20 @@ internal fun LivingEchoDock(
     LaunchedEffect(island, target) { target?.let { island.loadComparison(it) } }
     LaunchedEffect(island, event) { event?.let { island.loadComparisonEvent(it) } }
 
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Text(stringResource(Res.string.echo_title), Modifier.weight(1f).semantics { heading() },
             style = MaterialTheme.typography.titleLarge)
-        TextButton(onClick = { onDetails(!details) }) {
-            Text(stringResource(if (details) Res.string.echo_close_details else Res.string.echo_details))
-        }
-        TextButton(onClick = island::closeComparison) { Text(stringResource(Res.string.echo_close)) }
+        Block(stringResource(if (details) Res.string.echo_close_details else Res.string.echo_details),
+            { onDetails(!details) }, size = BlockSize.Compact, paint = Wood.BeechLight)
+        PegButton(GameIcons.Close, stringResource(Res.string.echo_close), island::closeComparison)
     }
 
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        FilterChip(!view.showRight, { island.showComparisonSide(false) }, enabled = !timeline.seeking && view.pair != null,
-            label = { Text(view.left.name, Modifier.widthIn(max = 185.dp)) })
-        FilterChip(view.showRight, { island.showComparisonSide(true) }, enabled = !timeline.seeking && view.pair != null,
-            label = { Text(view.right.name, Modifier.widthIn(max = 185.dp)) })
+    Row(Modifier.fillMaxWidth().selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        val enabled = !timeline.seeking && view.pair != null
+        Block(view.left.name, { island.showComparisonSide(false) }, Modifier.weight(1f), enabled = enabled,
+            paint = if (!view.showRight) Wood.Woad else Wood.BeechLight, selected = !view.showRight, size = BlockSize.Compact)
+        Block(view.right.name, { island.showComparisonSide(true) }, Modifier.weight(1f), enabled = enabled,
+            paint = if (view.showRight) Wood.Woad else Wood.BeechLight, selected = view.showRight, size = BlockSize.Compact)
     }
 
     if (view.failed) OutlinedButton(onClick = island::retryComparison) { Text(stringResource(Res.string.echo_retry)) }
@@ -157,35 +156,26 @@ internal fun LivingEchoPlaces(
             pair.left.village?.cleared?.size, pair.right.village?.cleared?.size, view)
         else -> null
     }
-    Surface(modifier, color = NightGreen.copy(alpha = 0.94f), contentColor = Parchment,
-        shape = MaterialTheme.shapes.large) {
-        Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-            if (groups.isEmpty()) {
-                Text(stringResource(if (pair.left.hash == pair.right.hash) Res.string.echo_no_difference
-                    else Res.string.echo_no_marked_difference), style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(vertical = 6.dp))
-            } else {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    for ((kind, sites) in groups) {
-                        if (kind == EchoKind.WetGround && EchoKind.Bank in groups) continue
-                        TextButton(onClick = {
-                            selection = kind
-                            onFocus(sites.map { it.ground })
-                        },
-                            colors = ButtonDefaults.textButtonColors(contentColor = Parchment)) {
-                            Text(stringResource(kind.label()))
-                        }
-                    }
-                    TextButton(onClick = island::toggleEcho,
-                        colors = ButtonDefaults.textButtonColors(contentColor = Parchment)) {
-                        Text(stringResource(if (view.echoEnabled) Res.string.echo_hide else Res.string.echo_show))
-                    }
+    Board(modifier, padding = 8.dp) {
+        if (groups.isEmpty()) {
+            Text(stringResource(if (pair.left.hash == pair.right.hash) Res.string.echo_no_difference
+                else Res.string.echo_no_marked_difference), style = MaterialTheme.typography.bodySmall)
+        } else {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                for ((kind, sites) in groups) {
+                    if (kind == EchoKind.WetGround && EchoKind.Bank in groups) continue
+                    Block(stringResource(kind.label()), {
+                        selection = kind
+                        onFocus(sites.map { it.ground })
+                    }, paint = if (selection == kind) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact)
                 }
-                if (context != null) Text(context, style = MaterialTheme.typography.bodySmall)
-                val villageMarks = groups.keys.any { it in VillageEchoKinds }
-                if (view.echoEnabled) Text(stringResource(if (villageMarks) Res.string.echo_village_legend else Res.string.echo_legend),
-                    style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 3.dp, bottom = 6.dp))
+                Block(stringResource(if (view.echoEnabled) Res.string.echo_hide else Res.string.echo_show), island::toggleEcho,
+                    paint = Wood.BeechLight, size = BlockSize.Compact)
             }
+            if (context != null) Text(context, style = MaterialTheme.typography.bodySmall)
+            val villageMarks = groups.keys.any { it in VillageEchoKinds }
+            if (view.echoEnabled) Text(stringResource(if (villageMarks) Res.string.echo_village_legend else Res.string.echo_legend),
+                style = MaterialTheme.typography.labelSmall, color = Wood.WalnutSoft)
         }
     }
 }

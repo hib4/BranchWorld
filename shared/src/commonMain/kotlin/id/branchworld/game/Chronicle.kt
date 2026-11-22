@@ -7,12 +7,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -23,7 +21,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
@@ -187,45 +184,40 @@ internal fun PetitionCard(island: IslandLoad.Ready, modifier: Modifier = Modifie
     val pending = remember(view, queued) { island.pendingEndorsement() }
     val chapter = island.chapter
     var reasons by remember(petition.id) { mutableStateOf(!compact) }
-    Surface(modifier.widthIn(max = 440.dp), color = NightGreen.copy(alpha = 0.97f), contentColor = Parchment,
-        shape = MaterialTheme.shapes.large, shadowElevation = 6.dp) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(petitionTitle(petition, chapter), Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFFFD89C))
+    Board(modifier.widthIn(max = 404.dp).fillMaxWidth(), gap = 3.dp) {
+        Text(petitionTitle(petition, chapter), Modifier.semantics {
+            heading()
+            liveRegion = LiveRegionMode.Polite
+        }, style = MaterialTheme.typography.titleMedium)
+        ScrollColumn(spacing = 6.dp) {
             if (pending != null) {
                 Text(stringResource(Res.string.petition_endorsed, stringResource(pending.option.title())),
                     Modifier.semantics { liveRegion = LiveRegionMode.Polite }, style = MaterialTheme.typography.bodyMedium)
-                TextButton(onClick = island::cancelEndorsement, enabled = view.editsAllowed,
-                    colors = ButtonDefaults.textButtonColors(contentColor = Parchment)) {
-                    Text(stringResource(Res.string.petition_change))
+                Block(stringResource(Res.string.petition_change), island::cancelEndorsement, enabled = view.editsAllowed,
+                    paint = Wood.BeechLight, size = BlockSize.Small)
+            } else {
+                if (!view.editsAllowed && !view.seeking) Text(stringResource(Res.string.petition_past),
+                    style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
+                if (compact) Block(stringResource(if (reasons) Res.string.petition_hide_reasons else Res.string.petition_show_reasons),
+                    { reasons = !reasons }, paint = Wood.BeechLight, size = BlockSize.Small)
+                if (reasons) Text(stringResource(if (petition.kind == PetitionKind.Water) Res.string.petition_water_body else Res.string.petition_growth_body),
+                    style = MaterialTheme.typography.bodyMedium)
+                for (option in petition.options) {
+                    Block(stringResource(Res.string.petition_endorse) + " · " + stringResource(option.title()),
+                        { island.endorse(option) }, Modifier.fillMaxWidth(), enabled = view.editsAllowed,
+                        paint = Wood.BeechLight, size = BlockSize.Small)
+                    if (reasons) Text(planDetail(option, village), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
                 }
-                return@Column
-            }
-            if (reasons) Text(stringResource(if (petition.kind == PetitionKind.Water) Res.string.petition_water_body else Res.string.petition_growth_body),
-                style = MaterialTheme.typography.bodyMedium)
-            for (option in petition.options) {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (reasons) {
-                        Text(stringResource(option.title()), style = MaterialTheme.typography.titleSmall)
-                        Text(planDetail(option, village), style = MaterialTheme.typography.bodySmall)
-                    }
-                    Button(onClick = { island.endorse(option) }, enabled = view.editsAllowed,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD89C), contentColor = NightGreen)) {
-                        Text(stringResource(Res.string.petition_endorse) + " · " + stringResource(option.title()))
-                    }
+                val now = island.clock.state.tick
+                val sameDay = petition.deadline / DayLength == now / DayLength
+                val when_ = when {
+                    sameDay && petition.deadline % DayLength < DayLength / 2 -> Res.string.petition_by_dusk
+                    sameDay -> Res.string.petition_tonight
+                    else -> Res.string.petition_tomorrow
                 }
+                Text(stringResource(Res.string.petition_deadline, stringResource(when_)), style = MaterialTheme.typography.labelSmall)
+
             }
-            if (compact) TextButton(onClick = { reasons = !reasons }, colors = ButtonDefaults.textButtonColors(contentColor = Parchment)) {
-                Text(stringResource(if (reasons) Res.string.petition_hide_reasons else Res.string.petition_show_reasons))
-            }
-            val now = island.clock.state.tick
-            val sameDay = petition.deadline / DayLength == now / DayLength
-            val when_ = when {
-                sameDay && petition.deadline % DayLength < DayLength / 2 -> Res.string.petition_by_dusk
-                sameDay -> Res.string.petition_tonight
-                else -> Res.string.petition_tomorrow
-            }
-            Text(stringResource(Res.string.petition_deadline, stringResource(when_)), style = MaterialTheme.typography.labelSmall)
         }
     }
 }
@@ -301,7 +293,7 @@ private fun VillageChronicle(island: IslandLoad.Ready, branchId: Int, chapter: C
                 Text(echoDay(event.tick), style = MaterialTheme.typography.labelSmall)
             }
             event.place(world, island.world.terrain)?.let { ground ->
-                OutlinedButton(onClick = { onFocus(ground) }) { Text(stringResource(Res.string.village_follow)) }
+                Block(stringResource(Res.string.village_follow), { onFocus(ground) }, paint = Wood.BeechLight, size = BlockSize.Small)
             }
         }
     }
