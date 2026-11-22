@@ -1,5 +1,6 @@
 package id.branchworld.game
 
+import id.branchworld.game.save.SaveFileName
 import id.branchworld.game.save.SaveFileTooLarge
 import id.branchworld.game.save.WorldSaveStore
 import java.nio.channels.FileChannel
@@ -16,6 +17,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal class DesktopWorldSaveStore(private val directory: Path = applicationDataDirectory()) : WorldSaveStore {
+    // Verification runs may point the game at a scratch folder with -Dbranchworld.dataDir.
     private val slot = directory.resolve("island-v3.json")
     private val legacy = listOf(2, 1).map { directory.resolve("island-v$it.json") }
 
@@ -56,12 +58,44 @@ internal class DesktopWorldSaveStore(private val directory: Path = applicationDa
         return true
     }
 
+    private val worlds = directory.resolve("worlds")
+
+    override suspend fun readFile(name: String, maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
+        require(SaveFileName.matches(name))
+        read(worlds.resolve(name), maxBytes)
+    }
+
+    override suspend fun writeFile(name: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        require(SaveFileName.matches(name))
+        writer.withLock {
+            Files.createDirectories(worlds)
+            FileChannel.open(directory.resolve(".island.lock"), CREATE, WRITE).use { channel ->
+                channel.lock().use { replace(worlds.resolve(name), bytes) }
+            }
+        }
+        true
+    }
+
+    private fun replace(target: Path, bytes: ByteArray) {
+        val temporary = Files.createTempFile(target.parent, ".world-", ".tmp")
+        try {
+            temporary.toFile().outputStream().use { stream ->
+                stream.write(bytes)
+                stream.fd.sync()
+            }
+            Files.move(temporary, target, ATOMIC_MOVE, REPLACE_EXISTING)
+        } finally {
+            Files.deleteIfExists(temporary)
+        }
+    }
+
     companion object {
         private val writer = Mutex()
     }
 }
 
 private fun applicationDataDirectory(): Path {
+    System.getProperty("branchworld.dataDir")?.takeIf { it.isNotBlank() }?.let { return Path.of(it) }
     val home = Path.of(System.getProperty("user.home"))
     val os = System.getProperty("os.name").lowercase()
     val parent = when {

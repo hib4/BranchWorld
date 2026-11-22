@@ -99,7 +99,7 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(event.kind.code)
             writeInt(event.amount)
         }
-        world.village?.let(::writeVillage)
+        world.village?.let { writeVillage(it, habitat != null) }
     }
     wildlife?.let { history ->
         writeLong(history.catches)
@@ -124,7 +124,34 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(pool.retained)
         }
     }
+    habitat?.let(::writeHabitat)
     bytes()
+}
+
+/** Rules v10 habitat section. Absent in earlier rules, so their canonical bytes are unchanged. */
+private fun CanonicalWriter.writeHabitat(habitat: HabitatState) {
+    writeInt(habitat.chapter)
+    writeInt(habitat.refuges.size)
+    for (refuge in habitat.refuges) {
+        writeInt(refuge.region)
+        writeLong(refuge.declaredAt)
+    }
+    with(habitat.herd) {
+        writeInt(bound)
+        writeLong(departedAt)
+        writeLong(arrivedAt ?: -1L)
+        writeInt(if (pushedThrough) 1 else 0)
+        writeInt(crossings)
+        writeInt(forced)
+        writeInt(calves)
+    }
+    writeInt(habitat.log.size)
+    for (event in habitat.log) {
+        writeLong(event.tick)
+        writeInt(event.kind.code)
+        writeInt(event.detail)
+        writeCell(event.cell)
+    }
 }
 
 internal fun EcologyState.canonicalHash(): String = canonicalBytes().canonicalHash()
@@ -135,7 +162,8 @@ private fun CanonicalWriter.writeOptionalCell(cell: GridCell?) {
 }
 
 /** Rules v9 village section. Absent in earlier rules, so their canonical bytes are unchanged. */
-private fun CanonicalWriter.writeVillage(village: VillageState) {
+private fun CanonicalWriter.writeVillage(village: VillageState, ranges: Boolean) {
+    if (ranges) writeInt(village.crowding)
     writeInt(village.nextId)
     writeInt(village.thirstTurns)
     writeInt(village.grazing)

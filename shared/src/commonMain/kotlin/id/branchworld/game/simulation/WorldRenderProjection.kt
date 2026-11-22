@@ -27,7 +27,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import kotlin.math.abs
 
-class WorldRenderSource(val terrain: TerrainMap, val poses: StateFlow<WorldRenderProjection>)
+class WorldRenderSource(
+    val terrain: TerrainMap,
+    val poses: StateFlow<WorldRenderProjection>,
+    /** Rules v10: the herd's seasonal way, dry range first. Static for the island, so it is computed once. */
+    val herdRoute: List<GroundPoint> = emptyList(),
+)
+
+/** Rules v10 range detail: declared refuges and which range the herd is heading for (1 wet, 2 dry). */
+data class RangePose(val refuges: List<Int>, val herdBound: Int)
 
 /** Presentation data for a completed tick. Terrain remains a separate static projection. */
 data class WorldRenderProjection(
@@ -43,6 +51,7 @@ data class WorldRenderProjection(
     val wildlife: WildlifeReadout? = null,
     val shaping: ShapingPose? = null,
     val livingEcho: LivingEchoProjection? = null,
+    val ranges: RangePose? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
@@ -219,6 +228,7 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
         ForagePose(it.id, it.kind, it.cell.project(terrain), (it.biomass * 4 + it.capacity - 1) / it.capacity, it.planted)
     },
     springs = springs.map { it.project(terrain) },
+    ranges = habitat?.let { RangePose(it.refuges.map { refuge -> refuge.region }, it.herd.bound) },
     ecology = EcologyReadout(
         creatures.count { it.species == Species.Rabbit },
         creatures.count { it.species == Species.Deer },

@@ -32,7 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.*
 import id.branchworld.game.ecology.DayLength
-import id.branchworld.game.ecology.FadingGroveSeed
+import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.Hardship
 import id.branchworld.game.ecology.Household
 import id.branchworld.game.ecology.HouseholdNames
@@ -51,12 +51,12 @@ import id.branchworld.game.simulation.project
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-/** Proper name of a settlement: Hollowmere and its river-flats hamlet in the Fading Grove. */
+/** Proper name of a settlement: Hollowmere and Reedford in the Fading Grove, Cairnholt and Westmead on Cairnwater. */
 @Composable
-internal fun settlementName(siteId: Int, chapter: Boolean): String = stringResource(when {
-    siteId == 2 -> Res.string.village_hamlet
-    chapter -> Res.string.village_hollowmere
-    else -> Res.string.village_generic
+internal fun settlementName(siteId: Int, chapter: Chapter?): String = stringResource(when (chapter) {
+    Chapter.FadingGrove -> if (siteId == 2) Res.string.village_hamlet else Res.string.village_hollowmere
+    Chapter.LastCrossing -> if (siteId == 2) Res.string.village_westmead else Res.string.village_cairnholt
+    null -> if (siteId == 2) Res.string.village_new_hamlet else Res.string.village_generic
 })
 
 @Composable
@@ -68,6 +68,7 @@ internal fun PlanOption.title(): StringResource = when (this) {
     PlanOption.RiverFlats -> Res.string.plan_flats
     PlanOption.ClearWoods -> Res.string.plan_clear
     PlanOption.BuildWithin -> Res.string.plan_within
+    PlanOption.Pasture -> Res.string.plan_pasture
 }
 
 internal fun VillageTask.label(night: Boolean): StringResource = when {
@@ -93,7 +94,7 @@ private fun Trade.noun() = when (this) {
 
 /** One truthful chronicle line, written from the recorded event and the village that recorded it. */
 @Composable
-internal fun VillageEvent.describe(village: VillageState, chapter: Boolean): String {
+internal fun VillageEvent.describe(village: VillageState, chapter: Chapter?): String {
     val place = settlementName(siteId, chapter)
     val household = village.households.firstOrNull { it.id == subject }
     val structure = village.structures.firstOrNull { it.id == subject }
@@ -102,9 +103,11 @@ internal fun VillageEvent.describe(village: VillageState, chapter: Boolean): Str
             village.structures.count { it.siteId == siteId && it.kind == StructureKind.Home && it.startedAt == tick }, place)
         VillageEventKind.HouseholdArrived -> stringResource(Res.string.chronicle_arrived, familyName(household),
             stringResource(Trade.entries.first { it.code == detail }.noun()))
-        VillageEventKind.HouseholdLeft -> stringResource(
-            if (detail == Hardship.Thirst.code) Res.string.chronicle_left_thirst else Res.string.chronicle_left_hunger,
-            familyName(household), place)
+        VillageEventKind.HouseholdLeft -> stringResource(when (detail) {
+            Hardship.Thirst.code -> Res.string.chronicle_left_thirst
+            Hardship.Crowding.code -> Res.string.chronicle_left_crowding
+            else -> Res.string.chronicle_left_hunger
+        }, familyName(household), place)
         VillageEventKind.MemberBorn -> stringResource(Res.string.chronicle_grew, familyName(household), detail)
         VillageEventKind.WorkBegun -> when (structure?.kind) {
             StructureKind.Well -> stringResource(Res.string.chronicle_begun_well)
@@ -126,7 +129,11 @@ internal fun VillageEvent.describe(village: VillageState, chapter: Boolean): Str
             if (keeper) stringResource(Res.string.chronicle_keeper_chose, plan)
             else stringResource(Res.string.chronicle_village_chose, place, plan)
         }
-        VillageEventKind.HamletFounded -> stringResource(Res.string.chronicle_hamlet, familyName(household), place)
+        VillageEventKind.HamletFounded -> stringResource(when {
+            chapter == Chapter.LastCrossing || village.chosen(PlanOption.Pasture) -> Res.string.chronicle_pasture
+            village.chosen(PlanOption.RiverFlats) -> Res.string.chronicle_hamlet
+            else -> Res.string.chronicle_new_hamlet
+        }, familyName(household), place)
         VillageEventKind.FieldGrazed -> stringResource(Res.string.chronicle_grazed, detail)
         VillageEventKind.FieldFlooded -> stringResource(Res.string.chronicle_flooded, place)
         VillageEventKind.Thirst -> stringResource(Res.string.chronicle_thirst, place)
@@ -152,7 +159,7 @@ internal fun VillageEvent.place(world: SettlementWorld, terrain: id.branchworld.
 }
 
 @Composable
-internal fun petitionTitle(petition: Petition, chapter: Boolean): String = stringResource(
+internal fun petitionTitle(petition: Petition, chapter: Chapter?): String = stringResource(
     if (petition.kind == PetitionKind.Water) Res.string.petition_water_title else Res.string.petition_growth_title,
     settlementName(petition.siteId, chapter),
 )
@@ -166,6 +173,7 @@ private fun planDetail(option: PlanOption, village: VillageState): String = when
     ))
     PlanOption.ClearWoods -> stringResource(Res.string.plan_clear_detail)
     PlanOption.BuildWithin -> stringResource(Res.string.plan_within_detail)
+    PlanOption.Pasture -> stringResource(Res.string.plan_pasture_detail)
 }
 
 /** The village's question to the Keeper. Answering is a timeline command, so it can be rewound and compared. */
@@ -177,7 +185,7 @@ internal fun PetitionCard(island: IslandLoad.Ready, modifier: Modifier = Modifie
     val petition = remember(view, queued) { island.openPetition() } ?: return
     val village = island.clock.state.settlements?.village ?: return
     val pending = remember(view, queued) { island.pendingEndorsement() }
-    val chapter = island.key.terrain.seed == FadingGroveSeed
+    val chapter = island.chapter
     var reasons by remember(petition.id) { mutableStateOf(!compact) }
     Surface(modifier.widthIn(max = 440.dp), color = NightGreen.copy(alpha = 0.97f), contentColor = Parchment,
         shape = MaterialTheme.shapes.large, shadowElevation = 6.dp) {
@@ -229,7 +237,7 @@ internal fun VillagePanel(island: IslandLoad.Ready, onFocus: (GroundPoint) -> Un
     val pose by island.world.poses.collectAsStateWithLifecycle()
     val world = island.clock.state.settlements ?: return
     val village = world.village ?: return
-    val chapter = island.key.terrain.seed == FadingGroveSeed
+    val chapter = island.chapter
     val night = pose.climate?.isDaylight == false
     if (world.sites.isEmpty()) {
         Text(stringResource(Res.string.settlement_searching))
@@ -279,7 +287,7 @@ internal fun VillagePanel(island: IslandLoad.Ready, onFocus: (GroundPoint) -> Un
 }
 
 @Composable
-private fun VillageChronicle(island: IslandLoad.Ready, branchId: Int, chapter: Boolean, onFocus: (GroundPoint) -> Unit) {
+private fun VillageChronicle(island: IslandLoad.Ready, branchId: Int, chapter: Chapter?, onFocus: (GroundPoint) -> Unit) {
     val world = island.clock.state.settlements ?: return
     val village = world.village ?: return
     var limit by remember(branchId) { mutableIntStateOf(8) }

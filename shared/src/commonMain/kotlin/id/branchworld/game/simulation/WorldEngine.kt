@@ -93,6 +93,15 @@ internal data class EndorsePlan(
     val option: PlanOption,
 ) : WorldCommand
 
+/** The Keeper declares a region a refuge where nothing new is built (rules v10). */
+@Serializable
+@SerialName("protect_region")
+internal data class ProtectRegion(
+    override val tick: Long,
+    override val sequence: Long,
+    val region: Int,
+) : WorldCommand
+
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {
     private val inputs = WorldCommands<SetDestination>()

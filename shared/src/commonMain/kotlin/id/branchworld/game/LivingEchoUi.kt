@@ -31,7 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.*
 import id.branchworld.game.ecology.DayLength
-import id.branchworld.game.ecology.FadingGroveSeed
+import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.SettlementEvent
 import id.branchworld.game.ecology.StructureKind
 import id.branchworld.game.ecology.VillageEvent
@@ -84,7 +84,7 @@ internal fun LivingEchoDock(
     }
     val pair = view.pair
     val tick = view.tick
-    val chapter = island.key.terrain.seed == FadingGroveSeed
+    val chapter = island.chapter
     if (tick != null) {
         val named = view.moments.sortedBy { it.rank() }
         val shortcuts = named.asSequence().filter { it.kind != HistoryMoment.Kind.Intervention }
@@ -200,11 +200,11 @@ private fun echoOutcome(label: StringResource, left: Int?, right: Int?, view: Co
     else stringResource(label, if (left > right) view.left.name else view.right.name)
 
 @Composable
-private fun shortMomentLabel(moment: HistoryMoment, chapter: Boolean): String {
+private fun shortMomentLabel(moment: HistoryMoment, chapter: Chapter?): String {
     val label: StringResource = when (moment.kind) {
         HistoryMoment.Kind.Warning -> Res.string.echo_warning_short
         HistoryMoment.Kind.Fork -> Res.string.echo_fork_short
-        HistoryMoment.Kind.Shortage -> if (chapter) Res.string.echo_harvest_short else Res.string.echo_scarcity
+        HistoryMoment.Kind.Shortage -> if (chapter == Chapter.FadingGrove) Res.string.echo_harvest_short else Res.string.echo_scarcity
         HistoryMoment.Kind.AfterRain -> Res.string.echo_rains_short
         HistoryMoment.Kind.Petition -> Res.string.echo_petition_short
         HistoryMoment.Kind.Departure -> Res.string.echo_departure_short
@@ -229,10 +229,10 @@ internal fun HistoryMoment.rank() = when (kind) {
 }
 
 @Composable
-internal fun momentLabel(moment: HistoryMoment, chapter: Boolean): String = when (moment.kind) {
-    HistoryMoment.Kind.Warning -> stringResource(Res.string.echo_warning)
+internal fun momentLabel(moment: HistoryMoment, chapter: Chapter?): String = when (moment.kind) {
+    HistoryMoment.Kind.Warning -> stringResource(if (chapter == Chapter.LastCrossing) Res.string.echo_pasture_request else Res.string.echo_warning)
     HistoryMoment.Kind.Fork -> stringResource(Res.string.echo_common_moment)
-    HistoryMoment.Kind.Shortage -> stringResource(if (chapter) Res.string.echo_shortage else Res.string.echo_scarcity)
+    HistoryMoment.Kind.Shortage -> stringResource(if (chapter == Chapter.FadingGrove) Res.string.echo_shortage else Res.string.echo_scarcity)
     HistoryMoment.Kind.Recovery -> stringResource(Res.string.echo_recovery)
     HistoryMoment.Kind.AfterRain -> stringResource(Res.string.echo_after_rain)
     HistoryMoment.Kind.Petition -> stringResource(Res.string.echo_petition)
@@ -295,7 +295,7 @@ private fun EchoChronicle(island: IslandLoad.Ready, view: ComparisonView) {
 private fun ChronicleTrail(name: String, entries: List<ChronicleEntry>, island: IslandLoad.Ready, view: ComparisonView) {
     var limit by remember(name, view.target) { mutableIntStateOf(8) }
     val ordered = remember(entries) { entries.sortedByDescending { it.tick } }
-    val chapter = island.key.terrain.seed == FadingGroveSeed
+    val chapter = island.chapter
     Text(name, style = MaterialTheme.typography.titleSmall, modifier = Modifier.semantics { heading() })
     if (entries.isEmpty()) Text(stringResource(Res.string.comparison_no_events), style = MaterialTheme.typography.bodySmall)
     for (entry in ordered.take(limit)) {

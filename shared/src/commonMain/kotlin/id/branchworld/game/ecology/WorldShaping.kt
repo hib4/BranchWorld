@@ -52,7 +52,7 @@ internal data class CalledShower(val region: Int, val startedAt: Long)
 internal data class RegionalWater(val region: Int, val retained: Int)
 
 internal data class RainGround(val available: Boolean, val infiltration: Int)
-internal enum class ShapeBlock { AwaitWarning, Spent, AlreadyRaining, NoGround, NoSites, Reserved }
+internal enum class ShapeBlock { AwaitWarning, Spent, AlreadyRaining, NoGround, NoSites, Reserved, AlreadyProtected }
 internal data class ShapePreview(
     val sites: List<GridCell>,
     val field: GridCell?,

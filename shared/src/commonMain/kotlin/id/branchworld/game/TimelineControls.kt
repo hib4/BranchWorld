@@ -50,7 +50,11 @@ import branchworld.shared.generated.resources.echo_warning
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.shape_timeline_position_percent
 import branchworld.shared.generated.resources.shape_return_warning
+import branchworld.shared.generated.resources.return_turning_point
+import branchworld.shared.generated.resources.echo_pasture_request
 import branchworld.shared.generated.resources.shape_rain_marker
+import branchworld.shared.generated.resources.shape_refuge_marker
+import branchworld.shared.generated.resources.shape_refuge_applied
 import branchworld.shared.generated.resources.shape_grove_marker
 import branchworld.shared.generated.resources.shape_rain_arrived
 import branchworld.shared.generated.resources.shape_did_not_apply
@@ -60,7 +64,7 @@ import branchworld.shared.generated.resources.shape_fork_here
 import branchworld.shared.generated.resources.shape_next_harvest
 import id.branchworld.game.ecology.SettlementTurn
 import id.branchworld.game.ecology.ShapingRulesVersion
-import id.branchworld.game.ecology.FadingGroveSeed
+import id.branchworld.game.ecology.Chapter
 import branchworld.shared.generated.resources.comparison_open
 import branchworld.shared.generated.resources.comparison_needs_fork
 import branchworld.shared.generated.resources.save_cancel
@@ -192,14 +196,16 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
     if (showTicks) Text(stringResource(Res.string.timeline_range, branch.start.toString(), branch.head.toString()))
     if (warning != null) {
         OutlinedButton(onClick = { operations.launch { island.returnToWarning() } },
-            enabled = island.canReturnToWarning) { Text(stringResource(Res.string.shape_return_warning)) }
+            enabled = island.canReturnToWarning) {
+                Text(stringResource(if (island.chapter == Chapter.LastCrossing) Res.string.return_turning_point else Res.string.shape_return_warning))
+            }
     }
     TimelineScrubber(
         branch.start..branch.head, view.tick, !view.seeking,
         markers = markedTicks, onStart = island.clock::pause, showTicks = showTicks, snapToMarkers = !showTicks,
         previewLabel = if (showTicks) null else { tick ->
             when (tick) {
-                warning -> stringResource(Res.string.echo_warning)
+                warning -> stringResource(if (island.chapter == Chapter.LastCrossing) Res.string.echo_pasture_request else Res.string.echo_warning)
                 branch.start -> stringResource(Res.string.echo_branch_start)
                 else -> executed.lastOrNull { it.tick == tick }?.label(false) ?: echoDay(tick)
             }
@@ -222,7 +228,7 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
             OutlinedButton(onClick = ::seek, enabled = canSeek) { Text(stringResource(Res.string.timeline_seek)) }
             OutlinedButton(onClick = ::playTo, enabled = canPlay) { Text(stringResource(Res.string.timeline_play_to)) }
         } else if (view.tick < Long.MAX_VALUE - SettlementTurn) {
-            val chapter = island.key.terrain.seed == FadingGroveSeed
+            val chapter = island.chapter == Chapter.FadingGrove
             val watchWarning = chapter && view.tick < 240
             val nextHarvest = (view.tick / SettlementTurn + 1) * SettlementTurn
             OutlinedButton(onClick = { island.playTo(if (watchWarning) 240L else nextHarvest) }, enabled = !view.seeking) {
@@ -386,6 +392,7 @@ internal fun TimelineScrubber(
 internal fun InterventionMarker.label(showTicks: Boolean = true): String {
     plan?.let { return stringResource(Res.string.plan_marker, stringResource(it.title())) }
     if (kind == Intervention.Rain) return stringResource(Res.string.shape_rain_marker, regionName(region))
+    if (kind == Intervention.Protect) return stringResource(Res.string.shape_refuge_marker, regionName(region))
     if (!showTicks && kind == Intervention.Reforest) return stringResource(Res.string.shape_grove_marker, regionName(region))
     val resource = if (kind == Intervention.Reforest) Res.string.timeline_reforest_event else Res.string.timeline_supplement_event
     return stringResource(resource, regionName(region), tick.toString())
@@ -395,6 +402,7 @@ internal fun InterventionMarker.label(showTicks: Boolean = true): String {
 internal fun InterventionResult.label(showTicks: Boolean = false): String {
     if (amount == 0 && (!showTicks || kind == Intervention.Rain)) return stringResource(Res.string.shape_did_not_apply)
     if (kind == Intervention.Rain) return stringResource(Res.string.shape_rain_arrived)
+    if (kind == Intervention.Protect) return stringResource(Res.string.shape_refuge_applied, regionName(region))
     if (!showTicks && kind == Intervention.Reforest) {
         return stringResource(branchworld.shared.generated.resources.Res.string.grove_applied, amount)
     }

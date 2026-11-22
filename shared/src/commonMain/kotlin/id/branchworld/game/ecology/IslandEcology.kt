@@ -18,6 +18,9 @@ internal class IslandEcology(val terrain: TerrainMap) {
     private val meadow = reachable.filter { terrain.biome(it) == Biome.Meadow }.ifEmpty { reachable }
     private val fields = linkedMapOf<GridCell, IntArray>()
 
+    /** The island's opening state, before any tick. Rebuilt from terrain once per instance. */
+    val baseline: EcologyState by lazy { initialState() }
+
     fun initialState(): EcologyState {
         val placement = SplitMix64(mix64(terrain.key.seed.toULong() xor PlacementSalt))
         val springs = springs()

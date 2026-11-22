@@ -20,13 +20,22 @@ private const val GrazingRadius = 4
 private const val GrazingPerCrop = 4
 private const val ThirstPetitionTurns = 2
 private const val ClearedPatches = 2
+private const val CrowdingTurns = 12
 
 /**
  * Rules v9 settlement turns. Every effect comes from authoritative ecology inputs: bank stage, soil moisture,
  * forage biomass, herbivores feeding beside the fields, and the Keeper's recorded endorsements.
  */
-internal class VillageRules(private val island: IslandEcology, private val economy: SettlementEconomy) {
+internal class VillageRules(
+    private val island: IslandEcology,
+    private val economy: SettlementEconomy,
+    private val rangesFor: () -> SeasonalRanges? = { null },
+) {
     private val terrain = island.terrain
+    /** Regions the Keeper has declared refuges this turn (rules v10). Nothing new is built in them. */
+    private var refuges: Set<Int> = emptySet()
+    private var story: Chapter? = null
+    private fun open(cell: GridCell) = cell.region() !in refuges
     private val names: List<Int> = run {
         val random = SplitMix64(mix64(terrain.key.seed.toULong() xor NameSalt))
         val order = HouseholdNames.indices.toMutableList()
@@ -76,9 +85,13 @@ internal class VillageRules(private val island: IslandEcology, private val econo
         patches: MutableList<ForagePatch>,
         springs: List<GridCell>,
         conditions: GrowingConditions,
+        habitat: HabitatState? = null,
+        chapter: Chapter? = null,
     ): SettlementWorld {
         if (tick % SettlementTurn != 0L) return world
         val village = world.village ?: return world
+        refuges = habitat?.refuges.orEmpty().mapTo(HashSet()) { it.region }
+        story = chapter
         if (world.sites.isEmpty()) return foundHollowmere(world, village, tick, patches, springs)
 
         var state = world
@@ -109,7 +122,8 @@ internal class VillageRules(private val island: IslandEcology, private val econo
         val thirsty = severeThirst(sites.first().welfare?.unmet ?: 0, sites.first().residents) && current.active(sites.first().id).isNotEmpty()
         current = current.copy(thirstTurns = if (thirsty) minOf(current.thirstTurns + 1, 16) else 0)
         current = raisePetitions(sites, current, tick, patches, springs)
-        return SettlementWorld(sites, state.events, gatheredFood, gatheredWood, current)
+        val turned = SettlementWorld(sites, state.events, gatheredFood, gatheredWood, current)
+        return if (rangesFor() != null) relieveCrowding(turned, tick, patches, springs) else turned
     }
 
     private fun foundHollowmere(
@@ -122,7 +136,8 @@ internal class VillageRules(private val island: IslandEcology, private val econo
             for (lot in site.lots.take(3)) add(Structure(next++, site.id, StructureKind.Home, lot, tick, HomeSteps, HomeSteps, completedAt = tick))
             add(Structure(next++, site.id, StructureKind.Field, site.field, tick, 1, 1, completedAt = tick))
         }
-        val founders = listOf(Trade.Farmer to 2, Trade.Woodcutter to 1, Trade.Mason to 1)
+        val founders = if (story == Chapter.LastCrossing) listOf(Trade.Farmer to 3, Trade.Woodcutter to 2, Trade.Mason to 2)
+            else listOf(Trade.Farmer to 2, Trade.Woodcutter to 1, Trade.Mason to 1)
         val households = founders.mapIndexed { index, (trade, members) ->
             Household(next++, names[index], site.id, structures[index].id, members, trade, tick)
         }
@@ -395,7 +410,7 @@ internal class VillageRules(private val island: IslandEcology, private val econo
     ): List<ForagePatch> {
         val reserved = village.structures.map { it.cell }.filter { it != underway }.toSet() + site.lots + site.center
         return patches.asSequence()
-            .filter { it.kind == ForageKind.Browse && !it.planted && it.cell !in reserved && economy.suitable(it.cell) }
+            .filter { it.kind == ForageKind.Browse && !it.planted && it.cell !in reserved && economy.suitable(it.cell) && open(it.cell) }
             .filter { distance(it.cell, site.center) <= 8 }
             .sortedWith(compareBy<ForagePatch> { if (it.cell == underway) -1 else distance(it.cell, site.center) }.thenBy { it.id })
             .take(ClearedPatches).toList()
@@ -427,8 +442,9 @@ internal class VillageRules(private val island: IslandEcology, private val econo
         }
         if (village.underway(site.id) != null) return village
         // Expansion follows the plan Hollowmere chose for its growth.
-        return when {
+        val expanded = when {
             village.chosen(PlanOption.ClearWoods) && village.fields(site.id).size > 1 -> startHome(village, site, tick)
+            village.chosen(PlanOption.Pasture) -> startHome(village, site, tick)
             village.chosen(PlanOption.BuildWithin) -> village.structures.firstOrNull {
                 it.siteId == site.id && it.kind == StructureKind.Home && it.level == 1 && it.completedAt != null
             }?.let { home ->
@@ -439,6 +455,38 @@ internal class VillageRules(private val island: IslandEcology, private val econo
             site.id != 1 -> startHome(village, site, tick)
             else -> village
         }
+        return expanded
+    }
+
+    /**
+     * Rules v10: crowding is relieved by the land at hand. Unless the Keeper made it a refuge, families take the herd's
+     * pasture; otherwise the newest household leaves to look for room elsewhere.
+     */
+    private fun relieveCrowding(turned: SettlementWorld, tick: Long, patches: List<ForagePatch>, springs: List<GridCell>): SettlementWorld {
+        var village = checkNotNull(turned.village)
+        val home = turned.sites.first()
+        // A village is crowded while every roof is full and its growth plan is settled; slow building does not ease it.
+        val decided = village.petitions.any { it.kind == PetitionKind.Growth && it.choice != null }
+        val full = village.active(home.id).sumOf { it.members } >= village.capacity(home.id)
+        val crowded = turned.sites.size == 1 && decided && full &&
+            village.active(home.id).size > 1
+        village = village.copy(crowding = if (crowded) minOf(village.crowding + 1, CrowdingTurns) else 0)
+        if (village.crowding < CrowdingTurns) return turned.copy(village = village)
+        val world = turned.copy(village = village)
+        val settled = foundHamlet(world, home, PlanOption.Pasture, tick, patches, springs)
+        if (settled != null) return settled.copy(village = checkNotNull(settled.village).copy(crowding = 0))
+        val active = village.active(home.id)
+        if (active.size <= 2) return world.copy(village = village.copy(crowding = 0))
+        val leaving = active.maxWith(compareBy<Household> { it.joinedAt }.thenBy { it.id })
+        val households = village.households.map {
+            if (it.id == leaving.id) it.copy(leftAt = tick, leftBecause = Hardship.Crowding, task = VillageTask.Idle) else it
+        }
+        val sites = world.sites.map { site ->
+            if (site.id == home.id) site.copy(residents = households.filter { it.siteId == site.id && it.active }.sumOf { it.members }) else site
+        }
+        return world.copy(sites = sites, village = village.copy(households = households, crowding = 0).record(
+            VillageEvent(tick, VillageEventKind.HouseholdLeft, home.id, leaving.id, Hardship.Crowding.code),
+        ))
     }
 
     private fun homeCapacity(village: VillageState, homeId: Int): Int {
@@ -448,7 +496,7 @@ internal class VillageRules(private val island: IslandEcology, private val econo
 
     private fun startHome(village: VillageState, site: Settlement, tick: Long): VillageState {
         val used = village.structures.map { it.cell }.toSet()
-        val lot = site.lots.firstOrNull { it !in used } ?: return village
+        val lot = site.lots.firstOrNull { it !in used && open(it) } ?: return village
         val home = Structure(village.nextId, site.id, StructureKind.Home, lot, tick, HomeSteps)
         return village.copy(structures = village.structures + home, nextId = village.nextId + 1)
             .record(VillageEvent(tick, VillageEventKind.WorkBegun, site.id, home.id, 1))
@@ -471,9 +519,12 @@ internal class VillageRules(private val island: IslandEcology, private val econo
         val choice = when (petition.kind) {
             PetitionKind.Water -> if (site.stone >= 12 || PlanOption.RiverFlats !in options) PlanOption.Well else PlanOption.RiverFlats
             // A hungry village wants farmland; a fed one prefers to keep its woods and build up.
-            PetitionKind.Growth -> if (PlanOption.ClearWoods in options && (site.foodBalance < 0 || site.shortage > 0)) {
-                PlanOption.ClearWoods
-            } else PlanOption.BuildWithin
+            PetitionKind.Growth -> when {
+                // The pasture is the richest land in reach; families take it unless the Keeper has made it a refuge.
+                PlanOption.Pasture in options && rangesFor()?.let { open(it.wet) } == true -> PlanOption.Pasture
+                PlanOption.ClearWoods in options && (site.foodBalance < 0 || site.shortage > 0) -> PlanOption.ClearWoods
+                else -> PlanOption.BuildWithin
+            }
         }
         val petitions = village.petitions.map { if (it.id == petition.id) it.copy(choice = choice, decidedAt = tick) else it }
         return world.copy(village = village.copy(petitions = petitions).record(
@@ -503,36 +554,69 @@ internal class VillageRules(private val island: IslandEcology, private val econo
                     village = village.copy(structures = village.structures + clearing, nextId = village.nextId + 1)
                         .record(VillageEvent(tick, VillageEventKind.WorkBegun, home.id, clearing.id, 1))
                 }
-                PlanOption.RiverFlats -> if (sites.size == 1) {
-                    val settlers = village.active(home.id).filter { it.trade == Trade.Farmer }
-                        .maxWithOrNull(compareBy<Household> { it.members }.thenByDescending { it.id }) ?: continue
-                    val blocked = village.structures.map { it.cell }
-                    val hamlet = economy.found(2, tick, settlers.members, patches, springs, sites, VillageLots, blocked, LotSpacing) ?: continue
-                    val bank = checkNotNull(island.drinkingBank(hamlet.center, springs))
-                    val share = settlers.members
-                    val total = home.residents.coerceAtLeast(1)
-                    val food = home.food * share / total
-                    val wood = home.wood * share / total
-                    val stone = home.stone * share / total
-                    val newHome = Structure(village.nextId, 2, StructureKind.Home, hamlet.lots.first(), tick, HomeSteps)
-                    val field = Structure(village.nextId + 1, 2, StructureKind.Field, hamlet.field, tick, 1, 1, completedAt = tick)
-                    val moved = village.households.map {
-                        if (it.id == settlers.id) it.copy(siteId = 2, home = newHome.id, task = VillageTask.Settling, hardship = 0) else it
-                    }
-                    village = village.copy(households = moved, structures = village.structures + newHome + field, nextId = village.nextId + 2)
-                        .record(VillageEvent(tick, VillageEventKind.HamletFounded, 2, settlers.id, settlers.members))
-                    val remaining = moved.filter { it.siteId == home.id && it.active }
-                    sites = listOf(
-                        home.copy(food = home.food - food, wood = home.wood - wood, stone = home.stone - stone,
-                            residents = remaining.sumOf { it.members }),
-                        hamlet.copy(residents = settlers.members, homes = 0, food = food, wood = wood, stone = stone,
-                            welfare = SettlementWelfare(bank, settlers.members * 2)),
-                    )
+                PlanOption.RiverFlats, PlanOption.Pasture -> if (sites.size == 1) {
+                    val moved = foundHamlet(world.copy(sites = sites, village = village), home, choice, tick, patches, springs) ?: continue
+                    sites = moved.sites
+                    village = checkNotNull(moved.village)
                 }
                 PlanOption.BuildWithin -> Unit
             }
         }
         return world.copy(sites = sites, village = village)
+    }
+
+    /** One farming household founds the second site: on the river flats, or on the herd's pasture (rules v10). */
+    private fun foundHamlet(
+        world: SettlementWorld, home: Settlement, choice: PlanOption, tick: Long, patches: List<ForagePatch>, springs: List<GridCell>,
+    ): SettlementWorld? {
+        if (world.sites.size != 1) return null
+        var village = checkNotNull(world.village)
+        val settlers = village.active(home.id).filter { it.trade == Trade.Farmer }
+            .maxWithOrNull(compareBy<Household> { it.members }.thenByDescending { it.id }) ?: return null
+        if (village.active(home.id).size < 2) return null
+        val blocked = village.structures.map { it.cell }
+        val hamlet = (if (choice == PlanOption.Pasture) pastureSite(world, patches, springs)
+            else economy.found(2, tick, settlers.members, patches, springs, world.sites, VillageLots, blocked, LotSpacing))
+            ?.copy(foundedAt = tick) ?: return null
+        val bank = checkNotNull(island.drinkingBank(hamlet.center, springs))
+        val share = settlers.members
+        val total = home.residents.coerceAtLeast(1)
+        val food = home.food * share / total
+        val wood = home.wood * share / total
+        val stone = home.stone * share / total
+        val newHome = Structure(village.nextId, 2, StructureKind.Home, hamlet.lots.first(), tick, HomeSteps)
+        val field = Structure(village.nextId + 1, 2, StructureKind.Field, hamlet.field, tick, 1, 1, completedAt = tick)
+        val moved = village.households.map {
+            if (it.id == settlers.id) it.copy(siteId = 2, home = newHome.id, task = VillageTask.Settling, hardship = 0) else it
+        }
+        village = village.copy(households = moved, structures = village.structures + newHome + field, nextId = village.nextId + 2)
+            .record(VillageEvent(tick, VillageEventKind.HamletFounded, 2, settlers.id, settlers.members))
+        val remaining = moved.filter { it.siteId == home.id && it.active }
+        return world.copy(
+            sites = listOf(
+                home.copy(food = home.food - food, wood = home.wood - wood, stone = home.stone - stone,
+                    residents = remaining.sumOf { it.members }),
+                hamlet.copy(residents = settlers.members, homes = 0, food = food, wood = wood, stone = stone,
+                    welfare = SettlementWelfare(bank, settlers.members * 2)),
+            ),
+            village = village,
+        )
+    }
+
+    /** Rules v10: a hamlet on the herd's wet-season pasture, unless the Keeper made it a refuge. */
+    private fun pastureSite(world: SettlementWorld, patches: List<ForagePatch>, springs: List<GridCell>): Settlement? {
+        val ranges = rangesFor() ?: return null
+        if (!open(ranges.wet)) return null
+        val village = world.village ?: return null
+        val blocked = village.structures.map { it.cell } + refugeCells()
+        return economy.found(2, 0, 2, patches, springs, world.sites, VillageLots, blocked, LotSpacing, near = ranges.wet)
+    }
+
+    private fun refugeCells(): List<GridCell> = buildList {
+        for (region in refuges) {
+            val center = regionCenter(region)
+            for (z in center.z - 8 until center.z + 8) for (x in center.x - 8 until center.x + 8) add(GridCell(x, z))
+        }
     }
 
     private fun freeCellNear(site: Settlement, village: VillageState, patches: List<ForagePatch>, springs: List<GridCell>): GridCell? {
@@ -561,7 +645,9 @@ internal class VillageRules(private val island: IslandEcology, private val econo
                 ) add(PlanOption.RiverFlats)
             }
             PetitionKind.Growth -> buildList {
-                if (clearingTargets(site, patches, village).isNotEmpty()) add(PlanOption.ClearWoods)
+                val farmers = village.active(site.id).any { it.trade == Trade.Farmer } && village.active(site.id).size > 1
+                if (world.sites.size == 1 && farmers && pastureSite(world, patches, springs) != null) add(PlanOption.Pasture)
+                else if (clearingTargets(site, patches, village).isNotEmpty()) add(PlanOption.ClearWoods)
                 add(PlanOption.BuildWithin)
             }
         }

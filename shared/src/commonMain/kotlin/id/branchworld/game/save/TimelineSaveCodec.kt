@@ -1,14 +1,17 @@
 package id.branchworld.game.save
 
 import id.branchworld.game.ecology.EcologyEngine
+import id.branchworld.game.ecology.IslandEcology
 import id.branchworld.game.ecology.CivilizationRulesVersion
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.WatershedRulesVersion
 import id.branchworld.game.ecology.WildlifeRulesVersion
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.VillageRulesVersion
+import id.branchworld.game.ecology.RangeRulesVersion
 import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.EndorsePlan
+import id.branchworld.game.simulation.ProtectRegion
 import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.canonicalHash
 import id.branchworld.game.simulation.commandOrder
@@ -34,6 +37,7 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
+    private const val RangeSchema = 8
     private const val VillageSchema = 7
     private const val ShapingSchema = 6
     private const val WildlifeSchema = 5
@@ -55,6 +59,7 @@ internal object TimelineSaveCodec {
         val rules = root.rulesVersion
         val worldgen = root.terrain.key.worldgenVersion
         val schema = when (rules) {
+            RangeRulesVersion -> RangeSchema
             VillageRulesVersion -> VillageSchema
             ShapingRulesVersion -> ShapingSchema
             WildlifeRulesVersion -> WildlifeSchema
@@ -78,7 +83,7 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema -> Unit
+            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema, RangeSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
@@ -102,6 +107,7 @@ internal object TimelineSaveCodec {
         WatershedSchema -> worldgen == WatershedWorldgenVersion && rules == WatershedRulesVersion
         ShapingSchema -> worldgen == WatershedWorldgenVersion && rules == ShapingRulesVersion
         VillageSchema -> worldgen == WatershedWorldgenVersion && rules == VillageRulesVersion
+        RangeSchema -> worldgen == WatershedWorldgenVersion && rules == RangeRulesVersion
         WildlifeSchema -> worldgen == WatershedWorldgenVersion && rules == WildlifeRulesVersion
         else -> false
     }
@@ -116,6 +122,8 @@ internal object TimelineSaveCodec {
         val active = requireNotNull(branches.getOrNull(timeline.activeBranchId - 1))
         require(timeline.viewedTick in active.start.tick..active.head.tick)
         val context = currentCoroutineContext()
+        // One island's static habitat serves every saved state; validation runs on this coroutine alone.
+        val island = IslandEcology(terrain)
         for ((index, branch) in branches.withIndex()) {
             context.ensureActive()
             require(branch.id == index + 1)
@@ -141,19 +149,20 @@ internal object TimelineSaveCodec {
             require(branch.commands.all { it.tick > branch.start.tick && it.tick <= branch.head.tick })
             require(branch.pending.all { it.tick > branch.head.tick })
             if (rules >= ShapingRulesVersion) {
-                val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion }
+                val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion }
                 require(queued.size <= 1 && queued.all { it.tick - branch.head.tick == 1L })
                 val endorsed = branch.pending.filterIsInstance<EndorsePlan>()
                 require(endorsed.size <= 1 && endorsed.all { it.tick - branch.head.tick == 1L })
             }
             if (rules < VillageRulesVersion) require((branch.commands + branch.pending).none { it is EndorsePlan })
+            if (rules < RangeRulesVersion) require((branch.commands + branch.pending).none { it is ProtectRegion })
             val inputs = branch.commands + branch.pending
             require(inputs.zipWithNext().all { (a, b) -> commandOrder.compare(a, b) < 0 })
             for (state in (branch.snapshots + branch.start + branch.head).distinct()) {
                 context.ensureActive()
                 require(state.rulesVersion == rules)
                 val replayInputs = if (state == branch.start) inputs else emptyList()
-                EcologyEngine(terrain, state, replayInputs, recordHistory = false).validateSavedState()
+                EcologyEngine(terrain, state, replayInputs, recordHistory = false, island = island).validateSavedState()
             }
         }
     }

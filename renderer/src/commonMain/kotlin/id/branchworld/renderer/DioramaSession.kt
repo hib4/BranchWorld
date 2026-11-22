@@ -61,6 +61,7 @@ internal class DioramaSession(
     private var rain: Node? = null
     private var shapingDetails: ShapingDetails? = null
     private var livingEcho: LivingEcho? = null
+    private var herdTrail: HerdTrail? = null
     private var localDetails: LocalDetails? = null
     private var light = coastalLight(null, false)
     private var previousClimate: ClimatePose? = null
@@ -103,6 +104,7 @@ internal class DioramaSession(
             forage = ForageMeshes(it, world.terrain, opening.springs, opening.wildlife != null, opening.shaping != null)
             localDetails = LocalDetails(it, world.terrain)
             livingEcho = LivingEcho(it, world.terrain)
+            herdTrail = HerdTrail(it, world.terrain, world.herdRoute)
             if (opening.shaping != null) shapingDetails = ShapingDetails(it, world.terrain, compact = output == null)
             controller.status.value = "Loading island…"
             output?.attach(it)
@@ -229,6 +231,7 @@ internal class DioramaSession(
             previousOpening = request.opening
         }
         livingEcho?.show(snapshot.livingEcho)
+        herdTrail?.show(snapshot.ranges, snapshot.settlements.orEmpty())
         val echoNow = snapshot.livingEcho?.sites?.isNotEmpty() == true
         if (echoNow != echoVisible) {
             echoVisible = echoNow
@@ -297,6 +300,7 @@ internal class DioramaSession(
         rain = null
         shapingDetails = null
         livingEcho = null
+        herdTrail = null
         echoVisible = false
         localDetails = null
         propModels = emptyList()

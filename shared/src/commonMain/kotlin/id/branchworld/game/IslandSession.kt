@@ -6,6 +6,8 @@ import id.branchworld.game.ecology.PlanOption
 import id.branchworld.game.ecology.InterventionResult
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.canonicalHash
+import id.branchworld.game.ecology.RangeRulesVersion
+import id.branchworld.game.save.AtlasEntry
 import id.branchworld.game.save.IncompatibleSave
 import id.branchworld.game.save.SaveFileTooLarge
 import id.branchworld.game.save.TimelineSaveCodec
@@ -52,7 +54,10 @@ internal class IslandSession {
 
     suspend fun open(key: TerrainKey) = open(IslandSessionKey(key))
 
-    suspend fun open(key: IslandSessionKey) {
+    /** Slots that failed to load this session. They are never autosaved over, so the player's history stays on disk. */
+    private val unreadable = mutableSetOf<String>()
+
+    suspend fun open(key: IslandSessionKey, store: WorldSaveStore? = null) {
         val previous = load.value
         if ((previous as? IslandLoad.Ready)?.key == key) return
         recent[key]?.let {
@@ -63,11 +68,16 @@ internal class IslandSession {
         if (previous is IslandLoad.Loading && previous.key == key) return
         load.value = loading
         try {
+            val saved = store?.let { readSlot(it, key) }
+            if (saved != null) {
+                if (load.value === loading) publish(saved)
+                return
+            }
             val ready = withContext(Dispatchers.Default) {
                 val started = TimeSource.Monotonic.markNow()
                 val terrain = IslandGenerator.generate(key.terrain)
                 val generationUs = started.elapsedNow().inWholeMicroseconds
-                val timeline = Timeline.start(terrain, rulesVersion = key.rules)
+                val timeline = Timeline.start(terrain, rulesVersion = key.rules, chapter = key.chapter)
                 println("BranchWorldTerrain seed=${key.terrain.seed} version=${key.terrain.worldgenVersion} rules=${key.rules} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=$generationUs readyUs=${started.elapsedNow().inWholeMicroseconds}")
                 IslandLoad.Ready(terrain, timeline)
             }
@@ -78,6 +88,108 @@ internal class IslandSession {
         } catch (error: Exception) {
             println("BranchWorldTerrain generationFailed key=$key ${error.stackTraceToString()}")
             if (load.value === loading) load.value = IslandLoad.Failed(key)
+        }
+    }
+
+    /** The island's own history from its atlas slot, or null to begin a new one. */
+    private suspend fun readSlot(store: WorldSaveStore, key: IslandSessionKey): IslandLoad.Ready? {
+        val bytes = try {
+            store.readFile(key.slot, TimelineSaveCodec.MaxBytes)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            println("BranchWorldSave slot unreadable ${key.slot}: ${error::class.simpleName}")
+            unreadable.add(key.slot)
+            storage.value = SaveStatus.Unreadable
+            return null
+        } ?: return null
+        return try {
+            val started = TimeSource.Monotonic.markNow()
+            val world = withContext(Dispatchers.Default) { TimelineSaveCodec.restore(bytes) }
+            val island = IslandLoad.Ready(world.terrain, world.timeline)
+            check(island.key == key) { "Slot ${key.slot} holds ${island.key}" }
+            println("BranchWorldSave opened slot=${key.slot} branch=${world.timeline.branchId} tick=${island.clock.state.tick} hash=${island.clock.state.canonicalHash()} restoreMs=${started.elapsedNow().inWholeMilliseconds}")
+            island
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            println("BranchWorldSave slot rejected ${key.slot}: ${error::class.simpleName}")
+            unreadable.add(key.slot)
+            storage.value = if (error is IncompatibleSave) SaveStatus.Incompatible else SaveStatus.Corrupt
+            null
+        }
+    }
+
+    /**
+     * Writes the open island's whole history to its own slot. Returns the atlas summary, or null when nothing was
+     * written. A slot that failed to load is left untouched.
+     */
+    suspend fun autosave(store: WorldSaveStore): AtlasEntry? {
+        val island = load.value as? IslandLoad.Ready ?: return null
+        val key = island.key
+        if (key.slot in unreadable || storage.value == SaveStatus.Busy) return null
+        val checkpoint = island.checkpoint()
+        val active = checkpoint.branches.first { it.id == checkpoint.activeBranchId }
+        return try {
+            val started = TimeSource.Monotonic.markNow()
+            val bytes = withContext(Dispatchers.Default) { TimelineSaveCodec.encode(checkpoint) }
+            if (!store.writeFile(key.slot, bytes)) return null
+            println("BranchWorldSave autosaved slot=${key.slot} branch=${active.id} tick=${active.head.tick} branches=${checkpoint.branches.size} bytes=${bytes.size} saveMs=${started.elapsedNow().inWholeMilliseconds}")
+            autosaved.value = active.head.tick
+            AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
+                active.head.tick, checkpoint.branches.size, active.name)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            println("BranchWorldSave autosave failed: ${error::class.simpleName}")
+            storage.value = SaveStatus.Unwritable
+            null
+        }
+    }
+
+    /** The open island's atlas summary without writing it, for platforms with no storage. */
+    fun summary(): AtlasEntry? {
+        val island = load.value as? IslandLoad.Ready ?: return null
+        val key = island.key
+        val view = island.timelineView.value
+        return AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
+            view.active.head, view.branches.size, view.active.name)
+    }
+
+    private val autosaved = MutableStateFlow<Long?>(null)
+    /** The head tick of the last successful autosave of the open island. */
+    val lastAutosave = autosaved.asStateFlow()
+
+    /**
+     * Copies the original single save into its island's atlas slot once, leaving the original file untouched.
+     * Returns the atlas entry for the imported island, or null when there was nothing usable to import.
+     */
+    suspend fun importLegacy(store: WorldSaveStore): AtlasEntry? {
+        val bytes = try {
+            store.read(TimelineSaveCodec.MaxBytes)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        } ?: return null
+        return try {
+            val world = withContext(Dispatchers.Default) { TimelineSaveCodec.restore(bytes) }
+            val island = IslandLoad.Ready(world.terrain, world.timeline)
+            val key = island.key
+            val checkpoint = island.checkpoint()
+            val active = checkpoint.branches.first { it.id == checkpoint.activeBranchId }
+            if (store.readFile(key.slot, TimelineSaveCodec.MaxBytes) == null) {
+                // Earlier schemas are re-encoded only by their own codec path; keep the original bytes exactly.
+                if (!store.writeFile(key.slot, bytes)) return null
+                println("BranchWorldSave imported legacy slot=${key.slot} tick=${active.head.tick} bytes=${bytes.size}")
+            }
+            AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
+                active.head.tick, checkpoint.branches.size, active.name)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            println("BranchWorldSave legacy import skipped: ${error::class.simpleName}")
+            null
         }
     }
 
@@ -158,7 +270,8 @@ internal sealed interface IslandLoad {
     data object Empty : IslandLoad
     data class Loading(val key: IslandSessionKey) : IslandLoad
     class Ready(terrain: TerrainMap, private val timeline: Timeline) : IslandLoad {
-        val key = IslandSessionKey(terrain.key, timeline.state.rulesVersion)
+        val key = IslandSessionKey(terrain.key, timeline.state.rulesVersion,
+            timeline.chapter?.takeIf { timeline.state.rulesVersion >= RangeRulesVersion })
         private val feedback = MutableStateFlow(InterventionFeedback(queued = timeline.queuedInterventions))
         val interventions = feedback.asStateFlow()
         private val timelineState = MutableStateFlow(timelineStatus())
@@ -185,9 +298,19 @@ internal sealed interface IslandLoad {
                     if (comparisonState.value == null) display.value = it
                 }
         })
-        val world = WorldRenderSource(terrain, display.asStateFlow())
+        val world = WorldRenderSource(terrain, display.asStateFlow(), timeline.herdRoute().map { it.project(terrain) })
 
         fun inspectRegions() = timeline.inspectRegions()
+        val chapter get() = timeline.chapter
+        val canCloseChapter get() = navigationAvailable && timeline.canCloseChapter
+        fun outcomes() = timeline.outcomes()
+        fun pastureRegion() = timeline.pastureRegion()
+
+        /** Opens a bookmarked or recorded moment of any history. */
+        suspend fun visit(branch: Int, tick: Long) {
+            val summary = timelineState.value.branches.firstOrNull { it.id == branch } ?: return
+            navigate(branch, tick.coerceIn(summary.start, summary.head))
+        }
         fun checkpoint() = timeline.checkpoint()
 
         fun recommendedRainRegion() = timeline.recommendedRainRegion().coerceAtLeast(0)

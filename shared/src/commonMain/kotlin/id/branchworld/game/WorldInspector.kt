@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.shape_rain_arrived
+import branchworld.shared.generated.resources.shape_refuge_declared
 import branchworld.shared.generated.resources.commands_queued
 import branchworld.shared.generated.resources.grove_applied
 import branchworld.shared.generated.resources.grove_choose_region
@@ -120,6 +121,7 @@ private fun RegionalControls(island: IslandLoad.Ready) {
             Intervention.Reforest -> Res.string.plants_applied
             Intervention.Supplement -> Res.string.supplement_applied
             Intervention.Rain -> Res.string.shape_rain_arrived
+            Intervention.Protect -> Res.string.shape_refuge_declared
             Intervention.Plan -> continue
         }
         Text(stringResource(message, result.tick.toString(), regionName(result.region), result.amount), live)

@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.test.ExperimentalTestApi
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -45,32 +47,31 @@ class DesktopEcologyUiTest {
         }
         waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Valley }
         val valley = viewport
-        onNodeWithText("Explore islands").performScrollTo().performClick()
-        onNodeWithText("Cairnwater").performScrollTo().performClick()
+        tap("Sandbox")
+        tap("Cairnwater")
+        tap("Shape this island")
         waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Tarn }
-        onNodeWithText("Explore island").performScrollTo().performClick()
-        onNodeWithText("Pause").performClick()
-        onNodeWithText("Inspect").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Pause").fetchSemanticsNodes().isNotEmpty() }
+        tap("Pause")
+        tap("Inspect")
         onNodeWithText("Landmarks").performClick()
         onNodeWithText("Cairnwater Lake").performScrollTo().performClick()
         waitUntil { camera.focus == WorldCamera.Focus.Landmark(LandmarkKind.Basin) }
-        onNodeWithText("Close").performClick()
-        onNodeWithText("Menu").performClick()
-        onNodeWithText("Back to home").performScrollTo().performClick()
-        onNodeWithText("Explore islands").performScrollTo().performClick()
-        onNodeWithText("Heron Reach").performScrollTo().performClick()
+        tap("Close")
+        returnToTitle()
+        tap("Sandbox")
+        tap("Heron Reach")
+        tap("Shape this island")
         waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Marsh }
-        onNodeWithText("Explore island").performScrollTo().performClick()
-        onNodeWithText("Pause").performClick()
-        onNodeWithText("Inspect").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Pause").fetchSemanticsNodes().isNotEmpty() }
+        tap("Pause")
+        tap("Inspect")
         onNodeWithText("Landmarks").performClick()
         onNodeWithText("Heron Marsh").performScrollTo().performClick()
         waitUntil { camera.focus == WorldCamera.Focus.Landmark(LandmarkKind.Basin) }
-        onNodeWithText("Close").performClick()
-        onNodeWithText("Menu").performClick()
-        onNodeWithText("Back to home").performScrollTo().performClick()
-        onNodeWithText("Explore islands").performScrollTo().performClick()
-        onNodeWithText("The Fading Grove").performScrollTo().performClick()
+        tap("Close")
+        returnToTitle()
+        beginFadingGrove()
         waitUntil(timeoutMillis = 5_000) { viewport === valley }
     }
 
@@ -89,9 +90,9 @@ class DesktopEcologyUiTest {
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
-        onNodeWithText("Begin story").performScrollTo().performClick()
-        onNodeWithText("Pause").performClick()
-        onNodeWithText("Inspect").performClick()
+        beginFadingGrove()
+        tap("Pause")
+        tap("Inspect")
         onNodeWithText("Select a creature").performScrollTo().performClick()
         onNodeWithText("Russet · Fox").performClick()
         onNodeWithText("Russet · Fox").assertExists()
@@ -107,7 +108,7 @@ class DesktopEcologyUiTest {
         searching.assertExists()
         settlement.performClick()
         searching.assertDoesNotExist()
-        onNodeWithText("Close").performClick()
+        tap("Close")
         waitUntil { camera.focus == WorldCamera.Focus.Creature(8) }
     }
 
@@ -129,9 +130,10 @@ class DesktopEcologyUiTest {
         assertEquals(0L, opening.tick)
         assertEquals(9, opening.creatures.size)
         assertEquals(2, opening.wildlife?.foxes)
+        tap("Stories")
         onNodeWithText("The Fading Grove").assertExists()
-        onNodeWithText("Begin story").performScrollTo().performClick()
-        onNodeWithText("Pause").performClick()
+        tap("Begin")
+        tap("Pause")
         assertSame(world, viewport)
         onNodeWithText("Send bunny left").assertDoesNotExist()
 
@@ -153,10 +155,9 @@ class DesktopEcologyUiTest {
         assertEquals(6, world.poses.value.forage.count { it.planted })
         waitUntil(timeoutMillis = 5_000) { camera.focus == null }
 
-        onNodeWithText("Menu").performClick()
-        onNodeWithText("Back to home").performScrollTo().performClick()
-        onNodeWithText("Return to this history").performScrollTo().performClick()
-        onNodeWithText("Play").assertExists()
+        returnToTitle()
+        tap("Continue")
+        waitUntil { onAllNodesWithText("Play").fetchSemanticsNodes().isNotEmpty() || onAllNodesWithContentDescription("Play").fetchSemanticsNodes().isNotEmpty() }
         assertSame(world, viewport)
     }
 
@@ -172,8 +173,8 @@ class DesktopEcologyUiTest {
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
-        onNodeWithText("Begin story").performScrollTo().performClick()
-        onNodeWithText("Shape").performClick()
+        beginFadingGrove()
+        tap("Shape")
         val power = onNodeWithText("Call rain").fetchSemanticsNode().boundsInRoot
         assertTrue(power.left > 440f, "The targeting controls should sit to the right of the landscape")
     }
@@ -191,7 +192,7 @@ class DesktopEcologyUiTest {
             }
         }
         waitUntil(timeoutMillis = 5_000) { mix == WorldAmbience.Sunlit }
-        onNodeWithText("Menu").performScrollTo().performClick()
+        tap("Settings")
         onNodeWithText("Reduce motion").performScrollTo().performClick()
         waitUntil { request.reducedMotion }
         onNodeWithText("World sounds").performScrollTo().performClick()

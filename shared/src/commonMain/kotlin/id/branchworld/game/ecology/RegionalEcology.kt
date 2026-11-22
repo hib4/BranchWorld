@@ -11,8 +11,11 @@ internal const val RegionCount = RegionWidth * RegionWidth
 internal fun GridCell.region(): Int =
     (z - TerrainMap.MinCell) / 16 * RegionWidth + (x - TerrainMap.MinCell) / 16
 
+internal fun regionCenter(region: Int): GridCell =
+    GridCell(TerrainMap.MinCell + region % RegionWidth * 16 + 8, TerrainMap.MinCell + region / RegionWidth * 16 + 8)
+
 /** Plan is the Keeper's endorsement of a village petition (rules v9); it targets no region. */
-internal enum class Intervention { Reforest, Supplement, Rain, Plan }
+internal enum class Intervention { Reforest, Supplement, Rain, Plan, Protect }
 
 internal data class InterventionResult(val kind: Intervention, val region: Int, val tick: Long, val amount: Int)
 

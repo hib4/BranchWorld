@@ -8,7 +8,11 @@ enum class WorldSound(private val fileName: String) {
     Fork("fork.wav"),
     Save("save.wav"),
     Grove("grove.wav"),
-    RainChime("spring-shower.wav");
+    RainChime("spring-shower.wav"),
+    UiSelect("ui-select.wav"),
+    UiConfirm("ui-confirm.wav"),
+    UiBack("ui-back.wav"),
+    UiOpen("ui-open.wav");
 
     fun assetUri(): String = Res.getUri("files/sounds/$fileName")
 }

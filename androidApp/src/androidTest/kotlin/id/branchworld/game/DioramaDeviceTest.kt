@@ -36,6 +36,7 @@ class DioramaDeviceTest {
             bounds("Focus island")
             assertTrue(findVisible { it.text == "Send bunny left" } == null)
             tap(bounds("Menu"))
+            tap(bounds("Settings"))
             tap(bounds("Reduce motion"))
             tap(bounds("Close"))
 
@@ -79,7 +80,11 @@ class DioramaDeviceTest {
             bounds("Play")
 
             tap(bounds("Menu"))
-            tap(bounds("Show diagnostics"))
+            tap(bounds("Settings"))
+            tap(bounds("Timeline tick tools"))
+            tap(bounds("Close"))
+            tap(bounds("Menu"))
+            tap(bounds("Diagnostics"))
             bounds("Seed: 104729")
             val parked = currentTick()
             val parkedForage = currentForage()
@@ -112,8 +117,8 @@ class DioramaDeviceTest {
             tap(bounds("Pause"))
             tap(bounds("Close"))
             tap(bounds("Menu"))
-            tap(bounds("Back to home"))
-            bounds("Return to this history")
+            tap(bounds("Return to title"))
+            bounds("Continue")
         } finally {
             if (!activity.isDestroyed) instrumentation.runOnMainSync { activity.finish() }
         }
@@ -238,10 +243,16 @@ class DioramaDeviceTest {
     }
 
     private fun openStory() {
-        waitUntil("enabled Begin story button") {
-            val label = findVisible { it.text?.toString()?.trim() == "Begin story" }
-            val button = generateSequence(label) { it.parent }.firstOrNull { it.isClickable && it.isEnabled }
-            button?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+        // Title screen → Stories → the first chapter's Begin (or Continue once it has a history).
+        for (label in listOf("Stories", null)) {
+            waitUntil("enabled ${label ?: "Begin or Continue"} button") {
+                val text = findVisible {
+                    val value = it.text?.toString()?.trim()
+                    if (label != null) value == label else value == "Begin" || value == "Continue"
+                }
+                val button = generateSequence(text) { it.parent }.firstOrNull { it.isClickable && it.isEnabled }
+                button?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+            }
         }
         bounds("Focus island")
     }

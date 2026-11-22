@@ -36,9 +36,9 @@ class DesktopVillageUiTest {
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
         val world = checkNotNull(viewport)
-        onNodeWithText("Begin story").performScrollTo().performClick()
+        beginFadingGrove()
         waitUntil(timeoutMillis = 20_000) { world.poses.value.tick == 240L }
-        onNodeWithText("Play").performClick()
+        tap("Play")
         // The village raises its petition from its own thirst and the clock holds for the Keeper.
         waitUntil(timeoutMillis = 30_000) { onAllNodesWithText("Hollowmere asks for guidance").fetchSemanticsNodes().isNotEmpty() }
         val asked = world.poses.value.tick
@@ -78,9 +78,9 @@ class DesktopVillageUiTest {
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
         val world = checkNotNull(viewport)
-        onNodeWithText("Begin story").performScrollTo().performClick()
+        beginFadingGrove()
         waitUntil(timeoutMillis = 20_000) { world.poses.value.tick == 240L }
-        onNodeWithText("Play").performClick()
+        tap("Play")
         waitUntil(timeoutMillis = 30_000) { onAllNodesWithText("Hollowmere asks for guidance").fetchSemanticsNodes().isNotEmpty() }
         // Reasons stay one tap away so the card leaves the valley visible.
         onNodeWithText("Endorse · Dig a well").assertExists()

@@ -95,8 +95,11 @@ internal data class EcologyState(
     val wildlife: WildlifeHistory? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val shaping: ShapingState? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val habitat: HabitatState? = null,
 ) {
     val rulesVersion: Int get() = when {
+        habitat != null -> RangeRulesVersion
         settlements?.village != null -> VillageRulesVersion
         shaping != null -> ShapingRulesVersion
         wildlife != null -> WildlifeRulesVersion

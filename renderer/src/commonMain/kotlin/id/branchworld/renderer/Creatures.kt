@@ -60,6 +60,10 @@ internal class CreatureModels(
         displayedTick = world.tick
         displayedBranch = world.branchId
         previousReducedMotion = reducedMotion
+        // Wildlife eases down beside homes and fields so a village keeps its scale. Cosmetic only.
+        val village = world.settlements.orEmpty().flatMap { site ->
+            site.village?.let { it.structures.map { structure -> structure.ground } + it.center } ?: site.homes
+        }
         val speciesById = world.creatures.associate { it.id to it.species }
         val iterator = active.iterator()
         while (iterator.hasNext()) {
@@ -74,7 +78,7 @@ internal class CreatureModels(
             val body = active.getOrPut(pose.id) {
                 unused[pose.species]?.removeLastOrNull() ?: makeBody(pose.species)
             }
-            body.show(world.tick, pose, continuous && previous != null, reducedMotion)
+            body.show(world.tick, pose, continuous && previous != null, reducedMotion, villageScale(pose, village))
             body.model.isVisible = true
         }
     }
@@ -114,7 +118,7 @@ internal class CreatureModels(
         private var scale = 1f
         private var lean = 0f
 
-        fun show(tick: Long, pose: CreaturePose, interpolate: Boolean, reducedMotion: Boolean) {
+        fun show(tick: Long, pose: CreaturePose, interpolate: Boolean, reducedMotion: Boolean, nearVillage: Float = 1f) {
             val heading = when (pose.heading) {
                 CreatureHeading.PositiveZ -> 0f
                 CreatureHeading.PositiveX -> 90f
@@ -157,6 +161,7 @@ internal class CreatureModels(
                 Species.Fox -> 0.205f
             } * if (pose.intent != null) WildlifeBodyScale else 1f
             if (pose.juvenile) scale *= 0.73f
+            scale *= nearVillage
             lean = when {
                 pose.action == CreatureAction.Stalking -> 7f
                 pose.action == CreatureAction.Drinking -> 10f
@@ -189,6 +194,15 @@ internal class CreatureModels(
 }
 
 internal const val WildlifeBodyScale = 0.76f
+private const val VillageWildlifeScale = 0.58f
+
+/** 1 away from settlements, easing to [VillageWildlifeScale] within about a cell and a half of a structure. */
+private fun villageScale(pose: CreaturePose, village: List<id.branchworld.game.simulation.GroundPoint>): Float {
+    if (village.isEmpty()) return 1f
+    val nearest = village.minOf { kotlin.math.hypot((it.x - pose.ground.x).toFloat(), (it.z - pose.ground.z).toFloat()) }
+    val t = ((nearest - 1.5f) / 3f).coerceIn(0f, 1f)
+    return VillageWildlifeScale + (1f - VillageWildlifeScale) * t * t * (3f - 2f * t)
+}
 
 private fun KslProgram.wildlifeCoat(species: Species) {
     if (species == Species.Deer) return

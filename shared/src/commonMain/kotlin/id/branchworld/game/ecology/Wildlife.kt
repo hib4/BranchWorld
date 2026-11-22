@@ -4,7 +4,19 @@ import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.simulation.SplitMix64
 import id.branchworld.game.terrain.Biome
+import id.branchworld.game.terrain.TerrainMap
 import kotlin.math.abs
+
+/** Rules v10 range context: the seasonal ranges, the cells deer avoid this tick and the habitat record it updates. */
+internal class RangeTurn(val ranges: SeasonalRanges, val disturbed: Set<Int>, var habitat: HabitatState) {
+    /** No settlement disturbs the wet-season pasture, so the herd can calve there. */
+    val quietPasture = disturbed.none { index ->
+        val x = index % TerrainMap.Size + TerrainMap.MinCell
+        val z = index / TerrainMap.Size + TerrainMap.MinCell
+        ranges.calving(GridCell(x, z))
+    }
+    var forcedLeader = false
+}
 
 /** Rules v7. Paths and cover indices are rebuildable from the authoritative tick. */
 internal class Wildlife(private val island: IslandEcology) {
@@ -52,8 +64,10 @@ internal class Wildlife(private val island: IslandEcology) {
         waypoints: Map<Long, GridCell>,
         random: SplitMix64,
         conditions: GrowingConditions? = null,
+        range: RangeTurn? = null,
     ): CreatureTurn {
         updateCover(patches)
+        this.range = range
         val events = mutableListOf<WildlifeEvent>()
         val animals = ArrayList<Creature>(state.creatures.size)
         val rabbits = state.creatures.filter { it.species == Species.Rabbit }
@@ -61,13 +75,18 @@ internal class Wildlife(private val island: IslandEcology) {
         val deer = state.creatures.filter { it.species == Species.Deer }
         val herd = deer.firstOrNull { it.matureAt <= tick } ?: deer.firstOrNull()
         val hunt = foxes.associate { it.id to hunt(it, rabbits, tick) }
+        val migration = range?.let { migrate(it, herd, tick) }
+        // Rules v10: the rains leave pools on the wet-season pasture, so the herd can drink where it calves.
+        seasonalPool = range?.ranges?.wet?.takeIf { seasonAt(tick) == Season.Wet }
+        leaderId = if (migration != null) herd?.id else null
         for (animal in state.creatures) {
             val life = checkNotNull(animal.wildlife)
             if (tick - life.bornAt >= animal.lifespan()) {
                 events.add(animal.event(tick, WildlifeMilestone.OldAge))
                 continue
             }
-            val next = act(animal, tick, recharge, patches, state.springs, waypoints[animal.id],
+            val waypoint = waypoints[animal.id] ?: migration?.takeIf { animal.id == leaderId }
+            val next = act(animal, tick, recharge, patches, state.springs, waypoint,
                 herd, foxes, hunt, random, conditions)
             if (next.depletedTicks >= SurvivalTicks) {
                 events.add(next.event(tick, WildlifeMilestone.Scarcity))
@@ -81,16 +100,67 @@ internal class Wildlife(private val island: IslandEcology) {
             } else animals.add(next)
         }
         resolveHunts(animals, events, tick)
+        if (range != null && migration != null) arrive(range, animals, migration, tick)
         var nextId = state.nextEntityId
         if (tick % 120L == 0L) {
             for (species in Species.entries) {
                 if (nextId < Long.MAX_VALUE && breed(animals, patches, species, tick, nextId, conditions != null)) {
-                    events.add(animals.last().event(tick, WildlifeMilestone.Birth))
+                    val born = animals.last()
+                    events.add(born.event(tick, WildlifeMilestone.Birth))
+                    if (range != null && species == Species.Deer) {
+                        val herdRecord = range.habitat.herd
+                        range.habitat = range.habitat.copy(herd = herdRecord.copy(calves = minOf(herdRecord.calves + 1, 4096)))
+                            .record(RangeEvent(tick, RangeEventKind.CalfBorn, (born.id and Int.MAX_VALUE.toLong()).toInt(), born.cell))
+                    }
                     nextId++
                 }
             }
         }
+        this.range = null
+        seasonalPool = null
         return CreatureTurn(animals, nextId, checkNotNull(state.wildlife).record(events))
+    }
+
+    private var range: RangeTurn? = null
+    private var leaderId: Long? = null
+    private var seasonalPool: GridCell? = null
+
+    /** Turns the herd toward the season's range. Returns the range the leader is still heading for, if any. */
+    private fun migrate(turn: RangeTurn, herd: Creature?, tick: Long): GridCell? {
+        if (herd == null) return null
+        val bound = if (seasonAt(tick) == Season.Wet) 1 else 2
+        var passage = turn.habitat.herd
+        if (passage.bound != bound) {
+            passage = passage.copy(bound = bound, departedAt = tick, arrivedAt = null, pushedThrough = false)
+            turn.habitat = turn.habitat.copy(herd = passage).record(RangeEvent(tick, RangeEventKind.HerdSetOut, bound, herd.cell))
+        }
+        return if (passage.arrivedAt == null) turn.ranges.anchor(bound) else null
+    }
+
+    private fun arrive(turn: RangeTurn, animals: MutableList<Creature>, anchor: GridCell, tick: Long) {
+        val leader = animals.firstOrNull { it.id == leaderId } ?: return
+        var passage = turn.habitat.herd
+        if (turn.forcedLeader && !passage.pushedThrough) {
+            passage = passage.copy(pushedThrough = true, forced = minOf(passage.forced + 1, 4096))
+            turn.habitat = turn.habitat.copy(herd = passage)
+                .record(RangeEvent(tick, RangeEventKind.HerdPushedThrough, passage.bound, leader.cell))
+            // Pushing past people and fences scatters the herd and costs it the reserves it needs to breed.
+            for ((index, animal) in animals.withIndex()) {
+                if (animal.species == Species.Deer && spacing(animal.cell, leader.cell) <= 8) {
+                    animals[index] = animal.copy(energy = (animal.energy - 200).coerceAtLeast(0), food = (animal.food - 100).coerceAtLeast(0))
+                }
+            }
+        }
+        if (turn.ranges.arrived(leader.cell, passage.bound)) {
+            passage = passage.copy(arrivedAt = tick, crossings = minOf(passage.crossings + 1, 4096))
+            turn.habitat = turn.habitat.copy(herd = passage)
+                .record(RangeEvent(tick, RangeEventKind.HerdCrossed, (tick - passage.departedAt).toInt().coerceAtMost(DayLength.toInt()), anchor))
+            if (passage.bound == 1 && !turn.quietPasture) {
+                turn.habitat = turn.habitat.record(RangeEvent(tick, RangeEventKind.PastureSettled, 0, anchor))
+            }
+            animals[animals.indexOf(leader)] = leader.copy(waypoint = null)
+        }
+        turn.forcedLeader = false
     }
 
     private fun updateCover(patches: List<ForagePatch>) {
@@ -192,7 +262,14 @@ internal class Wildlife(private val island: IslandEcology) {
         val watching = goal.need == Need.Hunt && goal.cell in cover && spacing(animal.cell, goal.cell) <= 1
         if (watching) return animal.copy(action = CreatureAction.Stalking)
         if (tick % pace != 0L || animal.cell == goal.cell) return animal.copy(action = action)
-        val next = island.navigation.step(animal.cell, island.terrainDistance(goal.cell))
+        val turn = range
+        val avoiding = if (turn != null && animal.species == Species.Deer) {
+            turn.ranges.avoidingField(goal.cell, animal.cell, turn.disturbed)
+        } else null
+        if (turn != null && avoiding == null && animal.id == leaderId && goal.need == Need.Waypoint && turn.disturbed.isNotEmpty() &&
+            cellId(animal.cell) !in turn.disturbed
+        ) turn.forcedLeader = true
+        val next = island.navigation.step(animal.cell, avoiding ?: island.terrainDistance(goal.cell))
         val heading = when {
             next.x > animal.cell.x -> CreatureHeading.PositiveX
             next.x < animal.cell.x -> CreatureHeading.NegativeX
@@ -277,8 +354,10 @@ internal class Wildlife(private val island: IslandEcology) {
 
     private fun waterGoal(animal: Creature, springs: List<GridCell>, recharge: Int, conditions: GrowingConditions?): Goal? {
         val prior = animal.goal
-        if (prior?.need == Need.Water && prior.cell in springs) return prior
-        return springs.minWithOrNull(compareBy<GridCell> {
+        val pool = seasonalPool?.takeIf { animal.species == Species.Deer }
+        val sources = if (pool == null) springs else springs + pool
+        if (prior?.need == Need.Water && prior.cell in sources) return prior
+        return sources.minWithOrNull(compareBy<GridCell> {
             val distance = island.terrainDistance(animal.cell)[cellId(it)]
             distance * 5 - (conditions?.moisture(it) ?: terrain.soilMoisture(it, recharge)) / if (recharge < 64) 5 else 12
         }.thenBy(::cellId))?.let { Goal(Need.Water, it) }
@@ -377,8 +456,20 @@ internal class Wildlife(private val island: IslandEcology) {
         }
         if (adults.size < 2) return false
         val occupied = animals.mapTo(mutableSetOf()) { it.cell }
+        val turn = range
+        // Rules v10: deer calve in the wet season on their quiet pasture. Driven from it, the scattered herd raises at
+        // most one calf late in the rains, and not in two seasons running.
+        val displaced = turn != null && species == Species.Deer && !turn.quietPasture
+        if (turn != null && species == Species.Deer) {
+            if (seasonAt(tick) != Season.Wet) return false
+            val passage = turn.habitat.herd
+            if (displaced && (tick - passage.departedAt < DayLength / 2 ||
+                    turn.habitat.log.any { it.kind == RangeEventKind.CalfBorn && it.tick >= passage.departedAt - 2 * DayLength })
+            ) return false
+        }
         for (firstIndex in adults) {
             val first = animals[firstIndex]
+            if (turn != null && species == Species.Deer && !displaced && !turn.ranges.calving(first.cell)) continue
             val distances = island.terrainDistance(first.cell)
             val shelter = island.nearest(distances, shelters) ?: continue
             if (distances[cellId(shelter)] !in 0..10) continue

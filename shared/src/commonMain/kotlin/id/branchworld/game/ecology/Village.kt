@@ -1,6 +1,8 @@
 package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.GridCell
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 
 /** Rules v9: named households, construction, petitions to the Keeper and a truthful village chronicle. */
@@ -29,7 +31,7 @@ enum class VillageTask(internal val code: Int) {
 }
 
 @Serializable
-enum class Hardship(internal val code: Int) { Thirst(1), Hunger(2) }
+enum class Hardship(internal val code: Int) { Thirst(1), Hunger(2), Crowding(3) }
 
 @Serializable
 enum class StructureKind(internal val code: Int) { Home(1), Field(2), Well(3), Clearing(4) }
@@ -41,6 +43,8 @@ enum class PetitionKind(internal val code: Int) { Water(1), Growth(2) }
 enum class PlanOption(internal val code: Int, val petition: PetitionKind) {
     Well(1, PetitionKind.Water), RiverFlats(2, PetitionKind.Water),
     ClearWoods(3, PetitionKind.Growth), BuildWithin(4, PetitionKind.Growth),
+    /** Rules v10: settle the herd's wet-season pasture. */
+    Pasture(5, PetitionKind.Growth),
 }
 
 @Serializable
@@ -107,6 +111,7 @@ internal data class VillageEvent(
 )
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class VillageState(
     val households: List<Household> = emptyList(),
     val structures: List<Structure> = emptyList(),
@@ -120,6 +125,9 @@ internal data class VillageState(
     val grazing: Int = 0,
     val lastGrazed: Long? = null,
     val lastFlood: Long? = null,
+    /** Rules v10: growth turns a fed village could not house anyone. Omitted in earlier saves. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val crowding: Int = 0,
 ) {
     fun active(siteId: Int) = households.filter { it.siteId == siteId && it.active }
     fun openPetition(): Petition? = petitions.firstOrNull { it.open }

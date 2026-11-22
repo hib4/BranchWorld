@@ -55,4 +55,13 @@ class ShellStateTest {
         val legacy = assertNotNull(saver.restore(listOf("world", false, 104729L)))
         assertEquals(1, legacy.terrain.worldgenVersion)
     }
+
+    @Test
+    fun saverKeepsTheChosenStoryAndMenu() {
+        val state = ShellState().selectIsland(Story.LastCrossing.key).show(HomeScreen.Atlas)
+        val saved = assertNotNull(with(ShellState.saver) { SaverScope { true }.save(state) })
+        assertEquals(state, ShellState.saver.restore(saved))
+        assertEquals(Story.LastCrossing.key, state.island)
+        assertEquals(HomeScreen.Title, state.openWorld().back().screen)
+    }
 }

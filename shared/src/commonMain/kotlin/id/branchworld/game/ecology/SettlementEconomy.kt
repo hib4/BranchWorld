@@ -131,6 +131,7 @@ internal class SettlementEconomy(private val island: IslandEcology) {
     internal fun found(
         id: Int, tick: Long, residents: Int, patches: List<ForagePatch>, springs: List<GridCell>, previous: List<Settlement>,
         lotCount: Int = MaximumHomes, blockedCells: Collection<GridCell> = emptyList(), lotSpacing: Int = 1,
+        near: GridCell? = null,
     ): Settlement? {
         val localFood = patches.asSequence().filter { it.kind == ForageKind.Meadow }
             .groupBy { it.cell.region() }.mapValues { (_, forage) -> forage.sumOf { it.biomass } }
@@ -138,7 +139,13 @@ internal class SettlementEconomy(private val island: IslandEcology) {
         for (site in previous) blocked.addAll(site.lots + site.center + site.field)
         blocked.addAll(blockedCells)
         val distances = springs.map(island::terrainDistance)
-        val candidates = island.reachable.asSequence()
+        val candidates = if (near != null) {
+            // Rules v10 pasture settlement: as close to the chosen pasture as the ground allows.
+            island.reachable.asSequence()
+                .filter { it !in blocked && suitable(it) && previous.none { site -> distance(it, site.center) < 12 } }
+                .map { it to distance(it, near) }.filter { it.second <= 10 }
+                .sortedWith(compareBy<Pair<GridCell, Int>> { it.second }.thenBy { cellId(it.first) })
+        } else island.reachable.asSequence()
             .filter { it !in blocked && suitable(it) && localFood.getOrElse(it.region()) { 0 } >= 80 }
             .filter { cell -> previous.none { distance(cell, it.center) < 12 } }
             .map { it to (distances.minOfOrNull { field -> field[cellId(it)] } ?: Int.MAX_VALUE) }

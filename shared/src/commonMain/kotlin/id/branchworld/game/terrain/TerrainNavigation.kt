@@ -53,6 +53,28 @@ internal class TerrainNavigation(val terrain: TerrainMap) {
         return distances
     }
 
+    /** Like [distancesTo], but cells in [blocked] (cell indices) are never entered unless they are the target. */
+    fun distancesAvoiding(target: GridCell, blocked: Set<Int>): IntArray {
+        require(contains(target))
+        val distances = IntArray(Size * Size) { -1 }
+        val queue = IntArray(distances.size)
+        val targetIndex = cellIndex(target.x, target.z)
+        queue[0] = targetIndex
+        distances[targetIndex] = 0
+        var read = 0
+        var write = 1
+        while (read < write) {
+            val index = queue[read++]
+            neighbors(index) { next ->
+                if (distances[next] < 0 && next !in blocked) {
+                    distances[next] = distances[index] + 1
+                    queue[write++] = next
+                }
+            }
+        }
+        return distances
+    }
+
     fun step(from: GridCell, distances: IntArray): GridCell {
         val index = cellIndex(from.x, from.z)
         val distance = distances[index]

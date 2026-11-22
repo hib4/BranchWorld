@@ -37,16 +37,14 @@ class DesktopTimelineUiTest {
                 App(viewport = { _, world -> SideEffect { viewport = world } })
             }
         }
-        awaitText("Begin story")
         waitUntil(timeoutMillis = 5_000) { viewport != null }
-        click("Begin story")
-        onNodeWithText("Pause").performClick()
-        onNodeWithText("Menu").performClick()
-        click("Show diagnostics")
+        beginFadingGrove()
+        tap("Pause")
+        tap("Menu")
+        tap("Settings")
         click("Timeline tick tools")
-        onNodeWithText("Close").performClick()
-        awaitText("Timeline")
-        onNodeWithText("Timeline").performClick()
+        tap("Close")
+        tap("Timeline")
         enterTick("60")
         onNodeWithText("Play to tick").performClick()
         waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }
@@ -78,14 +76,13 @@ class DesktopTimelineUiTest {
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
-        click("Begin story")
-        onNodeWithText("Pause").performClick()
-        onNodeWithText("Menu").performClick()
-        click("Show diagnostics")
+        beginFadingGrove()
+        tap("Pause")
+        tap("Menu")
+        tap("Settings")
         click("Timeline tick tools")
-        onNodeWithText("Close").performClick()
-        awaitText("Timeline")
-        onNodeWithText("Timeline").performClick()
+        tap("Close")
+        tap("Timeline")
         enterTick("60")
         click("Play to tick")
         waitUntil(timeoutMillis = 8_000) { viewport?.poses?.value?.tick == 60L }

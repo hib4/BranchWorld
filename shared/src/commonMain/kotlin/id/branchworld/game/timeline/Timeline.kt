@@ -4,6 +4,7 @@ import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.FadingGroveSeed
+import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.VillageRulesVersion
 import id.branchworld.game.ecology.Intervention
@@ -78,6 +79,15 @@ internal class Timeline private constructor(
         BranchSummary(it.id, it.name, it.parentId, it.start.tick, it.head.tick, it.interventions,
             it.head.settlements?.events?.size ?: 0)
     }
+
+    /** The current head of every history, for a chapter's closing comparison. */
+    fun outcomes(): List<ChapterOutcome> {
+        parkPending()
+        val summaries = summaries().associateBy { it.id }
+        return branches.values.map { ChapterOutcome.of(summaries.getValue(it.id), if (it.id == branchId && state.tick == it.head.tick) state else it.head) }
+    }
+
+    val canCloseChapter: Boolean get() = state.tick == active.head.tick && state.chapterCanClose(chapter)
 
     fun settlementEvents(branchId: Int): List<SettlementEvent> {
         val branch = branches[branchId] ?: return emptyList()
@@ -209,6 +219,13 @@ internal class Timeline private constructor(
 
     fun recommendedGroveRegion() = engine.recommendedGroveRegion()
 
+    /** The crafted story this history belongs to, or null in the sandbox. */
+    val chapter: Chapter? get() = engine.story
+
+    fun pastureRegion() = engine.pastureRegion()
+
+    fun herdRoute() = engine.herdRoute()
+
     fun cancelShape(): Boolean {
         if (state.tick != active.head.tick || !engine.cancelShape()) return false
         commandCount--
@@ -319,8 +336,9 @@ internal class Timeline private constructor(
         fun start(
             terrain: TerrainMap,
             rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else VillageRulesVersion,
+            chapter: Chapter? = null,
         ): Timeline {
-            val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false)
+            val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false, newChapter = chapter)
             return Timeline(terrain, root(engine.state, emptyList()), engine)
         }
 

@@ -1,6 +1,7 @@
 package id.branchworld.game
 
 import android.util.AtomicFile
+import id.branchworld.game.save.SaveFileName
 import id.branchworld.game.save.SaveFileTooLarge
 import id.branchworld.game.save.WorldSaveStore
 import java.io.File
@@ -48,6 +49,32 @@ internal class AndroidWorldSaveStore(directory: File) : WorldSaveStore {
     } catch (error: FileNotFoundException) {
         if (file.existsOnDisk()) throw error
         null
+    }
+
+    private val worlds = File(directory, "worlds")
+
+    override suspend fun readFile(name: String, maxBytes: Int): ByteArray? = withContext(Dispatchers.IO) {
+        require(SaveFileName.matches(name))
+        access.withLock { read(AtomicFile(File(worlds, name)), maxBytes) }
+    }
+
+    override suspend fun writeFile(name: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+        require(SaveFileName.matches(name))
+        access.withLock {
+            worlds.mkdirs()
+            val file = AtomicFile(File(worlds, name))
+            val stream = file.startWrite()
+            try {
+                stream.write(bytes)
+                stream.fd.sync()
+                file.finishWrite(stream)
+            } catch (error: Exception) {
+                file.failWrite(stream)
+                throw error
+            }
+            check(file.openRead().use { it.channel.size() == bytes.size.toLong() && it.readBytes().contentEquals(bytes) })
+        }
+        true
     }
 
     private fun AtomicFile.existsOnDisk() =
