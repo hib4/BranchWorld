@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="echo_burned_ground">Burned ground</string>
+    <string name="echo_stands">Pinewoods</string>
+    <string name="echo_burned_ground_outcome">More burned ground in %1$s.</string>
+    <string name="echo_stands_outcome">More pines are down in %1$s.</string>
+    <string name="echo_fire_legend">Amber marks show where the fire differed. Pale trees and homes stand in the other history.</string>
+</resources>

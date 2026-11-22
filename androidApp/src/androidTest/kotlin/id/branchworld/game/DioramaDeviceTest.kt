@@ -1,15 +1,19 @@
 package id.branchworld.game
 
 import android.accessibilityservice.AccessibilityServiceInfo
+import android.content.ContentUris
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Rect
 import android.os.Build
 import android.os.ParcelFileDescriptor
 import android.os.SystemClock
+import android.provider.MediaStore
 import android.view.InputDevice
 import android.view.MotionEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import androidx.test.filters.SdkSuppress
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -19,6 +23,56 @@ import kotlin.math.abs
 class DioramaDeviceTest {
     private val instrumentation = InstrumentationRegistry.getInstrumentation()
     private val input = instrumentation.uiAutomation
+
+    @Test
+    @SdkSuppress(minSdkVersion = 29)
+    fun photoModePublishesADecodableGameFrame() {
+        val activity = instrumentation.startActivitySync(
+            Intent(instrumentation.targetContext, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK),
+        )
+        val resolver = instrumentation.targetContext.contentResolver
+        val pictures = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        fun photoIds() = resolver.query(
+            pictures,
+            arrayOf(MediaStore.Images.Media._ID),
+            "${MediaStore.Images.Media.RELATIVE_PATH} = ?",
+            arrayOf("Pictures/BranchWorld/"),
+            null,
+        )?.use { rows -> buildSet { while (rows.moveToNext()) add(rows.getLong(0)) } }.orEmpty()
+        val before = photoIds()
+        try {
+            openStory()
+            waitUntil("terrain assets to load") {
+                findVisible { it.text in listOf("Starting renderer…", "Loading island…") } == null
+            }
+            tap(bounds("Menu"))
+            tap(bounds("Photo mode"))
+            // A photo needs the island's first complete frame. The game says so and asks to try again, as a player would.
+            waitUntil("Photo saved to Pictures/BranchWorld.") {
+                if (findVisible { it.text?.toString()?.trim() == "Photo saved to Pictures/BranchWorld." } != null) return@waitUntil true
+                findVisible { it.isEnabled && it.text?.toString()?.trim() == "Keep this view" }
+                    ?.let { node -> tap(Rect().also(node::getBoundsInScreen)) }
+                Thread.sleep(1_500)
+                false
+            }
+
+            val photo = ContentUris.withAppendedId(pictures, (photoIds() - before).single())
+            val bitmap = requireNotNull(resolver.openInputStream(photo)?.use(BitmapFactory::decodeStream))
+            try {
+                assertTrue("Expected a game-sized photo", bitmap.width >= 300 && bitmap.height >= 300)
+                val colors = buildSet {
+                    for (x in 1..5) for (y in 1..5) add(bitmap.getPixel(x * bitmap.width / 6, y * bitmap.height / 6))
+                }
+                assertTrue("Expected a rendered scene", colors.size > 4)
+            } finally {
+                bitmap.recycle()
+            }
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+            for (id in photoIds() - before) resolver.delete(ContentUris.withAppendedId(pictures, id), null, null)
+        }
+    }
 
     @Test
     fun dioramaRunsWorldClockAndSurvivesActivityRecreation() {

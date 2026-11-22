@@ -16,6 +16,7 @@ import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.Timeline
+import id.branchworld.game.timeline.WorldCode
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
@@ -41,14 +42,20 @@ class AtlasTest {
             files[name] = bytes
             return true
         }
+        override suspend fun createFile(name: String, bytes: ByteArray): Boolean =
+            if (name in files) false else writeFile(name, bytes)
     }
 
     @Test
     fun everyIslandHasItsOwnSlot() {
         assertEquals("story-fading-grove.json", Story.FadingGrove.key.slot)
         assertEquals("story-last-crossing.json", Story.LastCrossing.key.slot)
-        assertEquals("sandbox-271828-w2.json", IslandSessionKey.sandbox(271828).slot)
-        assertEquals("sandbox-n0-w2.json", IslandSessionKey.sandbox(-1).slot)
+        assertEquals("sandbox-271828-w2-r11.json", IslandSessionKey.sandbox(271828).slot)
+        assertEquals("sandbox-n0-w2-r11.json", IslandSessionKey.sandbox(-1).slot)
+        // Islands shaped in the rules-v10 sandbox keep their original slots and open under their own rules.
+        assertEquals("sandbox-271828-w2.json", IslandSessionKey(TerrainKey(271828, WatershedWorldgenVersion), RangeRulesVersion).slot)
+        assertEquals("story-ember-season.json", Story.EmberSeason.key.slot)
+        assertEquals(Story.EmberSeason, Story.LastCrossing.next)
         assertEquals("island-104729-w2-r8.json", IslandSessionKey(IslandGallery[0], ShapingRulesVersion).slot)
         assertEquals(Chapter.FadingGrove, Story.FadingGrove.key.story)
         assertNull(IslandSessionKey.sandbox(FadingGroveSeedForTest).story)
@@ -137,6 +144,37 @@ class AtlasTest {
         third.acknowledgeRestore(0)
         assertNull(third.autosave(store))
         assertContentEquals("damaged".encodeToByteArray(), store.files.getValue(key.slot))
+    }
+
+    @Test
+    fun importingAgainReopensTheSharedCopyWithoutReplacingIt(): Unit = runBlocking {
+        val story = Story.EmberSeason
+        val timeline = Timeline.start(IslandGenerator.generate(story.key.terrain), story.key.rules, story.chapter)
+        val code = WorldCode.encode(timeline.checkpoint())
+        val original = TimelineSaveCodec.encode(timeline.checkpoint())
+        val store = MemoryStore(original).apply { files[story.key.slot] = original }
+        val session = IslandSession()
+        val imported = kotlin.test.assertIs<WorldCodeImport.Open>(session.importCode(code, store)).entry
+        val importedKey = imported.key()
+        assertTrue(importedKey.isShared)
+        assertEquals(importedKey, ShellState().selectIsland(importedKey).openWorld().island)
+        session.open(importedKey, store)
+        val world = assertIs(session.state.value)
+        assertEquals(story.chapter, world.chapter)
+        assertEquals(importedKey, world.key)
+        world.clock.playTo(120)
+        val clock = launch { world.clock.run(isActive = { true }, wait = {}) }
+        while (world.clock.state.tick < 120) yield()
+        clock.cancel()
+        assertEquals(120, assertNotNull(session.autosave(store)).tick)
+
+        val second = IslandSession()
+        val reopened = kotlin.test.assertIs<WorldCodeImport.Open>(second.importCode(code, store)).entry
+        assertEquals(120, reopened.tick)
+        second.open(reopened.key(), store)
+        assertEquals(world.clock.state, assertIs(second.state.value).clock.state)
+        assertContentEquals(original, store.files.getValue(story.key.slot))
+        assertContentEquals(original, store.legacy)
     }
 
     @Test

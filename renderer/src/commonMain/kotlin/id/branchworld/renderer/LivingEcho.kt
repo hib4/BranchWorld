@@ -59,12 +59,15 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
             }
             for (site in echo.sites) {
                 val point = site.ground
-                val center = cellPosition(point.x, point.z, point.elevationTwice)
+                val cell = cellPosition(point.x, point.z, point.elevationTwice)
+                val center = if (site.kind == EchoKind.Burned) Vec3f(cell.x + CellSize / 2, cell.y, cell.z + CellSize / 2) else cell
                 val alternate = site.other > site.here
                 val aqua = site.kind == EchoKind.Bank || site.kind == EchoKind.WetGround
                 val tint = when {
                     aqua && alternate -> Color(0.59f, 0.96f, 1f, 0.92f)
                     aqua -> Color(0.32f, 0.82f, 0.86f, 0.84f)
+                    site.kind == EchoKind.Burned -> Color(1f, 0.63f, 0.43f, 0.91f)
+                    site.kind == EchoKind.Stand -> Color(0.76f, 0.92f, 0.66f, 0.93f)
                     site.kind == EchoKind.Grove || site.kind == EchoKind.Clearing -> Color(0.80f, 0.95f, 0.63f, 0.93f)
                     site.kind == EchoKind.Household -> Color(1f, 0.90f, 0.70f, 0.92f)
                     else -> Color(1f, 0.82f, 0.41f, 0.92f)
@@ -166,9 +169,14 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
                         }
                     }
                     EchoKind.Homes -> {
-                        contour(0.21f, 4, alternate, 0.024f, PI / 4)
+                        contour(0.21f, 4, alternate || site.other < 0, 0.024f, PI / 4)
                         // Only the other history has this home (or its larger form): draw it as a pale house.
                         if (alternate && site.other >= 2) ghostHouse(0.10f, if (site.other == 3) 0.20f else 0.15f, 0.08f)
+                        if (site.other < 0) {
+                            color = Color(1f, 0.62f, 0.45f, 0.90f)
+                            ribbon(ground(-0.10f, -0.10f), ground(0.10f, 0.10f), 0.011f)
+                            ribbon(ground(-0.10f, 0.10f), ground(0.10f, -0.10f), 0.011f)
+                        }
                     }
                     EchoKind.Well -> {
                         contour(0.15f, 16, alternate, 0.02f)
@@ -192,6 +200,19 @@ internal class LivingEcho(private val scene: Scene, private val terrain: Terrain
                     EchoKind.WetGround -> {
                         color = tint.withAlpha(if (alternate) 0.63f else 0.52f)
                         contour(0.12f, 18, alternate, 0.015f)
+                    }
+                    EchoKind.Burned -> {
+                        // Orange traces the same ground where the two histories disagree about the fire or its recovery.
+                        color = tint.withAlpha(if (site.here == 0) 0.86f else 0.67f)
+                        contour(0.157f, 12, site.here == 0, 0.013f, PI / 12)
+                        if (site.here == 0) ribbon(ground(-0.06f, 0.06f), ground(0.06f, -0.06f), 0.008f)
+                    }
+                    EchoKind.Stand -> {
+                        contour(0.088f, 12, alternate, 0.012f)
+                        if (alternate && site.other >= 2) {
+                            val mature = site.other == 3
+                            ghostPine(if (mature) 0.55f else 0.24f, if (mature) 0.13f else 0.07f)
+                        }
                     }
                 }
             }

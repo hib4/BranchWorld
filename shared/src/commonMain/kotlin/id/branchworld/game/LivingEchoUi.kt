@@ -33,6 +33,7 @@ import id.branchworld.game.ecology.DayLength
 import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.SettlementEvent
 import id.branchworld.game.ecology.StructureKind
+import id.branchworld.game.ecology.Succession
 import id.branchworld.game.ecology.VillageEvent
 import id.branchworld.game.ecology.VillageState
 import id.branchworld.game.simulation.EchoKind
@@ -140,9 +141,12 @@ internal fun LivingEchoPlaces(
     val pair = view.pair ?: return
     val pose = if (view.showRight) pair.right.projection else pair.left.projection
     val groups = pose.livingEcho?.sites.orEmpty().groupBy { it.kind }
+    val kinds = groups.keys.sortedBy { if (it in FireEchoKinds) 0 else 1 }
+    val leftFire = pair.left.projection.fire
+    val rightFire = pair.right.projection.fire
     val a = pair.left.projection.shaping
     val b = pair.right.projection.shaping
-    val context = when (selection?.takeIf { it in groups } ?: groups.keys.firstOrNull()) {
+    val context = when (selection?.takeIf { it in groups } ?: kinds.firstOrNull()) {
         EchoKind.Bank -> echoOutcome(Res.string.echo_water_outcome, a?.welfare?.water, b?.welfare?.water, view)
         EchoKind.Field -> echoOutcome(Res.string.echo_field_outcome, a?.welfare?.harvest, b?.welfare?.harvest, view)
         EchoKind.Grove -> echoOutcome(Res.string.echo_grove_outcome, a?.rootedGroves, b?.rootedGroves, view)
@@ -154,6 +158,11 @@ internal fun LivingEchoPlaces(
         EchoKind.Well -> echoOutcome(Res.string.echo_well_outcome, pair.left.village.wells(), pair.right.village.wells(), view)
         EchoKind.Clearing -> echoOutcome(Res.string.echo_clearing_outcome,
             pair.left.village?.cleared?.size, pair.right.village?.cleared?.size, view)
+        EchoKind.Burned -> echoOutcome(Res.string.echo_burned_ground_outcome,
+            leftFire?.scars?.count { !it.felled }, rightFire?.scars?.count { !it.felled }, view)
+        EchoKind.Stand -> echoOutcome(Res.string.echo_stands_outcome,
+            leftFire?.stands?.values?.count { it == Succession.Ash || it == Succession.Meadow },
+            rightFire?.stands?.values?.count { it == Succession.Ash || it == Succession.Meadow }, view)
         else -> null
     }
     Board(modifier, padding = 8.dp) {
@@ -162,25 +171,29 @@ internal fun LivingEchoPlaces(
                 else Res.string.echo_no_marked_difference), style = MaterialTheme.typography.bodySmall)
         } else {
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                for ((kind, sites) in groups) {
+                for (kind in kinds) {
                     if (kind == EchoKind.WetGround && EchoKind.Bank in groups) continue
                     Block(stringResource(kind.label()), {
                         selection = kind
-                        onFocus(sites.map { it.ground })
+                        onFocus(groups.getValue(kind).map { it.ground })
                     }, paint = if (selection == kind) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact)
                 }
                 Block(stringResource(if (view.echoEnabled) Res.string.echo_hide else Res.string.echo_show), island::toggleEcho,
                     paint = Wood.BeechLight, size = BlockSize.Compact)
             }
             if (context != null) Text(context, style = MaterialTheme.typography.bodySmall)
-            val villageMarks = groups.keys.any { it in VillageEchoKinds }
-            if (view.echoEnabled) Text(stringResource(if (villageMarks) Res.string.echo_village_legend else Res.string.echo_legend),
-                style = MaterialTheme.typography.labelSmall, color = Wood.WalnutSoft)
+            val legend = when {
+                kinds.any { it in FireEchoKinds } -> Res.string.echo_fire_legend
+                kinds.any { it in VillageEchoKinds } -> Res.string.echo_village_legend
+                else -> Res.string.echo_legend
+            }
+            if (view.echoEnabled) Text(stringResource(legend), style = MaterialTheme.typography.labelSmall, color = Wood.WalnutSoft)
         }
     }
 }
 
 private val VillageEchoKinds = setOf(EchoKind.Homes, EchoKind.Well, EchoKind.Clearing, EchoKind.Household)
+private val FireEchoKinds = setOf(EchoKind.Burned, EchoKind.Stand)
 
 private fun VillageState?.wells() = this?.structures?.count { it.kind == StructureKind.Well && it.complete } ?: 0
 
@@ -220,7 +233,7 @@ internal fun HistoryMoment.rank() = when (kind) {
 
 @Composable
 internal fun momentLabel(moment: HistoryMoment, chapter: Chapter?): String = when (moment.kind) {
-    HistoryMoment.Kind.Warning -> stringResource(if (chapter == Chapter.LastCrossing) Res.string.echo_pasture_request else Res.string.echo_warning)
+    HistoryMoment.Kind.Warning -> stringResource(warningMoment(chapter))
     HistoryMoment.Kind.Fork -> stringResource(Res.string.echo_common_moment)
     HistoryMoment.Kind.Shortage -> stringResource(if (chapter == Chapter.FadingGrove) Res.string.echo_shortage else Res.string.echo_scarcity)
     HistoryMoment.Kind.Recovery -> stringResource(Res.string.echo_recovery)
@@ -239,6 +252,8 @@ private fun EchoKind.label() = when (this) {
     EchoKind.Well -> Res.string.echo_well
     EchoKind.Clearing -> Res.string.echo_clearing
     EchoKind.Household -> Res.string.echo_household
+    EchoKind.Burned -> Res.string.echo_burned_ground
+    EchoKind.Stand -> Res.string.echo_stands
 }
 
 private sealed interface ChronicleEntry {

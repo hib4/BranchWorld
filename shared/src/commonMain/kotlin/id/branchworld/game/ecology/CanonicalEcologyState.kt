@@ -99,7 +99,7 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeInt(event.kind.code)
             writeInt(event.amount)
         }
-        world.village?.let { writeVillage(it, habitat != null) }
+        world.village?.let { writeVillage(it, habitat != null, fire != null) }
     }
     wildlife?.let { history ->
         writeLong(history.catches)
@@ -125,7 +125,87 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         }
     }
     habitat?.let(::writeHabitat)
+    fire?.let {
+        writeFire(it)
+        writeChronicle(checkNotNull(chronicle))
+    }
     bytes()
+}
+
+/** Rules v11 appends fire and Chronicle to the rules-v10 layout. */
+private fun CanonicalWriter.writeFire(fire: FireState) = with(fire) {
+    writeULong(randomState)
+    writeInt(wind)
+    writeLong(dryFrom)
+    writeLong(testedSpell)
+    writeInt(burning.size)
+    for (tile in burning) {
+        writeInt(tile.tile)
+        writeInt(tile.fuel)
+        writeInt(tile.fire)
+    }
+    writeInt(scars.size)
+    for (scar in scars) {
+        writeInt(scar.tile)
+        writeLong(scar.at)
+        writeInt(scar.kind.code)
+        writeInt(scar.cause)
+    }
+    writeInt(stands.size)
+    for (stand in stands) {
+        writeInt(stand.prop)
+        writeLong(stand.at)
+        writeInt(stand.kind.code)
+    }
+    writeInt(strikes.size)
+    for (strike in strikes) {
+        writeInt(strike.tile)
+        writeLong(strike.at)
+        writeInt(strike.cause)
+    }
+    writeInt(active.size)
+    for (fire in active) {
+        writeInt(fire.number)
+        writeInt(fire.started)
+        writeLong(fire.startedAt)
+        writeInt(fire.tile)
+        writeInt(fire.tiles)
+        writeInt(if (fire.fled) 1 else 0)
+        writeInt(fire.heldBy ?: -1)
+        writeInt(fire.heldAt ?: -1)
+    }
+    writeInt(recoveries.size)
+    for (recovery in recoveries) {
+        writeInt(recovery.number)
+        writeInt(recovery.out)
+        writeLong(recovery.outAt)
+        writeInt(recovery.tile)
+        writeInt(recovery.reached)
+    }
+    writeInt(fires)
+    writeInt(tilesBurned)
+    writeInt(homesBurned)
+    writeLong(lastFireOut ?: -1L)
+    writeInt(if (felled) 1 else 0)
+}
+
+private fun CanonicalWriter.writeChronicle(chronicle: WorldChronicle) {
+    writeInt(chronicle.nextId)
+    writeInt(chronicle.events.size)
+    for (event in chronicle.events) {
+        writeEventRef(event.ref)
+        writeCell(event.cell)
+        writeInt(event.subject)
+        writeInt(event.detail)
+        writeInt(event.causes.size)
+        event.causes.forEach(::writeEventRef)
+    }
+}
+
+private fun CanonicalWriter.writeEventRef(ref: EventRef) {
+    writeInt(ref.id)
+    writeLong(ref.tick)
+    writeInt(ref.kind.code)
 }
 
 /** Rules v10 habitat section. Absent in earlier rules, so their canonical bytes are unchanged. */
@@ -162,7 +242,7 @@ private fun CanonicalWriter.writeOptionalCell(cell: GridCell?) {
 }
 
 /** Rules v9 village section. Absent in earlier rules, so their canonical bytes are unchanged. */
-private fun CanonicalWriter.writeVillage(village: VillageState, ranges: Boolean) {
+private fun CanonicalWriter.writeVillage(village: VillageState, ranges: Boolean, fire: Boolean) {
     if (ranges) writeInt(village.crowding)
     writeInt(village.nextId)
     writeInt(village.thirstTurns)
@@ -196,6 +276,7 @@ private fun CanonicalWriter.writeVillage(village: VillageState, ranges: Boolean)
         writeInt(structure.progress)
         writeInt(structure.level)
         writeLong(structure.completedAt ?: -1L)
+        if (fire) writeLong(structure.burnedAt ?: -1L)
     }
     writeInt(village.petitions.size)
     for (petition in village.petitions) {

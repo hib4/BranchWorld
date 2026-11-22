@@ -70,6 +70,7 @@ internal object Wood {
 internal fun chapterPaint(chapter: Chapter?, sandbox: Boolean = false): Color = when {
     chapter == Chapter.FadingGrove -> Wood.Weld
     chapter == Chapter.LastCrossing -> Wood.Woad
+    chapter == Chapter.EmberSeason -> Wood.Madder
     sandbox -> Wood.Leaf
     else -> Wood.Umber
 }

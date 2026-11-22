@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.atlas_ember_burned
 import branchworld.shared.generated.resources.*
 import id.branchworld.game.save.AtlasEntry
 import id.branchworld.game.save.GameSettings
@@ -166,8 +167,16 @@ private fun StoryCard(story: Story, profile: PlayerProfile, onBegin: () -> Unit)
 }
 
 @Composable
-internal fun AtlasScreen(profile: PlayerProfile, onOpen: (AtlasEntry) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun AtlasScreen(
+    profile: PlayerProfile,
+    onOpen: (AtlasEntry) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onImportCode: (suspend (String) -> WorldCodeImport)? = null,
+    onOpenCode: (WorldCodeImport.Open) -> Unit = {},
+) {
     MenuPage(stringResource(Res.string.atlas_title), onBack, modifier) {
+        WorldCodeImportControl(onImportCode, onOpenCode)
         val entries = profile.atlas.sortedByDescending { it.order }
         if (entries.isEmpty()) Board(Modifier.widthIn(max = 320.dp)) {
             Text(stringResource(Res.string.atlas_empty), color = Wood.WalnutSoft)
@@ -186,6 +195,7 @@ private fun AtlasRow(entry: AtlasEntry, profile: PlayerProfile, onOpen: () -> Un
             IslandMiniMap(key.terrain, Modifier.size(width = 86.dp, height = 78.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(sessionTitle(key), style = MaterialTheme.typography.titleLarge)
+                if (key.isShared) Peg(stringResource(sessionKind(key)), paint = Wood.Woad)
                 Text(stringResource(Res.string.atlas_day, dayOf(entry.tick), entry.branches, entry.branchName),
                     style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
             }
@@ -193,6 +203,10 @@ private fun AtlasRow(entry: AtlasEntry, profile: PlayerProfile, onOpen: () -> Un
         record?.let {
             Text(stringResource(Res.string.atlas_chapter_closed, it.branchName, it.people, it.deer),
                 style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
+            it.burned?.let { count ->
+                Text(stringResource(Res.string.atlas_ember_burned, count),
+                    style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
+            }
         }
         if (marks > 0) Text(stringResource(Res.string.atlas_marks, marks), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
         Block(stringResource(Res.string.atlas_open), onOpen, paint = chapterPaint(key.story, key.sandbox), size = BlockSize.Small)
@@ -201,11 +215,18 @@ private fun AtlasRow(entry: AtlasEntry, profile: PlayerProfile, onOpen: () -> Un
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-internal fun SandboxScreen(onShape: (Long) -> Unit, onBack: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SandboxScreen(
+    onShape: (Long) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onImportCode: (suspend (String) -> WorldCodeImport)? = null,
+    onOpenCode: (WorldCodeImport.Open) -> Unit = {},
+) {
     var selected by rememberSaveable { mutableStateOf(IslandSeeds[1]) }
     var seedText by rememberSaveable { mutableStateOf("") }
     val typed = seedText.trim().toLongOrNull()
     MenuPage(stringResource(Res.string.sandbox_title), onBack, modifier) {
+        WorldCodeImportControl(onImportCode, onOpenCode)
         FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (seed in IslandSeeds) IslandChoice(TerrainKey(seed, WatershedWorldgenVersion), selected == seed && typed == null,
                 stringResource(islandTitle(TerrainKey(seed, WatershedWorldgenVersion)))) {

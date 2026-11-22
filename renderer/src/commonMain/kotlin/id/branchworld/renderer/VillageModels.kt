@@ -89,6 +89,12 @@ internal class VillageModels private constructor(
                 val facing = round(degrees(atan2(center.x - at.x, center.z - at.z)) / 60f) * 60f
                 when (structure.kind) {
                     StructureKind.Home -> {
+                        // A burned home stands as a charred ruin until the rebuilding has raised its frame again.
+                        if (structure.burned && structure.stage < 2) {
+                            put(VillageProp.Ruin, at.x, at.z, facing)
+                            if (structure.stage > 0) put(VillageProp.Scaffolding, at.x, at.z, facing)
+                            continue
+                        }
                         // A house keeps its colour when a family leaves; empty homes simply go dark.
                         val household = structure.id
                         val building = structure.stage < 4 && structure.level == 1
@@ -334,6 +340,8 @@ internal enum class VillageProp(val file: String, val scale: Float) {
     Stump("stump_old.glb", 0.26f),
     Logs("log_stack.glb", 0.26f),
     Stones("rock_smallH.glb", 0.15f),
+    /** Rules v11: what a fire leaves of a home. */
+    Ruin("building_destroyed.gltf", 0.38f),
     ;
 
     /** KayKit .gltf models use the shared atlas; Kenney .glb models use material colours. */

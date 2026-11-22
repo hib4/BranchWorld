@@ -16,7 +16,9 @@ internal const val TrampledGrazing = 16
 /** A crafted world-story whose rules the engine applies. The Fading Grove is implied by rules v8–v9 on its seed. */
 enum class Chapter(internal val code: Int, val seed: Long) {
     FadingGrove(1, FadingGroveSeed),
-    LastCrossing(2, CrossingSeed);
+    LastCrossing(2, CrossingSeed),
+    /** Rules v11: a dry storm over the pinewoods of Heron Reach. */
+    EmberSeason(3, EmberSeed);
 
     internal companion object {
         fun of(code: Int): Chapter? = entries.firstOrNull { it.code == code }

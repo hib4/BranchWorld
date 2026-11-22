@@ -9,7 +9,9 @@ import id.branchworld.game.ecology.WildlifeRulesVersion
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.VillageRulesVersion
 import id.branchworld.game.ecology.RangeRulesVersion
+import id.branchworld.game.ecology.FireRulesVersion
 import id.branchworld.game.simulation.CallRainRegion
+import id.branchworld.game.simulation.CutFirebreak
 import id.branchworld.game.simulation.EndorsePlan
 import id.branchworld.game.simulation.ProtectRegion
 import id.branchworld.game.simulation.ReforestRegion
@@ -27,16 +29,19 @@ import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.TimelineCheckpoint
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Timeline)
+internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Timeline, val sharedOrigin: String? = null)
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
+    private const val FireSchema = 9
     private const val RangeSchema = 8
     private const val VillageSchema = 7
     private const val ShapingSchema = 6
@@ -46,19 +51,23 @@ internal object TimelineSaveCodec {
     private val json = Json { encodeDefaults = true }
 
     @Serializable
+    @OptIn(ExperimentalSerializationApi::class)
     private data class Envelope(
         val schemaVersion: Int,
         val rulesVersion: Int,
         val worldgenVersion: Int,
         val integrity: String,
         val timeline: TimelineCheckpoint,
+        @EncodeDefault(EncodeDefault.Mode.NEVER)
+        val sharedOrigin: String? = null,
     )
 
-    fun encode(timeline: TimelineCheckpoint): ByteArray {
+    fun encode(timeline: TimelineCheckpoint, sharedOrigin: String? = null): ByteArray {
         val root = timeline.branches.first().start
         val rules = root.rulesVersion
         val worldgen = root.terrain.key.worldgenVersion
         val schema = when (rules) {
+            FireRulesVersion -> FireSchema
             RangeRulesVersion -> RangeSchema
             VillageRulesVersion -> VillageSchema
             ShapingRulesVersion -> ShapingSchema
@@ -67,7 +76,7 @@ internal object TimelineSaveCodec {
             else -> CivilizationSchema
         }
         require(isSupported(schema, rules, worldgen))
-        val envelope = Envelope(schema, rules, worldgen, integrity(timeline), timeline)
+        val envelope = Envelope(schema, rules, worldgen, integrity(timeline, sharedOrigin), timeline, sharedOrigin)
         return json.encodeToString(envelope).encodeToByteArray().also { require(it.size <= MaxBytes) }
     }
 
@@ -83,7 +92,7 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema, RangeSchema -> Unit
+            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema, RangeSchema, FireSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
@@ -91,12 +100,12 @@ internal object TimelineSaveCodec {
         if (!isSupported(schema, rules, worldgen)) throw IncompatibleSave()
         val envelope = json.decodeFromJsonElement(Envelope.serializer(), header)
         val checkpoint = envelope.timeline
-        require(envelope.integrity == integrity(checkpoint))
+        require(envelope.integrity == integrity(checkpoint, envelope.sharedOrigin))
         val root = requireNotNull(checkpoint.branches.firstOrNull())
         require(root.start.terrain.key.worldgenVersion == worldgen)
         val terrain = IslandGenerator.generate(root.start.terrain.key)
         validate(terrain, checkpoint, rules)
-        return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
+        return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint), envelope.sharedOrigin)
     }
 
     private fun version(value: Int?): Int = requireNotNull(value)
@@ -108,12 +117,16 @@ internal object TimelineSaveCodec {
         ShapingSchema -> worldgen == WatershedWorldgenVersion && rules == ShapingRulesVersion
         VillageSchema -> worldgen == WatershedWorldgenVersion && rules == VillageRulesVersion
         RangeSchema -> worldgen == WatershedWorldgenVersion && rules == RangeRulesVersion
+        FireSchema -> worldgen == WatershedWorldgenVersion && rules == FireRulesVersion
         WildlifeSchema -> worldgen == WatershedWorldgenVersion && rules == WildlifeRulesVersion
         else -> false
     }
 
-    private fun integrity(checkpoint: TimelineCheckpoint): String =
-        json.encodeToString(checkpoint).encodeToByteArray().canonicalHash()
+    private fun integrity(checkpoint: TimelineCheckpoint, sharedOrigin: String?): String {
+        val timeline = json.encodeToString(checkpoint)
+        val payload = if (sharedOrigin == null) timeline else "$sharedOrigin\n$timeline"
+        return payload.encodeToByteArray().canonicalHash()
+    }
 
     private suspend fun validate(terrain: TerrainMap, timeline: TimelineCheckpoint, rules: Int) {
         val branches = timeline.branches
@@ -149,13 +162,14 @@ internal object TimelineSaveCodec {
             require(branch.commands.all { it.tick > branch.start.tick && it.tick <= branch.head.tick })
             require(branch.pending.all { it.tick > branch.head.tick })
             if (rules >= ShapingRulesVersion) {
-                val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion }
+                val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion || it is CutFirebreak }
                 require(queued.size <= 1 && queued.all { it.tick - branch.head.tick == 1L })
                 val endorsed = branch.pending.filterIsInstance<EndorsePlan>()
                 require(endorsed.size <= 1 && endorsed.all { it.tick - branch.head.tick == 1L })
             }
             if (rules < VillageRulesVersion) require((branch.commands + branch.pending).none { it is EndorsePlan })
             if (rules < RangeRulesVersion) require((branch.commands + branch.pending).none { it is ProtectRegion })
+            if (rules < FireRulesVersion) require((branch.commands + branch.pending).none { it is CutFirebreak })
             val inputs = branch.commands + branch.pending
             require(inputs.zipWithNext().all { (a, b) -> commandOrder.compare(a, b) < 0 })
             for (state in (branch.snapshots + branch.start + branch.head).distinct()) {

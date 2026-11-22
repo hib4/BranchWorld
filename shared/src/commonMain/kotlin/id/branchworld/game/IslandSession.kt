@@ -28,6 +28,9 @@ import id.branchworld.game.timeline.InterventionMarker
 import id.branchworld.game.timeline.SharedPast
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.TimelinePair
+import id.branchworld.game.timeline.WorldCode
+import id.branchworld.game.timeline.WorldCodeError
+import id.branchworld.game.timeline.WorldCodeProblem
 import id.branchworld.game.timeline.commonTicks
 import id.branchworld.game.timeline.inTreeOrder
 import kotlinx.coroutines.CancellationException
@@ -73,6 +76,10 @@ internal class IslandSession {
                 if (load.value === loading) publish(saved)
                 return
             }
+            if (key.sharedSlot != null) {
+                if (load.value === loading) load.value = IslandLoad.Failed(key)
+                return
+            }
             val ready = withContext(Dispatchers.Default) {
                 val started = TimeSource.Monotonic.markNow()
                 val terrain = IslandGenerator.generate(key.terrain)
@@ -106,7 +113,7 @@ internal class IslandSession {
         return try {
             val started = TimeSource.Monotonic.markNow()
             val world = withContext(Dispatchers.Default) { TimelineSaveCodec.restore(bytes) }
-            val island = IslandLoad.Ready(world.terrain, world.timeline)
+            val island = IslandLoad.Ready(world.terrain, world.timeline, world.sharedOrigin)
             check(island.key == key) { "Slot ${key.slot} holds ${island.key}" }
             println("BranchWorldSave opened slot=${key.slot} branch=${world.timeline.branchId} tick=${island.clock.state.tick} hash=${island.clock.state.canonicalHash()} restoreMs=${started.elapsedNow().inWholeMilliseconds}")
             island
@@ -132,7 +139,7 @@ internal class IslandSession {
         val active = checkpoint.branches.first { it.id == checkpoint.activeBranchId }
         return try {
             val started = TimeSource.Monotonic.markNow()
-            val bytes = withContext(Dispatchers.Default) { TimelineSaveCodec.encode(checkpoint) }
+            val bytes = withContext(Dispatchers.Default) { TimelineSaveCodec.encode(checkpoint, island.sharedOrigin) }
             if (!store.writeFile(key.slot, bytes)) return null
             println("BranchWorldSave autosaved slot=${key.slot} branch=${active.id} tick=${active.head.tick} branches=${checkpoint.branches.size} bytes=${bytes.size} saveMs=${started.elapsedNow().inWholeMilliseconds}")
             autosaved.value = active.head.tick
@@ -154,6 +161,30 @@ internal class IslandSession {
         val view = island.timelineView.value
         return AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
             view.active.head, view.branches.size, view.active.name)
+    }
+
+    suspend fun importCode(code: String, store: WorldSaveStore): WorldCodeImport {
+        return try {
+            val decoded = withContext(Dispatchers.Default) { WorldCode.decode(code) }
+            val created = store.createFile(decoded.slot, decoded.save)
+            val world = if (created) decoded.world else {
+                val existing = store.readFile(decoded.slot, TimelineSaveCodec.MaxBytes) ?: return WorldCodeImport.Unwritable
+                val restored = withContext(Dispatchers.Default) { TimelineSaveCodec.restore(existing) }
+                if (restored.sharedOrigin != decoded.origin) return WorldCodeImport.Occupied
+                restored
+            }
+            val island = IslandLoad.Ready(world.terrain, world.timeline, decoded.origin)
+            val view = island.timelineView.value
+            val key = island.key
+            WorldCodeImport.Open(AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules,
+                key.story?.code ?: 0, view.active.head, view.branches.size, view.active.name))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: WorldCodeError) {
+            WorldCodeImport.BadCode(error.problem)
+        } catch (_: Exception) {
+            WorldCodeImport.Unwritable
+        }
     }
 
     private val autosaved = MutableStateFlow<Long?>(null)
@@ -204,6 +235,11 @@ internal class IslandSession {
     suspend fun save(store: WorldSaveStore, replace: Boolean = false): Boolean {
         if (storage.value == SaveStatus.Busy) return false
         val island = load.value as? IslandLoad.Ready ?: return false
+        if (island.key.sharedSlot != null) {
+            if (autosave(store) == null) return false
+            storage.value = SaveStatus.Saved(island.clock.state.tick)
+            return true
+        }
         val started = TimeSource.Monotonic.markNow()
         // Only the UI owner can capture the committed tick and pending queue together.
         val checkpoint = island.checkpoint()
@@ -269,9 +305,9 @@ internal class IslandSession {
 internal sealed interface IslandLoad {
     data object Empty : IslandLoad
     data class Loading(val key: IslandSessionKey) : IslandLoad
-    class Ready(terrain: TerrainMap, private val timeline: Timeline) : IslandLoad {
+    class Ready(terrain: TerrainMap, private val timeline: Timeline, val sharedOrigin: String? = null) : IslandLoad {
         val key = IslandSessionKey(terrain.key, timeline.state.rulesVersion,
-            timeline.chapter?.takeIf { timeline.state.rulesVersion >= RangeRulesVersion })
+            timeline.chapter?.takeIf { timeline.state.rulesVersion >= RangeRulesVersion }, sharedOrigin?.let(WorldCode::slotForOrigin))
         private val feedback = MutableStateFlow(InterventionFeedback(queued = timeline.queuedInterventions))
         val interventions = feedback.asStateFlow()
         private val timelineState = MutableStateFlow(timelineStatus())
@@ -302,8 +338,9 @@ internal sealed interface IslandLoad {
 
         fun inspectRegions() = timeline.inspectRegions()
         val chapter get() = timeline.chapter
-        val canCloseChapter get() = navigationAvailable && timeline.canCloseChapter
+        val canCloseChapter get() = !key.isShared && navigationAvailable && timeline.canCloseChapter
         fun outcomes() = timeline.outcomes()
+        fun history(branchId: Int) = timeline.history(branchId)
         fun pastureRegion() = timeline.pastureRegion()
 
         /** Opens a bookmarked or recorded moment of any history. */
@@ -319,7 +356,9 @@ internal sealed interface IslandLoad {
 
         fun shapePreview(kind: Intervention, region: Int): ShapeTarget? = timeline.preview(kind, region)?.let {
             ShapeTarget(it.sites.map { site -> site.project(world.terrain) },
-                it.field?.project(world.terrain), it.bank?.project(world.terrain), it.blocked)
+                it.field?.project(world.terrain), it.bank?.project(world.terrain), it.blocked,
+                // A firebreak is marked every other cell so the line reads without a ring on each one.
+                it.cut.filterIndexed { index, _ -> index % 2 == 0 }.map { cell -> cell.project(world.terrain) }, it.cut.size / 2)
         }
 
         val warningTick get() = timeline.warningLocation()?.second
@@ -607,8 +646,11 @@ internal data class TimelineView(
 internal data class ShapeTarget(
     val sites: List<GroundPoint>, val field: GroundPoint?, val bank: GroundPoint?,
     val blocked: id.branchworld.game.ecology.ShapeBlock?,
+    /** Rules v11: marks along the firebreak line and its length in stretches (2-cell tiles). */
+    val cutMarks: List<GroundPoint> = emptyList(),
+    val cut: Int = 0,
 ) {
-    val highlights get() = sites + listOfNotNull(field, bank)
+    val highlights get() = sites + listOfNotNull(field, bank) + cutMarks
 }
 
 internal data class InterventionFeedback(val queued: Int, val applied: List<InterventionResult> = emptyList())
@@ -634,6 +676,13 @@ internal data class ComparisonView(
 ) {
     val target get() = tick?.let { ComparisonTarget(left.id, right.id, it, revision) }
     val visibleBranchId get() = if (showRight) right.id else left.id
+}
+
+internal sealed interface WorldCodeImport {
+    data class Open(val entry: AtlasEntry) : WorldCodeImport
+    data class BadCode(val problem: WorldCodeProblem) : WorldCodeImport
+    data object Occupied : WorldCodeImport
+    data object Unwritable : WorldCodeImport
 }
 
 internal sealed interface SaveStatus {

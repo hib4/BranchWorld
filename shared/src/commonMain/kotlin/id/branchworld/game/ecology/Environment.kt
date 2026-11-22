@@ -46,8 +46,8 @@ internal data class Environment(
     }
 
     companion object {
-        fun start(seed: Long, watershed: Boolean = false, firstRain: Long = 300) = Environment(
-            Weather.Dry, firstRain, mix64(seed.toULong() xor 0x6f8c97a25c3197d3uL), if (watershed) 64 else null,
+        fun start(seed: Long, watershed: Boolean = false, firstRain: Long = 300, recharge: Int = 64) = Environment(
+            Weather.Dry, firstRain, mix64(seed.toULong() xor 0x6f8c97a25c3197d3uL), if (watershed) recharge else null,
         )
     }
 }

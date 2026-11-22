@@ -23,6 +23,8 @@ import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.Color
 import de.fabmax.kool.util.Time
 import de.fabmax.kool.util.releaseDelayed
+import id.branchworld.game.ecology.Succession
+import id.branchworld.game.ecology.Weather
 import id.branchworld.game.simulation.ClimatePose
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.SettlementPose
@@ -60,6 +62,7 @@ internal class DioramaSession(
     private var fineGrass: Node? = null
     private var rain: Node? = null
     private var shapingDetails: ShapingDetails? = null
+    private var fireDetails: FireDetails? = null
     private var livingEcho: LivingEcho? = null
     private var herdTrail: HerdTrail? = null
     private var localDetails: LocalDetails? = null
@@ -71,13 +74,14 @@ internal class DioramaSession(
     private var creatureFocusYaw: Float? = null
     private var propModels = emptyList<Model>()
     /** Each pine model's instances with their cells, so settlements can clear the trees on their plots. */
-    private var pineStands = emptyList<Pair<Model, List<Pair<Long, MutableMat4f>>>>()
+    private var pineStands = emptyList<Pair<Model, List<PineInstance>>>()
+    private var shownStands: Map<Int, Succession>? = null
     private var clearedCells: Set<Long>? = null
     private var settlements: VillageModels? = null
     private var assetFrame = -1
     private var idleAfterFrame: Int? = null
     private val timing = FrameTiming("renderer", measureDraws = true)
-    private var echoVisible = false
+    private var timingMode: String? = null
 
     init {
         context.onRender += { update() }
@@ -106,6 +110,7 @@ internal class DioramaSession(
             livingEcho = LivingEcho(it, world.terrain)
             herdTrail = HerdTrail(it, world.terrain, world.herdRoute)
             if (opening.shaping != null) shapingDetails = ShapingDetails(it, world.terrain, compact = output == null)
+            if (opening.fire != null) fireDetails = FireDetails(it, world.terrain, compact = output == null)
             controller.status.value = "Loading island…"
             output?.attach(it)
             context.addScene(it)
@@ -221,8 +226,14 @@ internal class DioramaSession(
         )
         val wildlife = creatures
         val time = if (request.reducedMotion) 0f else Time.gameTime.toFloat()
-        if (snapshot.climate != previousClimate || request.opening != previousOpening || assetFrame < 0) {
-            val nextLight = coastalLight(snapshot.climate, request.opening)
+        val fire = snapshot.fire
+        val dryStorm = !fire?.storm.isNullOrEmpty() && snapshot.climate?.weather == Weather.Dry
+        val strikeFlash = if (!request.reducedMotion && fire?.lightning != null) {
+            0.22f * (1f - fire.lightningAge / 5f).coerceIn(0f, 1f)
+        } else 0f
+        if (snapshot.climate != previousClimate || request.opening != previousOpening || assetFrame < 0 ||
+            dryStorm != light.dryStorm || strikeFlash != light.flash) {
+            val nextLight = coastalLight(snapshot.climate, request.opening, dryStorm, strikeFlash)
             if (light != nextLight) {
                 light = nextLight
                 current.showLight(nextLight)
@@ -232,12 +243,19 @@ internal class DioramaSession(
         }
         livingEcho?.show(snapshot.livingEcho)
         herdTrail?.show(snapshot.ranges, snapshot.settlements.orEmpty())
-        val echoNow = snapshot.livingEcho?.sites?.isNotEmpty() == true
-        if (echoNow != echoVisible) {
-            echoVisible = echoNow
+        val mode = when {
+            snapshot.livingEcho?.sites?.isNotEmpty() == true -> "echo-on"
+            !fire?.burning.isNullOrEmpty() -> "fire-active"
+            dryStorm -> "dry-storm"
+            fire != null -> "fire-quiet"
+            else -> "echo-off"
+        }
+        if (mode != timingMode) {
+            timingMode = mode
             timing.reset()
         }
         val shower = shapingDetails?.show(snapshot.shaping, request.targetSites, time, request.reducedMotion)
+        fireDetails?.show(fire, time, request.reducedMotion, light.sun, targeting = request.targetSites.isNotEmpty())
         water?.time = time
         inland?.apply {
             this.time = time
@@ -246,9 +264,9 @@ internal class DioramaSession(
         }
         wind?.apply {
             this.time = time
-            amplitude = if (request.reducedMotion) 0f else if (light.storm) 0.077f else if (light.rain) 0.057f else 0.026f
+            amplitude = if (request.reducedMotion) 0f else if (light.storm || light.dryStorm) 0.077f else if (light.rain) 0.057f else 0.026f
         }
-        val canopyWind = Vec2f(time, if (request.reducedMotion) 0f else if (light.rain) 0.045f else 0.019f)
+        val canopyWind = Vec2f(time, if (request.reducedMotion) 0f else if (light.rain || light.dryStorm) 0.045f else 0.019f)
         for (shader in canopy) shader.uniform2f("uPineWind").set(canopyWind)
         // The fine blades are subpixel at survey height on a smaller render budget.
         fineGrass?.isVisible = output != null || pose.distance < 12.4f
@@ -257,7 +275,7 @@ internal class DioramaSession(
             if (isVisible) transform.setIdentity().translate(0f, -(time * if (light.storm) 5.6f else 3.6f) % 1.7f, 0f)
         }
         wildlife?.show(snapshot, request.reducedMotion)
-        if (pineStands.isNotEmpty()) clearPines(snapshot.settlements.orEmpty())
+        if (pineStands.isNotEmpty()) clearPines(snapshot.settlements.orEmpty(), snapshot.fire?.stands.orEmpty())
         settlements?.show(snapshot.settlements.orEmpty(), snapshot.tick, snapshot.climate?.dayPhase ?: 0.2f, world.terrain,
             request.reducedMotion, time)
         forage?.show(snapshot, time, request.reducedMotion)
@@ -274,7 +292,7 @@ internal class DioramaSession(
                 println("BranchWorldRenderer activeBytes buffers=${BackendStats.totalBufferSize} textures=${BackendStats.totalTextureSize}")
             }
             if (Time.frameCount > assetFrame) controller.status.value = "Island ready"
-            timing.frame(if (echoVisible) "echo-on" else "echo-off")
+            timing.frame(mode)
         }
     }
 
@@ -299,9 +317,10 @@ internal class DioramaSession(
         fineGrass = null
         rain = null
         shapingDetails = null
+        fireDetails = null
         livingEcho = null
         herdTrail = null
-        echoVisible = false
+        timingMode = null
         localDetails = null
         propModels = emptyList()
         pineStands = emptyList()
@@ -409,8 +428,11 @@ internal class DioramaSession(
         }
     }
 
-    /** Cosmetic only: trees standing on settlement plots are hidden while those plots are in use. */
-    private fun clearPines(sites: List<SettlementPose>) {
+    /**
+     * Trees standing on settlement plots are hidden while those plots are in use (cosmetic). Pines the fire took or the
+     * axe felled come down, and come back as young trees, from the authoritative stand record (rules v11).
+     */
+    private fun clearPines(sites: List<SettlementPose>, stands: Map<Int, Succession>) {
         val cells = buildSet {
             for (site in sites) {
                 val village = site.village ?: continue
@@ -419,13 +441,18 @@ internal class DioramaSession(
                 }
             }
         }
-        if (cells == clearedCells) return
+        if (cells == clearedCells && stands == shownStands) return
         clearedCells = cells
+        shownStands = stands
         for ((model, stand) in pineStands) {
-            val kept = stand.filter { it.first !in cells }
+            val kept = stand.filter { it.cell !in cells && stands[it.prop].let { stage -> stage == null || stage == Succession.Scrub || stage == Succession.Grove } }
             model.meshes.values.forEach { mesh ->
                 mesh.addInstances<InstanceLayouts.ModelMat>(kept.size, clear = true) { buffer ->
-                    for ((_, matrix) in kept) buffer.put { set(it.modelMat, matrix) }
+                    for (pine in kept) {
+                        val young = stands[pine.prop] == Succession.Scrub
+                        val matrix = if (young) MutableMat4f(pine.matrix).scale(YoungPine) else pine.matrix
+                        buffer.put { set(it.modelMat, matrix) }
+                    }
                 }
             }
         }
@@ -433,6 +460,7 @@ internal class DioramaSession(
 
     private suspend fun Scene.placePines(terrain: TerrainMap, variant: PineVariant): Model? {
         val cells = mutableListOf<Long>()
+        val props = mutableListOf<Int>()
         val matrices = buildList {
             for (index in 0 until terrain.propCount) {
                 val prop = terrain.prop(index)
@@ -446,6 +474,7 @@ internal class DioramaSession(
                 val scale = variant.height / variant.sourceHeight * variation * (prop.scalePercent / 100f)
                 // The Kenney scene nodes put the base 0.05 units below their file origin.
                 cells.add(cellKey(prop.x, prop.z))
+                props.add(index)
                 add(MutableMat4f()
                     .translate(center.x, terrain.heightAt(center.x, center.z) + 0.05f * scale, center.z)
                     .rotate(prop.yawDegrees.toFloat().deg, Vec3f.Y_AXIS)
@@ -475,7 +504,7 @@ internal class DioramaSession(
             },
         )).also { model ->
             attachWhileCurrent(model)
-            pineStands = pineStands + (model to cells.zip(matrices))
+            pineStands = pineStands + (model to cells.indices.map { PineInstance(props[it], cells[it], matrices[it]) })
             model.meshes.values.forEach { mesh ->
                 mesh.isFrustumChecked = false
                 mesh.addInstances<InstanceLayouts.ModelMat>(matrices.size) { buffer ->
@@ -493,6 +522,11 @@ internal class DioramaSession(
         addNode(model)
     }
 }
+
+private class PineInstance(val prop: Int, val cell: Long, val matrix: MutableMat4f)
+
+/** Young pines regrowing on burned or felled ground stand at this fraction of their grown height. */
+private const val YoungPine = 0.42f
 
 private fun cellKey(x: Int, z: Int): Long = (x.toLong() shl 32) or (z.toLong() and 0xffffffffL)
 

@@ -16,6 +16,9 @@ interface WorldSaveStore {
 
     /** Atomically replaces a named file. Adapters without named files ignore the request. */
     suspend fun writeFile(name: String, bytes: ByteArray): Boolean = false
+
+    /** Atomically creates a named file, returning false if it already exists or storage is unavailable. */
+    suspend fun createFile(name: String, bytes: ByteArray): Boolean = false
 }
 
 /** Lower-case letters, digits and dashes with a .json extension: safe on every platform's file system. */

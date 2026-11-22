@@ -19,6 +19,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.ember_wait_warning
+import branchworld.shared.generated.resources.shape_confirm_firebreak
+import branchworld.shared.generated.resources.shape_firebreak
+import branchworld.shared.generated.resources.shape_firebreak_forecast
+import branchworld.shared.generated.resources.shape_firebreak_length
+import branchworld.shared.generated.resources.shape_blocked_no_fuel
 import branchworld.shared.generated.resources.grove_choose_region
 import branchworld.shared.generated.resources.no_planting_sites
 import branchworld.shared.generated.resources.restore_grove
@@ -57,6 +63,8 @@ import branchworld.shared.generated.resources.shape_confirm_protect
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.SettlementTurn
 import id.branchworld.game.ecology.ShapeBlock
+import id.branchworld.game.ecology.FireRulesVersion
+import id.branchworld.game.ecology.region
 import id.branchworld.game.simulation.GroundPoint
 import org.jetbrains.compose.resources.stringResource
 
@@ -69,7 +77,8 @@ internal fun ShapeControls(
     val timeline by island.timelineView.collectAsStateWithLifecycle()
     val feedback by island.interventions.collectAsStateWithLifecycle()
     val pending = remember(island, timeline.branchId, feedback.queued) {
-        island.markers(timeline.branchId).firstOrNull { it.queued }
+        // An endorsed plan also waits in the queue, but it is not a power this panel can show or cancel.
+        island.markers(timeline.branchId).firstOrNull { it.queued && it.kind in ShapePowers }
     }
     var power by remember(island, timeline.branchId) { mutableStateOf(pending?.kind ?: Intervention.Rain) }
     var rainRegion by remember(island, timeline.branchId) {
@@ -81,12 +90,19 @@ internal fun ShapeControls(
     var refugeRegion by remember(island, timeline.branchId) {
         mutableIntStateOf(pending?.takeIf { it.kind == Intervention.Protect }?.region ?: island.pastureRegion() ?: groveRegion)
     }
+    var breakRegion by remember(island, timeline.branchId) {
+        mutableIntStateOf(pending?.takeIf { it.kind == Intervention.Firebreak }?.region
+            ?: island.clock.state.settlements?.sites?.firstOrNull()?.center?.region() ?: groveRegion)
+    }
     val hollowmere = island.chapter == Chapter.FadingGrove
+    val ember = island.chapter == Chapter.EmberSeason
     val refuges = island.key.rules >= RangeRulesVersion
+    val firebreaks = island.key.rules >= FireRulesVersion
     var picking by remember(island) { mutableStateOf(false) }
     val region = when (power) {
         Intervention.Rain -> rainRegion
         Intervention.Protect -> refugeRegion
+        Intervention.Firebreak -> breakRegion
         else -> groveRegion
     }
     val target = remember(island, power, region, timeline.branchId, timeline.tick, feedback.queued) {
@@ -96,8 +112,9 @@ internal fun ShapeControls(
 
     FlowRow(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         for ((choice, label) in listOf(Intervention.Rain to Res.string.shape_call_rain, Intervention.Reforest to Res.string.restore_grove,
-            Intervention.Protect to Res.string.shape_protect)) {
+            Intervention.Protect to Res.string.shape_protect, Intervention.Firebreak to Res.string.shape_firebreak)) {
             if (choice == Intervention.Protect && !refuges) continue
+            if (choice == Intervention.Firebreak && !firebreaks) continue
             val selected = power == choice
             Block(stringResource(label), { power = choice }, paint = if (selected) Wood.Woad else Wood.BeechLight,
                 size = BlockSize.Compact, selected = selected)
@@ -106,8 +123,12 @@ internal fun ShapeControls(
     Text(stringResource(when (power) {
         Intervention.Rain -> Res.string.shape_rain_forecast
         Intervention.Protect -> Res.string.shape_protect_forecast
+        Intervention.Firebreak -> Res.string.shape_firebreak_forecast
         else -> Res.string.shape_grove_forecast
     }), style = MaterialTheme.typography.bodyMedium)
+    if (power == Intervention.Firebreak && target.cut > 0) {
+        Text(stringResource(Res.string.shape_firebreak_length, target.cut), style = MaterialTheme.typography.bodySmall)
+    }
     if (power == Intervention.Protect && region == island.pastureRegion()) {
         Text(stringResource(Res.string.shape_protect_pasture), style = MaterialTheme.typography.bodySmall)
     }
@@ -136,18 +157,24 @@ internal fun ShapeControls(
         when (power) {
             Intervention.Rain -> rainRegion = it
             Intervention.Protect -> refugeRegion = it
+            Intervention.Firebreak -> breakRegion = it
             else -> groveRegion = it
         }
     }
 
     val blocked = when (target.blocked) {
-        ShapeBlock.AwaitWarning -> if (hollowmere) Res.string.shape_wait_warning else Res.string.crossing_wait_warning
+        ShapeBlock.AwaitWarning -> when {
+            hollowmere -> Res.string.shape_wait_warning
+            ember -> Res.string.ember_wait_warning
+            else -> Res.string.crossing_wait_warning
+        }
         ShapeBlock.Spent -> Res.string.shape_spent
         ShapeBlock.AlreadyRaining -> Res.string.shape_already_raining
         ShapeBlock.NoGround -> Res.string.shape_no_ground
         ShapeBlock.NoSites -> Res.string.no_planting_sites
         ShapeBlock.Reserved -> Res.string.shape_queued
         ShapeBlock.AlreadyProtected -> Res.string.shape_already_protected
+        ShapeBlock.NoFuel -> Res.string.shape_blocked_no_fuel
         null -> if (!timeline.editsAllowed && timeline.canFork) Res.string.shape_fork_to_act else null
     }
     val live = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
@@ -163,6 +190,7 @@ internal fun ShapeControls(
             Block(stringResource(when (power) {
                 Intervention.Rain -> Res.string.shape_confirm_rain
                 Intervention.Protect -> Res.string.shape_confirm_protect
+                Intervention.Firebreak -> Res.string.shape_confirm_firebreak
                 else -> Res.string.grove_choose_region
             }), { island.intervene(power, region) }, enabled = target.blocked == null && timeline.editsAllowed,
                 paint = chapterPaint(island.chapter, island.key.sandbox), size = BlockSize.Small)
@@ -177,3 +205,6 @@ internal fun ShapeControls(
         }
     }
 }
+
+/** The powers the Shape panel offers, previews and cancels. */
+private val ShapePowers = setOf(Intervention.Rain, Intervention.Reforest, Intervention.Protect, Intervention.Firebreak)

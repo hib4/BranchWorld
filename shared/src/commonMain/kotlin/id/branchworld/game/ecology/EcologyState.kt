@@ -97,8 +97,15 @@ internal data class EcologyState(
     val shaping: ShapingState? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val habitat: HabitatState? = null,
+    /** Rules v11 wildfire, regrowth and felled woods. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val fire: FireState? = null,
+    /** Rules v11 world events with their recorded causes. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val chronicle: WorldChronicle? = null,
 ) {
     val rulesVersion: Int get() = when {
+        fire != null -> FireRulesVersion
         habitat != null -> RangeRulesVersion
         settlements?.village != null -> VillageRulesVersion
         shaping != null -> ShapingRulesVersion

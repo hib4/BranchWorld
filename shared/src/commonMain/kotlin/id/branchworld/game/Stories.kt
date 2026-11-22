@@ -12,13 +12,17 @@ import branchworld.shared.generated.resources.day_label
 import branchworld.shared.generated.resources.day_midday
 import branchworld.shared.generated.resources.day_morning
 import branchworld.shared.generated.resources.day_night
+import branchworld.shared.generated.resources.code_shared_island
 import branchworld.shared.generated.resources.earlier_rules_title
 import branchworld.shared.generated.resources.fading_grove
 import branchworld.shared.generated.resources.story_crossing
 import branchworld.shared.generated.resources.story_crossing_premise
+import branchworld.shared.generated.resources.story_ember
+import branchworld.shared.generated.resources.story_ember_premise
 import branchworld.shared.generated.resources.story_grove_premise
 import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.DayLength
+import id.branchworld.game.ecology.FireRulesVersion
 import id.branchworld.game.ecology.RangeRulesVersion
 import id.branchworld.game.save.AtlasEntry
 import id.branchworld.game.save.PlayerProfile
@@ -29,7 +33,8 @@ import org.jetbrains.compose.resources.stringResource
 /** The crafted chapters, in the order the journey opens them. */
 internal enum class Story(val chapter: Chapter, val key: IslandSessionKey, val numeral: String) {
     FadingGrove(Chapter.FadingGrove, IslandSessionKey(IslandGallery[0]), "I"),
-    LastCrossing(Chapter.LastCrossing, IslandSessionKey(IslandGallery[1], RangeRulesVersion, Chapter.LastCrossing), "II");
+    LastCrossing(Chapter.LastCrossing, IslandSessionKey(IslandGallery[1], RangeRulesVersion, Chapter.LastCrossing), "II"),
+    EmberSeason(Chapter.EmberSeason, IslandSessionKey(IslandGallery[2], FireRulesVersion, Chapter.EmberSeason), "III");
 
     val previous: Story? get() = entries.getOrNull(ordinal - 1)
     val next: Story? get() = entries.getOrNull(ordinal + 1)
@@ -39,21 +44,24 @@ internal enum class Story(val chapter: Chapter, val key: IslandSessionKey, val n
     val title: StringResource get() = when (this) {
         FadingGrove -> Res.string.fading_grove
         LastCrossing -> Res.string.story_crossing
+        EmberSeason -> Res.string.story_ember
     }
 
     val premise: StringResource get() = when (this) {
         FadingGrove -> Res.string.story_grove_premise
         LastCrossing -> Res.string.story_crossing_premise
+        EmberSeason -> Res.string.story_ember_premise
     }
 
     companion object {
         fun of(chapter: Chapter?): Story? = entries.firstOrNull { it.chapter == chapter }
-        fun of(key: IslandSessionKey): Story? = entries.firstOrNull { it.key == key }
+        fun of(key: IslandSessionKey): Story? = entries.firstOrNull { it.key == key.copy(sharedSlot = null) }
     }
 }
 
 internal fun AtlasEntry.key(): IslandSessionKey = IslandSessionKey(
     TerrainKey(seed, worldgen), rules, Chapter.entries.firstOrNull { it.code == chapter }?.takeIf { rules >= RangeRulesVersion },
+    slot.takeIf(SharedWorldSlot::matches),
 )
 
 /** The name an island goes by in menus: its story, or the island itself in the sandbox. */
@@ -65,6 +73,7 @@ internal fun sessionTitle(key: IslandSessionKey): String {
 }
 
 internal fun sessionKind(key: IslandSessionKey): StringResource = when {
+    key.isShared -> Res.string.code_shared_island
     Story.of(key) != null -> Res.string.atlas_story
     key.sandbox -> Res.string.atlas_sandbox
     else -> Res.string.atlas_earlier

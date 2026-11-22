@@ -63,7 +63,14 @@ internal data class WildlifeHistory(
 
 internal const val WildlifeFounderCount = 9
 
-internal fun Species.populationLimit() = if (this == Species.Fox) 4 else MaxPerSpecies
+internal fun Species.populationLimit(rulesVersion: Int = WildlifeRulesVersion) = if (rulesVersion >= FireRulesVersion) {
+    // Rules v11: renewed ground after fire can carry larger herds, warrens and packs.
+    when (this) {
+        Species.Rabbit -> 12
+        Species.Deer -> 10
+        Species.Fox -> 5
+    }
+} else if (this == Species.Fox) 4 else MaxPerSpecies
 
 internal fun Species.maturityTicks() = when (this) {
     Species.Rabbit -> MaturityTicks

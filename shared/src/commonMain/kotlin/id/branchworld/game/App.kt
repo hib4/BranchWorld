@@ -56,6 +56,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.history_title
 import branchworld.shared.generated.resources.*
 import id.branchworld.game.ecology.Chapter
 import id.branchworld.game.ecology.Intervention
@@ -73,6 +74,7 @@ import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
 import id.branchworld.game.timeline.ChapterOutcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -109,12 +111,15 @@ fun App(
     viewportCamera: (WorldCamera) -> Unit = {},
     playInUnfocusedWindow: Boolean = false,
     setAmbience: ((WorldAmbience) -> Unit)? = null,
+    savePhoto: (suspend (PhotoMeta) -> PhotoResult)? = null,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
     var panelName by rememberSaveable { mutableStateOf<String?>(null) }
     val panel = panelName?.let(WorldPanel::valueOf)
     var overlayName by rememberSaveable { mutableStateOf<String?>(null) }
     val overlay = overlayName?.let(Overlay::valueOf)
+    var savingPhoto by remember { mutableStateOf(false) }
+    var photoResult by remember { mutableStateOf<PhotoResult?>(null) }
     var closed by remember { mutableStateOf<Pair<Story, String>?>(null) }
     var autoStart by remember { mutableStateOf(false) }
     var focus by remember { mutableStateOf<WorldCamera.Focus?>(null) }
@@ -242,11 +247,20 @@ fun App(
         }
     }
     val playbackState = if (playInUnfocusedWindow) Lifecycle.State.STARTED else Lifecycle.State.RESUMED
+    val lifecycleState by lifecycle.currentStateAsState()
+    val soundActive = foreground && lifecycleState.isAtLeast(playbackState)
+    val fire = pose?.fire
+    val thunderAt = pose?.takeIf { fire?.lightning != null }?.let { it.tick - checkNotNull(fire).lightningAge }
+    LaunchedEffect(session, pose?.branchId, thunderAt) {
+        // A still image after seeking shows the bolt without replaying its sound.
+        if (soundEnabled && soundActive && isWorld && comparison == null && pose?.interpolateCreatures == true && thunderAt != null) {
+            playSound?.invoke(WorldSound.Thunder)
+        }
+    }
     if (setAmbience != null) {
-        val lifecycleState by lifecycle.currentStateAsState()
         val sink by rememberUpdatedState(setAmbience)
-        val mix = worldAmbience(soundEnabled, foreground && lifecycleState.isAtLeast(playbackState), pose?.climate,
-            calledRain = shower != null)
+        val mix = worldAmbience(soundEnabled, soundActive, pose?.climate, calledRain = shower != null,
+            dryStorm = !fire?.storm.isNullOrEmpty(), burning = !fire?.burning.isNullOrEmpty())
         LaunchedEffect(mix) { sink(mix) }
         DisposableEffect(Unit) { onDispose { sink(WorldAmbience.Silent) } }
     }
@@ -276,6 +290,13 @@ fun App(
         overlayName = null
         state = state.selectIsland(key).openWorld()
         autoStart = start
+    }
+    val importCode: (suspend (String) -> WorldCodeImport)? = saveStore?.let { store ->
+        { code -> islands.importCode(code, store) }
+    }
+    fun openCode(result: WorldCodeImport.Open) {
+        updateProfile { it.visit(result.entry) }
+        enter(result.entry.key(), start = false)
     }
     fun leaveWorld() {
         clock?.pause()
@@ -337,9 +358,11 @@ fun App(
                     HomeScreen.Stories -> StoriesScreen(current, onBegin = { enter(it.key, start = true) },
                         onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 740.dp))
                     HomeScreen.Atlas -> AtlasScreen(current, onOpen = { enter(it.key(), start = false) },
-                        onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 600.dp))
+                        onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 600.dp),
+                        onImportCode = importCode, onOpenCode = ::openCode)
                     HomeScreen.Sandbox -> SandboxScreen(onShape = { enter(IslandSessionKey.sandbox(it), start = true) },
-                        onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 640.dp))
+                        onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 640.dp),
+                        onImportCode = importCode, onOpenCode = ::openCode)
                 }
                 if (failed) {
                     Board(Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(spacing.edge(16.dp))) {
@@ -361,7 +384,32 @@ fun App(
             }
 
             if (isWorld && session != null && overlay == Overlay.Photo) {
-                PhotoControls({ overlayName = null }, Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(12.dp)))
+                PhotoControls(
+                    onLeave = { overlayName = null },
+                    onSave = savePhoto?.let { capture ->
+                        {
+                            if (!savingPhoto) {
+                                val moment = PhotoMeta(session.key.terrain.seed, pose?.tick ?: session.clock.state.tick)
+                                savingPhoto = true
+                                photoResult = null
+                                fallbackScope.launch {
+                                    try {
+                                        photoResult = capture(moment)
+                                    } catch (error: CancellationException) {
+                                        throw error
+                                    } catch (_: Exception) {
+                                        photoResult = PhotoResult.CouldNotSave
+                                    } finally {
+                                        savingPhoto = false
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    saving = savingPhoto,
+                    result = photoResult,
+                    modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(12.dp)),
+                )
             } else if (isWorld && session != null) {
                 val state0 = session.clock.state
                 val paint = chapterPaint(session.chapter, session.key.sandbox)
@@ -381,7 +429,10 @@ fun App(
                             val isHollowmere = session.chapter == Chapter.FadingGrove
                             val shaping = pose?.shaping
                             val village = shaping?.welfare
+                            val ember = session.chapter == Chapter.EmberSeason
+                            val fireNote = fireConcern(pose?.fire, ember, pose?.shaping?.warningAt != null)
                             val concern = when {
+                                fireNote != null -> fireNote
                                 session.chapter == Chapter.LastCrossing -> crossingConcern(state0) ?: Res.string.island_opening
                                 isHollowmere && village != null && village.unmet > 0 -> Res.string.shape_shortage
                                 isHollowmere && village?.firstRecovery != null && pose.tick - village.firstRecovery <= 90 -> Res.string.shape_recovered
@@ -410,6 +461,11 @@ fun App(
                             if (session.chapter == Chapter.LastCrossing && route.isNotEmpty()) {
                                 Block(stringResource(Res.string.crossing_show_way), {
                                     requestFocus(WorldCamera.Focus.EchoSite(route, false))
+                                }, size = BlockSize.Small, icon = GameIcons.Eye, paint = Wood.BeechLight)
+                            }
+                            fireFocus(pose?.fire)?.let { (label, grounds) ->
+                                Block(stringResource(label), {
+                                    requestFocus(WorldCamera.Focus.EchoSite(grounds, false))
                                 }, size = BlockSize.Small, icon = GameIcons.Eye, paint = Wood.BeechLight)
                             }
                             if (story != null && session.canCloseChapter && timelineView?.seeking == false) {
@@ -549,7 +605,11 @@ fun App(
                     onMark = {
                         if (view != null) updateProfile { it.mark(Bookmark(islandKey.slot, view.branchId, tick, view.active.name)) }
                     },
-                    onPhoto = { overlayName = Overlay.Photo.name; showPanel(null) },
+                    onPhoto = {
+                        photoResult = null
+                        overlayName = Overlay.Photo.name
+                        showPanel(null)
+                    },
                     onSettings = { overlayName = null; showPanel(WorldPanel.Settings) },
                     onAtlas = { leaveWorld(); state = state.show(HomeScreen.Atlas) },
                     onTitle = { leaveWorld() },
@@ -563,7 +623,7 @@ fun App(
                 }
             }
 
-            if (isWorld && session != null && story != null && overlay == Overlay.Closing) {
+            if (isWorld && session != null && story != null && !islandKey.isShared && overlay == Overlay.Closing) {
                 Scrim(Modifier.matchParentSize())
                 val outcomes = remember(session, timelineView) { session.outcomes() }
                 ChapterClosing(story, outcomes, timelineView?.branchId ?: 1, onChoose = { outcome ->
@@ -593,6 +653,7 @@ private const val AutosaveTicks = 600L
 
 private fun ChapterOutcome.record(story: Story, slot: String) = ChapterRecord(
     story.chapter.code, slot, branch.id, branch.name, tick, people, departed.values.sum(), deer, homes,
+    burned = homesBurned.takeIf { story.chapter == Chapter.EmberSeason },
 )
 
 /** The one first-time explanation the current moment calls for, if the player has not seen it yet. */
@@ -652,8 +713,18 @@ private fun PanelContent(
         }
         WorldPanel.Village -> VillagePanel(island, onFocus = { ground -> requestFocus(WorldCamera.Focus.WildlifeLocation(ground)) })
         WorldPanel.Timeline -> if (comparison == null) {
-            TimelineControls(island, diagnostics, onForked)
-            if (bookmarks.isNotEmpty()) MarkedMoments(bookmarks, island, onVisit, onForget)
+            var showChronicle by rememberSaveable(island.key) { mutableStateOf(false) }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Block(stringResource(if (showChronicle) Res.string.open_timeline else Res.string.history_title),
+                    { showChronicle = !showChronicle }, paint = Wood.Woad, size = BlockSize.Small)
+                if (!showChronicle) WorldCodeShareControl(island)
+            }
+            if (showChronicle) {
+                HistoryBoard(island, bookmarks, onVisit, onForget) { ground ->
+                    closePanel()
+                    requestFocus(WorldCamera.Focus.WildlifeLocation(ground))
+                }
+            } else TimelineControls(island, diagnostics, bookmarks, onForked)
         } else {
             val timeline by island.timelineView.collectAsStateWithLifecycle()
             if (diagnostics) {
@@ -684,7 +755,7 @@ private fun PanelContent(
 }
 
 @Composable
-private fun MarkedMoments(bookmarks: List<Bookmark>, island: IslandLoad.Ready, onVisit: (Bookmark) -> Unit, onForget: (Bookmark) -> Unit) {
+internal fun MarkedMoments(bookmarks: List<Bookmark>, island: IslandLoad.Ready, onVisit: (Bookmark) -> Unit, onForget: (Bookmark) -> Unit) {
     val view by island.timelineView.collectAsStateWithLifecycle()
     Text(stringResource(Res.string.timeline_marks), style = MaterialTheme.typography.titleMedium)
     for (mark in bookmarks.sortedWith(compareBy<Bookmark> { it.branchId }.thenBy { it.tick })) {

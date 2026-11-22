@@ -14,6 +14,23 @@ import kotlin.test.assertTrue
 
 class DesktopWorldSaveStoreTest {
     @Test
+    fun sharedSlotsHaveAnAtomicCreateOnlyWrite() = runBlocking {
+        val directory = createTempDirectory("branchworld-shared-")
+        try {
+            val name = "shared-01234567.json"
+            val first = DesktopWorldSaveStore(directory)
+            val second = DesktopWorldSaveStore(directory)
+            val a = async { first.createFile(name, byteArrayOf(1)) }
+            val b = async { second.createFile(name, byteArrayOf(2)) }
+            val outcomes = listOf(a.await(), b.await())
+            assertEquals(1, outcomes.count { it })
+            assertContentEquals(byteArrayOf(if (outcomes[0]) 1 else 2), second.readFile(name, 16))
+        } finally {
+            directory.toFile().deleteRecursively()
+        }
+    }
+
+    @Test
     fun concurrentFirstSaveRequiresOneWriterToConfirmReplacement() {
         val directory = createTempDirectory("branchworld-save-")
         try {

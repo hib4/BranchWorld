@@ -102,6 +102,15 @@ internal data class ProtectRegion(
     val region: Int,
 ) : WorldCommand
 
+/** The Keeper cuts a firebreak across the wind through a region, from one natural break to the next (rules v11). */
+@Serializable
+@SerialName("cut_firebreak")
+internal data class CutFirebreak(
+    override val tick: Long,
+    override val sequence: Long,
+    val region: Int,
+) : WorldCommand
+
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {
     private val inputs = WorldCommands<SetDestination>()

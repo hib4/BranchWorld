@@ -2,19 +2,40 @@ package id.branchworld.game.simulation
 
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.RegionalWater
+import id.branchworld.game.ecology.ScarKind
 import id.branchworld.game.ecology.Structure
 import id.branchworld.game.ecology.StructureKind
+import id.branchworld.game.ecology.Succession
 import id.branchworld.game.ecology.VillageState
 import id.branchworld.game.ecology.rainCovers
 import id.branchworld.game.ecology.rooted
+import id.branchworld.game.ecology.successionAt
+import id.branchworld.game.ecology.tileCell
 import id.branchworld.game.terrain.TerrainMap
 import kotlin.math.abs
 
 /** Locations where the two reconstructed histories differ at the same moment. */
 data class LivingEchoProjection(val sites: List<EchoSite>)
 
-/** Homes, Well and Clearing values: 0 absent, 1 under construction, 2 standing, 3 enlarged. Household: members at home. */
-enum class EchoKind { Bank, Field, Grove, Homes, WetGround, Well, Clearing, Household }
+/** Structures range from -1 burned to 3 enlarged. Household values count members at home. */
+enum class EchoKind { Bank, Field, Grove, Homes, WetGround, Well, Clearing, Household, Burned, Stand }
+
+/** Ground stages run from untouched (0) through active fire (1) to scrub (4). */
+private fun EcologyState.burnedGround(): Map<Int, Int> = buildMap {
+    val fire = fire ?: return@buildMap
+    for (scar in fire.scars) if (scar.kind == ScarKind.Burned) put(scar.tile, 2 + successionAt(tick - scar.at).ordinal)
+    for (tile in fire.burning) put(tile.tile, 1)
+}
+
+/** Pine stages run from charred (0) and felled (1) through young growth (2) to standing (3). */
+private fun EcologyState.changedStands(): Map<Int, Int> = fire?.stands.orEmpty().associate { stand ->
+    val stage = when (successionAt(tick - stand.at)) {
+        Succession.Ash, Succession.Meadow -> if (stand.kind == ScarKind.Felled) 1 else 0
+        Succession.Scrub -> 2
+        Succession.Grove -> 3
+    }
+    stand.prop to stage
+}
 
 data class EchoSite(
     val kind: EchoKind,
@@ -36,6 +57,20 @@ internal fun livingEcho(terrain: TerrainMap, visible: EcologyState, alternate: E
         val otherGrove = grove(alternate)
         for (cell in localGrove.keys + otherGrove.keys) {
             changed(EchoKind.Grove, cell, localGrove[cell] ?: 0, otherGrove[cell] ?: 0)
+        }
+
+        if (visible.fire != alternate.fire) {
+            val localScars = visible.burnedGround()
+            val otherScars = alternate.burnedGround()
+            for (tile in localScars.keys + otherScars.keys) {
+                changed(EchoKind.Burned, tileCell(tile), localScars[tile] ?: 0, otherScars[tile] ?: 0)
+            }
+            val localStands = visible.changedStands()
+            val otherStands = alternate.changedStands()
+            for (index in localStands.keys + otherStands.keys) {
+                val prop = terrain.prop(index)
+                changed(EchoKind.Stand, GridCell(prop.x, prop.z), localStands[index] ?: 3, otherStands[index] ?: 3)
+            }
         }
 
         val localSettlements = visible.settlements?.sites.orEmpty().associateBy { it.center }
@@ -120,6 +155,7 @@ internal fun livingEcho(terrain: TerrainMap, visible: EcologyState, alternate: E
 }
 
 private fun Structure.echoStage() = when {
+    burnedAt != null && !complete -> -1
     !complete && level == 1 -> 1
     complete && level >= 2 -> 3
     else -> 2

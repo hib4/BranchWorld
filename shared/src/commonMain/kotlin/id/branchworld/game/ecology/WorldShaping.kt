@@ -52,12 +52,14 @@ internal data class CalledShower(val region: Int, val startedAt: Long)
 internal data class RegionalWater(val region: Int, val retained: Int)
 
 internal data class RainGround(val available: Boolean, val infiltration: Int)
-internal enum class ShapeBlock { AwaitWarning, Spent, AlreadyRaining, NoGround, NoSites, Reserved, AlreadyProtected }
+internal enum class ShapeBlock { AwaitWarning, Spent, AlreadyRaining, NoGround, NoSites, Reserved, AlreadyProtected, NoFuel }
 internal data class ShapePreview(
     val sites: List<GridCell>,
     val field: GridCell?,
     val bank: GridCell?,
     val blocked: ShapeBlock?,
+    /** Rules v11: the cells a firebreak would clear. */
+    val cut: List<GridCell> = emptyList(),
 )
 
 internal fun rainCovers(region: Int, cell: GridCell): Boolean {

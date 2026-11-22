@@ -9,6 +9,7 @@ enum class WorldSound(private val fileName: String) {
     Save("save.wav"),
     Grove("grove.wav"),
     RainChime("spring-shower.wav"),
+    Thunder("ember-thunder.wav"),
     UiSelect("ui-select.wav"),
     UiConfirm("ui-confirm.wav"),
     UiBack("ui-back.wav"),
@@ -18,33 +19,42 @@ enum class WorldSound(private val fileName: String) {
 }
 
 /** A presentation request. Platform players own fades, audio focus, and native resources. */
-enum class WorldAmbience(val surf: Float, val wind: Float, val rain: Float, val birds: Float) {
+enum class WorldAmbience(val surf: Float, val wind: Float, val rain: Float, val birds: Float, val crackle: Float = 0f) {
     Silent(0f, 0f, 0f, 0f),
     Sunlit(0.48f, 0.36f, 0f, 0.36f),
     Twilight(0.42f, 0.26f, 0f, 0f),
     LocalRain(0.40f, 0.33f, 0.48f, 0.14f),
     Rain(0.25f, 0.44f, 0.68f, 0f),
-    Storm(0.27f, 0.63f, 0.83f, 0f);
+    Storm(0.27f, 0.63f, 0.83f, 0f),
+    DryStorm(0.30f, 0.62f, 0f, 0.04f),
+    Wildfire(0.24f, 0.45f, 0f, 0f, crackle = 0.72f);
 
     fun volume(layer: AmbienceLayer): Float = when (layer) {
         AmbienceLayer.Surf -> surf
         AmbienceLayer.Wind -> wind
         AmbienceLayer.Rain -> rain
         AmbienceLayer.Birds -> birds
+        AmbienceLayer.Fire -> crackle
     }
 }
 
 enum class AmbienceLayer(private val fileName: String) {
-    Surf("coastal-surf.wav"), Wind("coastal-wind.wav"), Rain("coastal-rain.wav"), Birds("coastal-birds.wav");
+    Surf("coastal-surf.wav"), Wind("coastal-wind.wav"), Rain("coastal-rain.wav"), Birds("coastal-birds.wav"),
+    Fire("ember-crackle.wav");
 
     fun assetUri(): String = Res.getUri("files/sounds/$fileName")
 }
 
-internal fun worldAmbience(enabled: Boolean, active: Boolean, climate: ClimatePose?, calledRain: Boolean = false): WorldAmbience = when {
+internal fun worldAmbience(
+    enabled: Boolean, active: Boolean, climate: ClimatePose?, calledRain: Boolean = false,
+    dryStorm: Boolean = false, burning: Boolean = false,
+): WorldAmbience = when {
     !enabled || !active || climate == null -> WorldAmbience.Silent
     climate.isStorm -> WorldAmbience.Storm
     climate.weather == Weather.Rain -> WorldAmbience.Rain
+    burning -> WorldAmbience.Wildfire
     calledRain -> WorldAmbience.LocalRain
+    dryStorm -> WorldAmbience.DryStorm
     climate.dayPhase >= 0.46f && climate.dayPhase < 0.96f -> WorldAmbience.Twilight
     else -> WorldAmbience.Sunlit
 }

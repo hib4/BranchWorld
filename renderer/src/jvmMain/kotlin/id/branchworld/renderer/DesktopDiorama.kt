@@ -65,6 +65,8 @@ class DesktopDiorama {
 
     fun present(camera: WorldCamera) = controller.present(camera)
 
+    suspend fun capturePng(): ByteArray? = output.capturePng()
+
     @Composable
     fun Hud() = PreviewHud(controller)
 

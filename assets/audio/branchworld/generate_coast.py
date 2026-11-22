@@ -95,6 +95,35 @@ def shower(rng, count):
     return result
 
 
+def fire(rng, count):
+    result = [0.0] * count
+    for i, (low, body, air) in enumerate(noise_bands(rng, count, (112, 670, 3200))):
+        swell = 0.72 + 0.20 * math.sin(TAU * i * 3 / count) + 0.08 * math.cos(TAU * i * 7 / count)
+        result[i] = (0.34 * low + 0.13 * (body - low) + 0.025 * (air - body)) * swell
+    for _ in range(86):
+        start = rng.randrange(count)
+        pitch = rng.uniform(550, 2300)
+        strength = rng.uniform(0.025, 0.31)
+        duration = rng.randrange(70, 730)
+        for i in range(duration):
+            phase = i / duration
+            decay = (1 - phase) ** 4 * min(1, i / 4)
+            snap = 0.60 * rng.uniform(-1, 1) + 0.40 * math.sin(TAU * pitch * i / RATE)
+            result[(start + i) % count] += strength * decay * snap
+    return result
+
+
+def thunder(rng, count):
+    for i, (sub, low, middle, high) in enumerate(noise_bands(rng, count, (55, 160, 690, 2700))):
+        t = i / RATE
+        attack = min(t / 0.021, 1)
+        fade = min(1, (count - i) / (0.28 * RATE))
+        crack = attack * math.exp(-t * 21) * (0.50 * (middle - low) + 0.29 * (high - middle))
+        roll = sum(math.exp(-(t - center) ** 2 / spread) * level
+                   for center, spread, level in ((0.13, 0.009, 1), (0.38, 0.020, 0.79), (0.77, 0.069, 0.42)))
+        yield (crack + 3.1 * (sub + 0.53 * (low - sub)) * roll * attack) * fade
+
+
 def write_layer(name, generator, seconds, peak, seed):
     values = list(generator(random.Random(seed), round(seconds * RATE)))
     scale = peak * 32767 / max(abs(value) for value in values)
@@ -112,3 +141,5 @@ if __name__ == '__main__':
     write_layer('coastal-rain', rain, 14, 0.54, 104761)
     write_layer('coastal-birds', birds, 17, 0.22, 104773)
     write_layer('spring-shower', shower, 0.85, 0.44, 104779)
+    write_layer('ember-crackle', fire, 7.5, 0.62, 424242)
+    write_layer('ember-thunder', thunder, 2.1, 0.49, 424243)

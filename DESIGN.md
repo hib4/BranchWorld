@@ -206,7 +206,7 @@ Oiled beech and walnut ink as the ground, with five plant-dye paints used only w
 - **Weld Yellow** (weld): The Fading Grove's chapter paint and the primary "Shape" action in the dock. The only paint that carries walnut ink (about 8.2:1).
 
 ### Secondary
-- **Madder Red** (madder): Material `secondary` and `error`. A paint for faces with pale ink; not used for small stamped numerals.
+- **Madder Red** (madder): Material `secondary` and `error`, and Ember Season's chapter paint (Phase 09). A paint for faces with pale ink. Ember Season's chapter stamp is the one stamped numeral in madder, set large enough (the 28 dp peg) for pale ink to read; other small numerals stay off madder.
 - **Leaf Green** (leaf): sandbox chapter paint and Material `tertiary`; carries pale ink.
 - **Umber Brown** (umber): paint for islands under earlier rules (no chapter); carries beech-light ink (about 4.9:1).
 

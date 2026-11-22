@@ -169,6 +169,25 @@ internal class Timeline private constructor(
         }
     }
 
+    fun history(branchId: Int): HistoryBrowser {
+        var forkState: EcologyState? = null
+        val segments = lineage(branchId, Long.MAX_VALUE).map { origin ->
+            val branch = branches.getValue(origin.branchId)
+            val end = forkState ?: branch.head
+            forkState = branch.start
+            HistorySegment(branch.id, branch.parentId, branch.start.tick, end.tick,
+                listOf(branch.start) + branch.snapshots.filter { it.tick < end.tick } + end,
+                interventionMarkers(branch.id, end.tick))
+        }
+        return HistoryBrowser(segments)
+    }
+
+    fun historyLocation(branchId: Int, tick: Long): Pair<Int, Long>? =
+        lineage(branchId, tick).lastOrNull { origin ->
+            val branch = branches.getValue(origin.branchId)
+            tick in branch.start.tick..minOf(branch.head.tick, origin.tick)
+        }?.let { it.branchId to tick }
+
     private fun interventionTrail(branchId: Int, through: Long): List<OwnedIntervention> =
         lineage(branchId, through).asReversed().flatMap { origin ->
             interventionMarkers(origin.branchId, origin.tick).map { OwnedIntervention(origin.branchId, it) }
@@ -235,11 +254,7 @@ internal class Timeline private constructor(
 
     fun warningLocation(): Pair<Int, Long>? {
         val tick = state.shaping?.warningAt ?: active.head.shaping?.warningAt ?: return null
-        var candidate = active
-        while (candidate.parentId != null && tick <= candidate.start.tick) {
-            candidate = branches.getValue(checkNotNull(candidate.parentId))
-        }
-        return (candidate.id to tick).takeIf { tick in candidate.start.tick..candidate.head.tick }
+        return historyLocation(branchId, tick)
     }
 
     fun canSteer(left: Boolean) = editsAllowed && engine.steeringTarget(left) != null

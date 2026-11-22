@@ -31,13 +31,13 @@ enum class VillageTask(internal val code: Int) {
 }
 
 @Serializable
-enum class Hardship(internal val code: Int) { Thirst(1), Hunger(2), Crowding(3) }
+enum class Hardship(internal val code: Int) { Thirst(1), Hunger(2), Crowding(3), /** Rules v11: the home burned and no other roof was free. */ Fire(4) }
 
 @Serializable
 enum class StructureKind(internal val code: Int) { Home(1), Field(2), Well(3), Clearing(4) }
 
 @Serializable
-enum class PetitionKind(internal val code: Int) { Water(1), Growth(2) }
+enum class PetitionKind(internal val code: Int) { Water(1), Growth(2), /** Rules v11: a dry storm gathers over the woods. */ Ember(3) }
 
 @Serializable
 enum class PlanOption(internal val code: Int, val petition: PetitionKind) {
@@ -45,12 +45,18 @@ enum class PlanOption(internal val code: Int, val petition: PetitionKind) {
     ClearWoods(3, PetitionKind.Growth), BuildWithin(4, PetitionKind.Growth),
     /** Rules v10: settle the herd's wet-season pasture. */
     Pasture(5, PetitionKind.Growth),
+    /** Rules v11: fell the pines and clear the brush around the homes before the storm breaks. */
+    FellAroundHomes(6, PetitionKind.Ember),
+    /** Rules v11: keep the old woods standing. */
+    KeepGrove(7, PetitionKind.Ember),
 }
 
 @Serializable
 enum class VillageEventKind(internal val code: Int) {
     Founded(1), HouseholdArrived(2), HouseholdLeft(3), MemberBorn(4), WorkBegun(5), WorkCompleted(6),
     PetitionRaised(7), PlanChosen(8), HamletFounded(9), FieldGrazed(10), FieldFlooded(11), Thirst(12), Hunger(13),
+    /** Rules v11: a home burned. [VillageEvent.subject] is the structure. */
+    HomeBurned(14),
 }
 
 @Serializable
@@ -71,6 +77,7 @@ internal data class Household(
 }
 
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class Structure(
     val id: Int,
     val siteId: Int,
@@ -81,6 +88,9 @@ internal data class Structure(
     val progress: Int = 0,
     val level: Int = 1,
     val completedAt: Long? = null,
+    /** Rules v11: the tick this home last burned. Omitted in earlier saves. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val burnedAt: Long? = null,
 ) {
     val complete: Boolean get() = progress >= required
 }

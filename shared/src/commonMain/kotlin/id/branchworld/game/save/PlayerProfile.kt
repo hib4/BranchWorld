@@ -1,5 +1,7 @@
 package id.branchworld.game.save
 
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -21,6 +23,7 @@ internal data class GameSettings(
 
 /** A history the player chose to close a chapter with. Outcome numbers come from that branch's real head state. */
 @Serializable
+@OptIn(ExperimentalSerializationApi::class)
 internal data class ChapterRecord(
     val chapter: Int,
     val slot: String,
@@ -31,6 +34,8 @@ internal data class ChapterRecord(
     val departed: Int,
     val deer: Int,
     val homes: Int,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val burned: Int? = null,
 )
 
 /** One island in the World Atlas: its own save slot and a short summary of its current history. */

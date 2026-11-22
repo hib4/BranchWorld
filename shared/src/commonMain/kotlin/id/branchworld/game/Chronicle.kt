@@ -53,6 +53,7 @@ import org.jetbrains.compose.resources.stringResource
 internal fun settlementName(siteId: Int, chapter: Chapter?): String = stringResource(when (chapter) {
     Chapter.FadingGrove -> if (siteId == 2) Res.string.village_hamlet else Res.string.village_hollowmere
     Chapter.LastCrossing -> if (siteId == 2) Res.string.village_westmead else Res.string.village_cairnholt
+    Chapter.EmberSeason -> if (siteId == 2) Res.string.village_fernlea else Res.string.village_sedgewick
     null -> if (siteId == 2) Res.string.village_new_hamlet else Res.string.village_generic
 })
 
@@ -66,6 +67,8 @@ internal fun PlanOption.title(): StringResource = when (this) {
     PlanOption.ClearWoods -> Res.string.plan_clear
     PlanOption.BuildWithin -> Res.string.plan_within
     PlanOption.Pasture -> Res.string.plan_pasture
+    PlanOption.FellAroundHomes -> Res.string.plan_fell
+    PlanOption.KeepGrove -> Res.string.plan_keep_grove
 }
 
 internal fun VillageTask.label(night: Boolean): StringResource = when {
@@ -103,6 +106,7 @@ internal fun VillageEvent.describe(village: VillageState, chapter: Chapter?): St
         VillageEventKind.HouseholdLeft -> stringResource(when (detail) {
             Hardship.Thirst.code -> Res.string.chronicle_left_thirst
             Hardship.Crowding.code -> Res.string.chronicle_left_crowding
+            Hardship.Fire.code -> Res.string.chronicle_left_fire
             else -> Res.string.chronicle_left_hunger
         }, familyName(household), place)
         VillageEventKind.MemberBorn -> stringResource(Res.string.chronicle_grew, familyName(household), detail)
@@ -118,8 +122,11 @@ internal fun VillageEvent.describe(village: VillageState, chapter: Chapter?): St
             StructureKind.Clearing -> stringResource(Res.string.chronicle_done_clearing)
             else -> stringResource(if (detail >= 2) Res.string.chronicle_done_enlarge else Res.string.chronicle_done_home)
         }
-        VillageEventKind.PetitionRaised -> stringResource(
-            if (detail == PetitionKind.Water.code) Res.string.chronicle_petition_water else Res.string.chronicle_petition_growth, place)
+        VillageEventKind.PetitionRaised -> stringResource(when (detail) {
+            PetitionKind.Water.code -> Res.string.chronicle_petition_water
+            PetitionKind.Ember.code -> Res.string.chronicle_petition_ember
+            else -> Res.string.chronicle_petition_growth
+        }, place)
         VillageEventKind.PlanChosen -> {
             val plan = stringResource(PlanOption.entries.first { it.code == detail }.title())
             val keeper = village.petitions.firstOrNull { it.id == subject }?.byKeeper == true
@@ -135,6 +142,7 @@ internal fun VillageEvent.describe(village: VillageState, chapter: Chapter?): St
         VillageEventKind.FieldFlooded -> stringResource(Res.string.chronicle_flooded, place)
         VillageEventKind.Thirst -> stringResource(Res.string.chronicle_thirst, place)
         VillageEventKind.Hunger -> stringResource(Res.string.chronicle_hunger, place)
+        VillageEventKind.HomeBurned -> stringResource(Res.string.chronicle_home_burned, place)
     }
 }
 
@@ -143,7 +151,7 @@ internal fun VillageEvent.place(world: SettlementWorld, terrain: id.branchworld.
     val village = world.village ?: return null
     val site = world.sites.firstOrNull { it.id == siteId } ?: return null
     val cell = when (kind) {
-        VillageEventKind.WorkBegun, VillageEventKind.WorkCompleted -> village.structures.firstOrNull { it.id == subject }?.cell
+        VillageEventKind.WorkBegun, VillageEventKind.WorkCompleted, VillageEventKind.HomeBurned -> village.structures.firstOrNull { it.id == subject }?.cell
         VillageEventKind.HouseholdLeft, VillageEventKind.HouseholdArrived, VillageEventKind.MemberBorn, VillageEventKind.HamletFounded ->
             village.households.firstOrNull { it.id == subject }?.let { household ->
                 village.structures.firstOrNull { it.id == household.home }?.cell
@@ -157,7 +165,11 @@ internal fun VillageEvent.place(world: SettlementWorld, terrain: id.branchworld.
 
 @Composable
 internal fun petitionTitle(petition: Petition, chapter: Chapter?): String = stringResource(
-    if (petition.kind == PetitionKind.Water) Res.string.petition_water_title else Res.string.petition_growth_title,
+    when (petition.kind) {
+        PetitionKind.Water -> Res.string.petition_water_title
+        PetitionKind.Growth -> Res.string.petition_growth_title
+        PetitionKind.Ember -> Res.string.petition_ember_title
+    },
     settlementName(petition.siteId, chapter),
 )
 
@@ -171,6 +183,8 @@ private fun planDetail(option: PlanOption, village: VillageState): String = when
     PlanOption.ClearWoods -> stringResource(Res.string.plan_clear_detail)
     PlanOption.BuildWithin -> stringResource(Res.string.plan_within_detail)
     PlanOption.Pasture -> stringResource(Res.string.plan_pasture_detail)
+    PlanOption.FellAroundHomes -> stringResource(Res.string.plan_fell_detail)
+    PlanOption.KeepGrove -> stringResource(Res.string.plan_keep_grove_detail)
 }
 
 /** The village's question to the Keeper. Answering is a timeline command, so it can be rewound and compared. */
@@ -200,7 +214,11 @@ internal fun PetitionCard(island: IslandLoad.Ready, modifier: Modifier = Modifie
                     style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
                 if (compact) Block(stringResource(if (reasons) Res.string.petition_hide_reasons else Res.string.petition_show_reasons),
                     { reasons = !reasons }, paint = Wood.BeechLight, size = BlockSize.Small)
-                if (reasons) Text(stringResource(if (petition.kind == PetitionKind.Water) Res.string.petition_water_body else Res.string.petition_growth_body),
+                if (reasons) Text(stringResource(when (petition.kind) {
+                    PetitionKind.Water -> Res.string.petition_water_body
+                    PetitionKind.Growth -> Res.string.petition_growth_body
+                    PetitionKind.Ember -> Res.string.petition_ember_body
+                }),
                     style = MaterialTheme.typography.bodyMedium)
                 for (option in petition.options) {
                     Block(stringResource(Res.string.petition_endorse) + " · " + stringResource(option.title()),

@@ -15,8 +15,9 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -26,6 +27,7 @@ import de.fabmax.kool.KoolConfigJvm
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.swing.SwingWindowSubsystem
 import id.branchworld.game.App
+import id.branchworld.game.PhotoResult
 import id.branchworld.game.save.WorldSaveStore
 import java.awt.Canvas
 import java.io.File
@@ -38,7 +40,7 @@ import kotlinx.coroutines.runBlocking
 
 /**
  * Captures the real game at Desktop size: the Kool renderer draws the island offscreen and the actual App composes
- * its menus and HUD over those frames. Runs only when build/verification/atlas-08/capture.txt names a fixture folder,
+ * its menus and HUD over those frames. Runs only when build/verification/<phase>/capture.txt names a fixture folder,
  * because it opens a tiny window and needs a GPU.
  */
 @OptIn(ExperimentalTestApi::class)
@@ -57,10 +59,12 @@ class DesktopAtlasCapture {
     @Test
     fun captureTheJourney() {
         val root = File(System.getProperty("user.dir")).parentFile
-        val request = File(root, "build/verification/atlas-08/capture.txt").takeIf { it.exists() } ?: return
+        // The newest phase's request wins; captures land beside the request that asked for them.
+        val request = listOf("living-worlds-09", "atlas-08").map { File(root, "build/verification/$it/capture.txt") }
+            .firstOrNull { it.exists() } ?: return
         val (fixture, outName, size) = request.readText().trim().split(" ")
         val (width, height) = size.split("x").map { it.toInt() }
-        val evidence = File(root, "build/verification/atlas-08/$outName").also { it.mkdirs() }
+        val evidence = File(request.parentFile, outName).also { it.mkdirs() }
         val store = FolderStore(File(fixture))
         val steps = File(fixture, "steps.txt").readLines().filter { it.isNotBlank() }
 
@@ -101,6 +105,16 @@ class DesktopAtlasCapture {
                             },
                             viewportCamera = controller::present,
                             saveStore = store,
+                            savePhoto = { moment ->
+                                val png = output.capturePng()
+                                if (png == null) PhotoResult.ViewNotReady else {
+                                    val saved = File(evidence, "saved-photo-${moment.tick}.png").apply { writeBytes(png) }
+                                    val picture = requireNotNull(ImageIO.read(saved))
+                                    check(picture.width >= 300 && picture.height >= 300)
+                                    println("Captured ${saved.name} ${picture.width}x${picture.height}")
+                                    PhotoResult.Saved("the verification folder")
+                                }
+                            },
                         )
                     }
                 }
@@ -115,12 +129,35 @@ class DesktopAtlasCapture {
                                 Thread.sleep(40)
                             }
                         }
+                        // Live heap after collection, for comparing scenes.
+                        "heap" -> {
+                            waitForIdle()
+                            repeat(3) { System.gc(); Thread.sleep(80) }
+                            val runtime = Runtime.getRuntime()
+                            println("BranchWorldHeap $argument usedMB=${(runtime.totalMemory() - runtime.freeMemory()) / 1_048_576}")
+                        }
                         "await" -> waitUntil(timeoutMillis = 60_000) { onAllNodesWithText(argument, substring = true).fetchSemanticsNodes().isNotEmpty() }
-                        "click" -> onAllNodesWithText(argument)[0].performClick()
+                        "click" -> onAllNodesWithText(argument)[0].apply { runCatching { performScrollTo() } }.performClick()
+                        "scroll" -> onAllNodesWithText(argument, substring = true).let { it[it.fetchSemanticsNodes().size - 1] }.performScrollTo()
+                        // Only if it is there, such as another page of a list that may already be complete.
+                        "maybe" -> onAllNodesWithText(argument).takeIf { it.fetchSemanticsNodes().isNotEmpty() }?.get(0)
+                            ?.apply { runCatching { performScrollTo() } }?.performClick()
+                        // The last match: the newest card on a shelf, such as a later chapter's Begin.
+                        "last" -> onAllNodesWithText(argument).let { it[it.fetchSemanticsNodes().size - 1] }
+                            .apply { runCatching { performScrollTo() } }.performClick()
                         "desc" -> onAllNodesWithContentDescription(argument)[0].performClick()
                         "shot" -> {
                             waitForIdle()
-                            val image = onRoot().captureToImage().toAwtImage()
+                            // Dialogs and popups compose in their own roots; paint each over the screen where it sits.
+                            val roots = onAllNodes(isRoot())
+                            val image = roots[0].captureToImage().toAwtImage()
+                            val canvas2d = image.createGraphics()
+                            for (index in 1 until roots.fetchSemanticsNodes().size) {
+                                val node = roots[index]
+                                val bounds = node.fetchSemanticsNode().boundsInWindow
+                                canvas2d.drawImage(node.captureToImage().toAwtImage(), bounds.left.toInt(), bounds.top.toInt(), null)
+                            }
+                            canvas2d.dispose()
                             ImageIO.write(image, "png", File(evidence, "$argument.png"))
                             println("Captured $argument ${image.width}x${image.height}")
                         }

@@ -20,6 +20,11 @@ import id.branchworld.game.ecology.cropPerWorker
 import id.branchworld.game.ecology.seasonAt
 import id.branchworld.game.ecology.soilMoisture
 import id.branchworld.game.ecology.terrainCell
+import id.branchworld.game.ecology.ScarKind
+import id.branchworld.game.ecology.Succession
+import id.branchworld.game.ecology.WorldEventKind
+import id.branchworld.game.ecology.successionAt
+import id.branchworld.game.ecology.tileCell
 import id.branchworld.game.terrain.Biome
 import id.branchworld.game.terrain.LandmarkKind
 import id.branchworld.game.terrain.TerrainMap
@@ -52,11 +57,31 @@ data class WorldRenderProjection(
     val shaping: ShapingPose? = null,
     val livingEcho: LivingEchoProjection? = null,
     val ranges: RangePose? = null,
+    /** Rules v11 fire, scars and fallen pines. */
+    val fire: FirePose? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
 
 data class GroundPoint(val x: Int, val z: Int, val elevationTwice: Int)
+
+/** Read-only fire scene. Tiles are 2×2 cells; [FireTilePose.ground] is the tile's first cell. */
+data class FirePose(
+    val burning: List<FireTilePose>,
+    val scars: List<ScarPose>,
+    /** Pines (terrain prop index) that have fallen or are growing back, with their stage. */
+    val stands: Map<Int, Succession>,
+    /** Direction the wind carries fire, in eighths from east toward +z. */
+    val wind: Int,
+    /** Where the gathering storm will strike. */
+    val storm: List<GroundPoint>,
+    /** The most recent lightning and how many ticks ago it struck, while it is still visible. */
+    val lightning: GroundPoint?,
+    val lightningAge: Int,
+)
+
+data class FireTilePose(val tile: Int, val ground: GroundPoint, val intensity: Int)
+data class ScarPose(val tile: Int, val ground: GroundPoint, val stage: Succession, val felled: Boolean)
 
 data class SettlementPose(
     val id: Int, val homes: List<GroundPoint>, val field: GroundPoint, val resident: GroundPoint?,
@@ -87,6 +112,8 @@ data class StructurePose(
     val stage: Int,
     val level: Int,
     val household: Int?,
+    /** Rules v11: the home burned and has not yet been raised again. */
+    val burned: Boolean = false,
 )
 
 data class VillagerPose(
@@ -200,6 +227,8 @@ internal fun WorldState.renderProjection(
     return WorldRenderProjection(tick, listOf(CreaturePose(bunnyId, Species.Rabbit, ground, heading, action)))
 }
 
+private const val LightningShown = 16L
+
 internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderProjection(
     tick = tick,
     creatures = creatures.map { animal ->
@@ -229,6 +258,18 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
     },
     springs = springs.map { it.project(terrain) },
     ranges = habitat?.let { RangePose(it.refuges.map { refuge -> refuge.region }, it.herd.bound) },
+    fire = fire?.let { burning ->
+        val strike = chronicle?.events?.lastOrNull { it.kind == WorldEventKind.Lightning }?.takeIf { tick - it.tick < LightningShown }
+        FirePose(
+            burning.burning.map { FireTilePose(it.tile, tileCell(it.tile).project(terrain), (it.fuel / 60).coerceIn(1, 4)) },
+            burning.scars.map { ScarPose(it.tile, tileCell(it.tile).project(terrain), successionAt(tick - it.at), it.kind == ScarKind.Felled) },
+            burning.stands.associate { it.prop to successionAt(tick - it.at) },
+            burning.wind,
+            burning.strikes.map { tileCell(it.tile).project(terrain) },
+            strike?.cell?.project(terrain),
+            strike?.let { (tick - it.tick).toInt() } ?: 0,
+        )
+    },
     ecology = EcologyReadout(
         creatures.count { it.species == Species.Rabbit },
         creatures.count { it.species == Species.Deer },
@@ -337,7 +378,8 @@ private fun EcologyState.villagePose(site: Settlement, village: VillageState, te
             site.center.project(terrain),
             structures.map {
                 StructurePose(it.id, it.kind, it.cell.project(terrain),
-                    if (it.complete) 4 else (it.progress * 4 / it.required).coerceIn(0, 3), it.level, occupied[it.id])
+                    if (it.complete) 4 else (it.progress * 4 / it.required).coerceIn(0, 3), it.level, occupied[it.id],
+                    burned = it.burnedAt != null && !it.complete)
             },
             villagers,
             tier(site.food, site.residents * 6),

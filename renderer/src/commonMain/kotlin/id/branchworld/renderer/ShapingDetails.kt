@@ -138,6 +138,20 @@ internal class ShapingDetails(private val scene: Scene, private val terrain: Ter
                     addTriIndices(outer, nextOuter, inner)
                     addTriIndices(nextOuter, nextInner, inner)
                 }
+                // A painted stake stands over each mark so the place still reads behind grass and low canopy.
+                val ground = terrain.heightAt(p.x, p.z).coerceAtLeast(0f)
+                for (turn in 0..1) {
+                    val dx = if (turn == 0) 0.012f else 0f
+                    val dz = if (turn == 0) 0f else 0.012f
+                    color = Color(1f, 0.80f, 0.30f, 0.95f)
+                    val a = vertex(Vec3f(p.x - dx, ground, p.z - dz), Vec3f.Y_AXIS)
+                    val b = vertex(Vec3f(p.x + dx, ground, p.z + dz), Vec3f.Y_AXIS)
+                    color = Color(1f, 0.93f, 0.62f, 0.95f)
+                    val c = vertex(Vec3f(p.x + dx, ground + 0.17f, p.z + dz), Vec3f.Y_AXIS)
+                    val d = vertex(Vec3f(p.x - dx, ground + 0.17f, p.z - dz), Vec3f.Y_AXIS)
+                    addTriIndices(a, b, c)
+                    addTriIndices(a, c, d)
+                }
             }
         }
         shader = translucentSurface()

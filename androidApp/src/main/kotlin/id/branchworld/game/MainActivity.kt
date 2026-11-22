@@ -14,6 +14,7 @@ class MainActivity : ComponentActivity() {
     private val renderer by lazy { AndroidDiorama(applicationContext) }
     private val sounds by lazy { AndroidWorldSounds(applicationContext) }
     private val saveStore by lazy { AndroidWorldSaveStore(filesDir) }
+    private val photos by lazy { AndroidWorldPhotos(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
@@ -28,6 +29,10 @@ class MainActivity : ComponentActivity() {
                 saveStore = saveStore,
                 playSound = sounds::play,
                 setAmbience = sounds::setAmbience,
+                savePhoto = { moment ->
+                    val png = renderer.capturePng()
+                    if (png == null) PhotoResult.ViewNotReady else photos.save(png, moment)
+                },
             )
         }
     }

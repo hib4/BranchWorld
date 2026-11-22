@@ -1,6 +1,7 @@
 package id.branchworld.renderer
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asSkiaBitmap
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.unit.IntSize
 import de.fabmax.kool.math.Vec2i
@@ -13,11 +14,14 @@ import de.fabmax.kool.util.Uint8Buffer
 import de.fabmax.kool.util.releaseWith
 import de.fabmax.kool.util.useRaw
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.skia.ColorAlphaType
 import org.jetbrains.skia.ColorType
+import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
 import org.jetbrains.skia.ImageInfo
 import kotlin.math.roundToInt
@@ -26,6 +30,16 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
     val frame = MutableStateFlow<ImageBitmap?>(null)
     private val requestedSize = MutableStateFlow(Vec2i(640, 360))
     private var target: Target? = null
+
+    suspend fun capturePng(): ByteArray? {
+        if (!controller.active || !controller.foreground.value || controller.status.value != "Island ready") return null
+        val visible = frame.value ?: return null
+        return withContext(Dispatchers.Default) {
+            Image.makeFromBitmap(visible.asSkiaBitmap()).use { image ->
+                checkNotNull(image.encodeToData(EncodedImageFormat.PNG)).use { it.bytes }
+            }
+        }
+    }
 
     fun resize(size: IntSize) {
         if (size.width < 2 || size.height < 2) return

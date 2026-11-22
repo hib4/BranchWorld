@@ -20,6 +20,10 @@ class AndroidWorldSaveStoreTest {
             runBlocking {
                 val store = AndroidWorldSaveStore(directory)
                 val original = byteArrayOf(1, 2, 3)
+                val shared = "shared-01234567.json"
+                assertTrue(store.createFile(shared, original))
+                assertFalse(AndroidWorldSaveStore(directory).createFile(shared, byteArrayOf(9)))
+                assertArrayEquals(original, store.readFile(shared, 16))
                 assertNull(store.read(16))
                 val legacy = File(directory, "island-v1.json").apply { writeBytes(byteArrayOf(8)) }
                 assertArrayEquals(byteArrayOf(8), store.read(16))

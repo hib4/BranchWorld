@@ -2,6 +2,7 @@ package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.CreatureHeading
+import id.branchworld.game.simulation.CutFirebreak
 import id.branchworld.game.simulation.EndorsePlan
 import id.branchworld.game.simulation.ProtectRegion
 import id.branchworld.game.simulation.GridCell
@@ -25,26 +26,36 @@ internal class EcologyEngine(
     /** Static habitat for [terrain]. Callers validating many states of one island on one thread may share it. */
     private val island: IslandEcology = IslandEcology(terrain),
 ) {
-    private val wildlife by lazy { Wildlife(island) }
+    private val wildlife by lazy { Wildlife(island, rulesVersion) }
     private val regional by lazy { RegionalEcology(island) }
     private val economy by lazy { SettlementEconomy(island) }
     private val ranges by lazy { island.baseline.let { SeasonalRanges(island, it.springs, it.patches) } }
     private val villageRules by lazy { VillageRules(island, economy) { if (rulesVersion >= RangeRulesVersion) ranges else null } }
+    private val fireRules by lazy { FireRules(island) }
     val story: Chapter? = chapterOf(rulesVersion, terrain.key.seed,
         checkpoint?.habitat ?: if (rulesVersion >= RangeRulesVersion) HabitatState(newChapter?.code ?: 0) else null)
     private val chapter = story != null
     private val drought = story == Chapter.FadingGrove
-    private val openingRain = if (drought) OpeningDryEnd else 300L
+    private val ember = story == Chapter.EmberSeason
+    private val openingRain = when {
+        drought -> OpeningDryEnd
+        ember -> EmberOpeningRain
+        else -> 300L
+    }
+    /** Ember Season opens after wet rains: the marsh is full, but the woods will cure through the long dry spell. */
+    private val openingRecharge = if (ember) EmberOpeningRecharge else 64
     private val rainSoils by lazy { List(RegionCount) { rainGround(terrain, it) } }
     private val inputs = WorldCommands<WorldCommand>(recordHistory)
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
-            RangeRulesVersion, VillageRulesVersion, ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
-                val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain),
+            FireRulesVersion, RangeRulesVersion, VillageRulesVersion, ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
+                val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain, recharge = openingRecharge),
                     settlements = SettlementWorld(village = if (rulesVersion >= VillageRulesVersion) VillageState() else null),
                     shaping = if (rulesVersion >= ShapingRulesVersion) ShapingState() else null,
-                    habitat = if (rulesVersion >= RangeRulesVersion) HabitatState(story?.code ?: 0) else null)
+                    habitat = if (rulesVersion >= RangeRulesVersion) HabitatState(story?.code ?: 0) else null,
+                    fire = if (rulesVersion >= FireRulesVersion) FireState.start(terrain.key.seed) else null,
+                    chronicle = if (rulesVersion >= FireRulesVersion) WorldChronicle() else null)
                 if (rulesVersion >= WildlifeRulesVersion) wildlife.populate(opening) else opening
             }
             CivilizationRulesVersion -> it.copy(environment = Environment.start(terrain.key.seed), settlements = SettlementWorld())
@@ -61,8 +72,10 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
-        require((rulesVersion in WatershedRulesVersion..RangeRulesVersion) == (terrain.watershed != null))
+        require((rulesVersion in WatershedRulesVersion..FireRulesVersion) == (terrain.watershed != null))
         require(story != Chapter.LastCrossing || terrain.key.seed == CrossingSeed)
+        require(story != Chapter.EmberSeason || terrain.key.seed == EmberSeed && rulesVersion >= FireRulesVersion)
+        require((state.fire == null) == (state.chronicle == null) && (state.fire == null || state.habitat != null))
         require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
         require(state.settlements == null || state.environment != null)
         require(state.wildlife == null || state.environment?.recharge != null)
@@ -81,7 +94,7 @@ internal class EcologyEngine(
                 (it.goal == null || island.navigation.contains(it.goal.cell)) &&
                 (it.waypoint == null || island.navigation.contains(it.waypoint))
         })
-        require(Species.entries.all { species -> state.creatures.count { it.species == species } <= species.populationLimit() })
+        require(Species.entries.all { species -> state.creatures.count { it.species == species } <= species.populationLimit(rulesVersion) })
         if (state.wildlife == null) {
             require(state.creatures.all { it.species in LegacySpecies && it.wildlife == null &&
                 it.action.canonicalId <= CreatureAction.Resting.canonicalId &&
@@ -118,6 +131,7 @@ internal class EcologyEngine(
         is CallRainRegion -> state.shaping != null && command.region in 0 until RegionCount
         is EndorsePlan -> state.settlements?.village != null && command.petitionId > 0
         is ProtectRegion -> state.habitat != null && command.region in 0 until RegionCount
+        is CutFirebreak -> state.fire != null && command.region in 0 until RegionCount
     }
 
     fun acceptedCommands(): List<WorldCommand> = inputs.accepted()
@@ -150,7 +164,7 @@ internal class EcologyEngine(
         val environment = requireNotNull(state.environment)
         state.shaping?.validate(state.tick, chapter)
         if (state.tick < openingRain) {
-            val opening = Environment.start(state.terrain.key.seed, terrain.watershed != null, openingRain)
+            val opening = Environment.start(state.terrain.key.seed, terrain.watershed != null, openingRain, openingRecharge)
             val recharge = opening.recharge?.let { (it - 2 * (state.tick / 10).toInt()).coerceAtLeast(0) }
             require(environment == opening.copy(recharge = recharge))
         } else require(environment.nextChange - state.tick in 0..360)
@@ -166,6 +180,15 @@ internal class EcologyEngine(
             require(habitat.log.size <= RangeLogLimit && habitat.log.zipWithNext().all { (a, b) -> a.tick <= b.tick })
             require(habitat.log.all { it.tick in 1..state.tick && island.terrain.cellAt(it.cell.x, it.cell.z) != null })
         }
+        val fire = state.fire
+        if (fire != null) {
+            fireRules.validate(fire, state.chronicle, state.tick, state.settlements?.village)
+            checkNotNull(state.chronicle).validate(state.tick, island)
+        } else {
+            val village = state.settlements?.village
+            require(village == null || village.petitions.none { it.kind == PetitionKind.Ember } &&
+                village.structures.none { it.burnedAt != null } && village.households.none { it.leftBecause == Hardship.Fire })
+        }
         state.settlements?.let {
             if (it.village != null) villageRules.validate(it, state.tick, state.patches, state.springs, baseline.patches)
             else economy.validate(it, state.tick, state.patches, state.springs, state.shaping != null)
@@ -180,6 +203,7 @@ internal class EcologyEngine(
         kind == Intervention.Rain && weather == Weather.Rain -> ShapeBlock.AlreadyRaining
         kind == Intervention.Rain && !rainSoils[region].available -> ShapeBlock.NoGround
         kind == Intervention.Reforest && sites.isEmpty() -> ShapeBlock.NoSites
+        kind == Intervention.Firebreak && fireRules.firebreakTiles(region, checkNotNull(state.fire)).isEmpty() -> ShapeBlock.NoFuel
         else -> null
     }
 
@@ -187,6 +211,7 @@ internal class EcologyEngine(
         val shaping = state.shaping ?: return null
         if (region !in 0 until RegionCount || kind == Intervention.Supplement || kind == Intervention.Plan) return null
         if (kind == Intervention.Protect && state.habitat == null) return null
+        if (kind == Intervention.Firebreak && state.fire == null) return null
         val village = state.settlements?.sites?.lastOrNull { it.residents > 0 }
         val sites = if (kind == Intervention.Reforest) regional.plantingSites(region, state.patches, state.springs,
             state.settlements?.reservedCells().orEmpty()) else emptyList()
@@ -195,7 +220,10 @@ internal class EcologyEngine(
             ?.takeIf { kind == Intervention.Rain && rainCovers(region, it) }
         val blocker = shapingBlock(kind, region, shaping, checkNotNull(state.environment).weather, sites)
         val booked = pendingShape() != null
-        return ShapePreview(sites, field, bank, if (booked) ShapeBlock.Reserved else blocker)
+        val cut = state.fire?.takeIf { kind == Intervention.Firebreak }?.let { fire ->
+            fireRules.firebreakTiles(region, fire).flatMap(fireRules::landIn)
+        }.orEmpty()
+        return ShapePreview(sites, field, bank, if (booked) ShapeBlock.Reserved else blocker, cut)
     }
 
     fun recommendedRainRegion(): Int {
@@ -226,7 +254,7 @@ internal class EcologyEngine(
     fun cancelEndorsement(): Boolean = pendingEndorsement()?.let(inputs::cancel) ?: false
 
     fun pendingShape(): WorldCommand? = if (state.shaping == null) null else
-        inputs.pending().firstOrNull { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion }
+        inputs.pending().firstOrNull { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion || it is CutFirebreak }
 
     fun cancelShape(): Boolean = pendingShape()?.let(inputs::cancel) ?: false
 
@@ -239,13 +267,13 @@ internal class EcologyEngine(
             if (kind == Intervention.Rain || kind == Intervention.Reforest && !availability.canPlant ||
                 kind == Intervention.Supplement && !availability.canSupplement
             ) return false
-            if (kind == Intervention.Protect) return false
+            if (kind == Intervention.Protect || kind == Intervention.Firebreak) return false
             val nextTick = state.tick + 1
             if (inputs.pending().any { command ->
                 command.tick == nextTick && when (command) {
                     is ReforestRegion -> kind == Intervention.Reforest && command.region == region
                     is SupplementForage -> kind == Intervention.Supplement && command.region == region
-                    is CallRainRegion, is SetDestination, is EndorsePlan, is ProtectRegion -> false
+                    is CallRainRegion, is SetDestination, is EndorsePlan, is ProtectRegion, is CutFirebreak -> false
                 }
             }) return false
         }
@@ -255,6 +283,7 @@ internal class EcologyEngine(
                 Intervention.Supplement -> SupplementForage(tick, sequence, region)
                 Intervention.Rain -> CallRainRegion(tick, sequence, region)
                 Intervention.Protect -> ProtectRegion(tick, sequence, region)
+                Intervention.Firebreak -> CutFirebreak(tick, sequence, region)
                 Intervention.Plan -> error("Plans are endorsed through a petition")
             }
         }
@@ -286,11 +315,21 @@ internal class EcologyEngine(
         var introduced = 0
         var endorsed = previous.settlements
         var habitat = previous.habitat
+        var fire = previous.fire
+        var chronicle = previous.chronicle
+        var felledBiomass = 0
+        // Rules v11 records each of the Keeper's acts so later events can name them as causes.
+        fun keeperAct(act: KeeperAct, subject: Int, cell: GridCell): EventRef? = chronicle?.let { log ->
+            log.record(tick, WorldEventKind.KeeperAct, cell, subject, act.code).also { chronicle = it.first }.second
+        }
         val results = buildList {
             for (command in appliedCommands) {
                 when (command) {
-                    is EndorsePlan -> endorsed = endorsed?.let {
-                        villageRules.applyEndorsement(it, tick, command.petitionId, command.option)
+                    is EndorsePlan -> {
+                        val before = endorsed
+                        endorsed = endorsed?.let { villageRules.applyEndorsement(it, tick, command.petitionId, command.option) }
+                        if (endorsed != before) keeperAct(KeeperAct.Endorse, command.option.code,
+                            endorsed?.sites?.firstOrNull()?.center ?: regionCenter(0))
                     }
                     is SetDestination -> waypoints[command.entityId] = command.cell
                     is ReforestRegion -> {
@@ -300,6 +339,7 @@ internal class EcologyEngine(
                                 regional.plantingSites(command.region, patches, previous.springs, reserved)) == null
                         ) regional.plant(command.region, patches, previous.springs, reserved) else 0
                         if (count > 0 && current != null) shaping = current.copy(spent = true)
+                        if (count > 0) keeperAct(KeeperAct.Grove, command.region, regionCenter(command.region))
                         introduced += count * RegionalEcology.SaplingBiomass
                         add(InterventionResult(Intervention.Reforest, command.region, tick, count))
                     }
@@ -307,7 +347,10 @@ internal class EcologyEngine(
                         val current = checkNotNull(shaping)
                         val applied = shapingBlock(Intervention.Rain, command.region, current,
                             checkNotNull(environment).weather, emptyList()) == null
-                        if (applied) shaping = current.copy(spent = true, shower = CalledShower(command.region, tick))
+                        if (applied) {
+                            shaping = current.copy(spent = true, shower = CalledShower(command.region, tick))
+                            keeperAct(KeeperAct.Rain, command.region, regionCenter(command.region))
+                        }
                         add(InterventionResult(Intervention.Rain, command.region, tick, if (applied) 1 else 0))
                     }
                     is ProtectRegion -> {
@@ -319,8 +362,28 @@ internal class EcologyEngine(
                             shaping = current.copy(spent = true)
                             habitat = refuge.copy(refuges = refuge.refuges + Refuge(command.region, tick))
                                 .record(RangeEvent(tick, RangeEventKind.RefugeDeclared, command.region, regionCenter(command.region)))
+                            keeperAct(KeeperAct.Protect, command.region, regionCenter(command.region))
                         }
                         add(InterventionResult(Intervention.Protect, command.region, tick, if (applied) 1 else 0))
+                    }
+                    is CutFirebreak -> {
+                        val current = checkNotNull(shaping)
+                        val woods = checkNotNull(fire)
+                        val tiles = if (shapingBlock(Intervention.Firebreak, command.region, current,
+                                checkNotNull(environment).weather, emptyList()) == null) fireRules.firebreakTiles(command.region, woods)
+                            else emptyList()
+                        if (tiles.isNotEmpty()) {
+                            val standing = patches.sumOf { it.biomass }
+                            val cut = fireRules.cut(tiles, tick, woods, patches, fireRules.patchIndex(patches), null)
+                            felledBiomass += standing - patches.sumOf { it.biomass }
+                            shaping = current.copy(spent = true)
+                            val act = checkNotNull(keeperAct(KeeperAct.Firebreak, command.region, tileCell(tiles[tiles.size / 2])))
+                            chronicle = chronicle?.record(tick, WorldEventKind.TreesFelled, tileCell(tiles[tiles.size / 2]), cut.pines,
+                                tiles.size, listOf(act))?.first
+                            fire = cut.fire.copy(scars = cut.fire.scars.map { if (it.cause == -1) it.copy(cause = act.id) else it })
+                            endorsed = endorsed?.giveWood(cut.pines * FelledWood)
+                        }
+                        add(InterventionResult(Intervention.Firebreak, command.region, tick, tiles.size))
                     }
                     is SupplementForage -> {
                         val amount = regional.supplement(command.region, patches)
@@ -341,18 +404,38 @@ internal class EcologyEngine(
                     val growth = if (recharge == null) patch.regrowth * multiplier else {
                         val soil = conditions?.moisture(patch.cell) ?: terrain.soilMoisture(patch.cell, recharge)
                         val establishment = if (conditions != null && patch.planted && !patch.rooted() && soil >= 100) 2 else 0
-                        growthForSoil(soil, patch.regrowth) + establishment
+                        val base = growthForSoil(soil, patch.regrowth) + establishment
+                        // Rules v11: nothing grows in fresh ash; grass returns to burned ground in a rich flush.
+                        fire?.let { base * fireRules.growthFactor(it, patch.cell, tick) } ?: base
                     }
                     patches[index] = patch.copy(biomass = minOf(patch.capacity, patch.biomass + growth))
                 }
             }
         }
         val afterGrowth = patches.sumOf { it.biomass }
+        if (fire != null && tick % FireStep == 0L) {
+            val outcome = fireRules.step(tick, fire, checkNotNull(chronicle), checkNotNull(environment), checkNotNull(shaping), patches, endorsed)
+            fire = outcome.fire
+            chronicle = outcome.chronicle
+            endorsed = outcome.settlements
+        }
         val range = habitat?.let { RangeTurn(ranges, endorsed?.disturbedCells(island).orEmpty(), it) }
+        val view = fire?.let { fireView(it, tick) }
         val (animals, nextId, history) = if (previous.wildlife == null) {
             advanceLegacy(previous, tick, patches, waypoints, random)
         } else {
-            wildlife.advance(previous, tick, checkNotNull(environment?.recharge), patches, waypoints, random, conditions, range)
+            wildlife.advance(previous, tick, checkNotNull(environment?.recharge), patches, waypoints, random, conditions, range, view)
+        }
+        if (fire != null && wildlife.fledFromFire.isNotEmpty()) {
+            val activeFires = fire.active.map { active ->
+                val fled = wildlife.fledFromFire[active.number]
+                if (active.fled || fled == null) return@map active
+                val started = chronicle?.find(active.started)?.ref ?: EventRef(active.started, active.startedAt, WorldEventKind.FireStarted)
+                chronicle = chronicle?.record(tick, WorldEventKind.AnimalsFled, fled.cell, (fled.id and Int.MAX_VALUE.toLong()).toInt(),
+                    fled.species.canonicalId, listOf(started))?.first
+                active.copy(fled = true)
+            }
+            fire = fire.copy(active = activeFires)
         }
         if (range != null) {
             // A herd pushing through a settlement tramples its fields as surely as grazing beside them.
@@ -366,7 +449,7 @@ internal class EcologyEngine(
         val births = nextId - previous.nextEntityId
         val deaths = previous.creatures.size - animals.size + births
         val ledger = previous.ledger
-        val settlements = endorsed?.let {
+        var settlements = endorsed?.let {
             if (it.village != null) {
                 val grazed = villageRules.graze(it, animals)
                 villageRules.advance(grazed, tick, checkNotNull(environment), patches, previous.springs, checkNotNull(conditions),
@@ -377,6 +460,22 @@ internal class EcologyEngine(
             else it
         }
         val current = shaping
+        // Ember Season: a dry storm gathers once the woods have cured, and the village asks what to do before it breaks.
+        if (ember && current?.warningAt == null && tick % SettlementTurn == 0L && tick >= EmberEarliestWarning &&
+            settlements?.village?.let { it.openPetition() == null && it.active(1).isNotEmpty() } == true &&
+            fireRules.cure(tick, checkNotNull(fire), checkNotNull(environment)) >= 100
+        ) {
+            val log = checkNotNull(chronicle)
+            val center = settlements.sites.first().center
+            val planned = fireRules.planStorm(tick, checkNotNull(fire), patches, checkNotNull(settlements.village), center, log.nextId)
+            val strike = planned.strikes.firstOrNull()
+            if (strike != null) {
+                chronicle = log.record(tick, WorldEventKind.DryStorm, tileCell(strike.tile), strike.tile, planned.wind).first
+                fire = planned
+                shaping = checkNotNull(current).copy(warningAt = tick)
+                settlements = settlements.copy(village = checkNotNull(settlements.village).raiseEmberPetition(1, tick))
+            }
+        }
         if (drought && current?.warningAt == null && tick % SettlementTurn == 0L &&
             checkNotNull(environment?.recharge) <= 16 && settlements?.sites?.firstOrNull()?.residents?.let { it > 0 } == true
         ) shaping = checkNotNull(current).copy(warningAt = tick)
@@ -384,6 +483,10 @@ internal class EcologyEngine(
         if (story == Chapter.LastCrossing && current?.warningAt == null && tick % SettlementTurn == 0L &&
             settlements?.village?.openPetition()?.options?.contains(PlanOption.Pasture) == true
         ) shaping = checkNotNull(current).copy(warningAt = tick)
+        if (chronicle != null) {
+            val log = recordVillageTurns(chronicle!!, previous.settlements, settlements, tick)
+            chronicle = log
+        }
         return previous.copy(
             tick = tick,
             randomState = random.state,
@@ -395,14 +498,60 @@ internal class EcologyEngine(
             wildlife = history,
             shaping = shaping,
             habitat = habitat,
+            fire = fire,
+            chronicle = chronicle,
             ledger = EcologyLedger(
-                consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass },
+                consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass } + felledBiomass,
                 regrown = ledger.regrown + afterGrowth - before,
                 births = ledger.births + births,
                 deaths = ledger.deaths + deaths,
                 introduced = ledger.introduced + introduced,
             ),
         ).also { state = it }
+    }
+
+    private var bareSource: List<Scar>? = null
+    private var bareEpoch = -1L
+    private var bare: Set<GridCell> = emptySet()
+    private var burningSource: List<BurningTile>? = null
+    private val fireTiles = IntArray(TileCount)
+    private val emptyFireTiles = IntArray(0)
+
+    /** What wildlife sees of the fire this tick. Bare ground is rebuilt only when scars or their stages change. */
+    private fun fireView(fire: FireState, tick: Long): FireView {
+        val epoch = tick / FireStep
+        if (fire.scars !== bareSource || epoch != bareEpoch) {
+            bare = fireRules.bareCells(fire, tick)
+            bareSource = fire.scars
+            bareEpoch = epoch
+        }
+        if (fire.burning !== burningSource) {
+            fireTiles.fill(0)
+            for (tile in fire.burning) fireTiles[tile.tile] = tile.fire
+            burningSource = fire.burning
+        }
+        return FireView(if (fire.burning.isEmpty()) emptyFireTiles else fireTiles, bare)
+    }
+
+    /** Rules v11 chronicle entries for village changes the fire rules did not record themselves. */
+    private fun recordVillageTurns(log: WorldChronicle, before: SettlementWorld?, after: SettlementWorld?, tick: Long): WorldChronicle {
+        val village = after?.village ?: return log
+        var chronicle = log
+        val earlier = before?.village
+        for (petition in village.petitions) {
+            if (petition.kind != PetitionKind.Ember || petition.choice == null) continue
+            if (earlier?.petitions?.firstOrNull { it.id == petition.id }?.choice != null) continue
+            val storm = chronicle.events.lastOrNull { it.kind == WorldEventKind.DryStorm }?.ref
+            val keeper = if (petition.byKeeper) chronicle.lastAct(KeeperAct.Endorse) else null
+            chronicle = chronicle.record(tick, WorldEventKind.PlanChosen, after.sites.first().center, petition.id,
+                checkNotNull(petition.choice).code, listOfNotNull(storm, keeper)).first
+        }
+        for (structure in village.structures) {
+            if (structure.burnedAt == null || structure.completedAt != tick) continue
+            val burned = chronicle.events.lastOrNull { it.kind == WorldEventKind.HomeBurned && it.subject == structure.id }?.ref
+            chronicle = chronicle.record(tick, WorldEventKind.HomeRebuilt, structure.cell, structure.id, structure.siteId, listOfNotNull(burned)).first
+        }
+        return chronicle
     }
 
     private fun advanceLegacy(

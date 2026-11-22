@@ -1,8 +1,12 @@
 package id.branchworld.renderer
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.opengl.GLSurfaceView
+import android.os.Handler
+import android.os.Looper
 import android.view.MotionEvent
+import android.view.PixelCopy
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
@@ -15,11 +19,16 @@ import de.fabmax.kool.platform.KoolContextAndroid
 import de.fabmax.kool.platform.KoolSurfaceView
 import id.branchworld.game.simulation.WorldCamera
 import id.branchworld.game.simulation.WorldRenderSource
+import java.io.ByteArrayOutputStream
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
+import kotlin.coroutines.resume
 import kotlin.math.hypot
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 
 class AndroidDiorama(context: Context) {
     private val appContext = context.applicationContext
@@ -51,6 +60,26 @@ class AndroidDiorama(context: Context) {
 
     fun present(camera: WorldCamera) = controller.present(camera)
 
+    suspend fun capturePng(): ByteArray? = withContext(Dispatchers.Main.immediate) {
+        val surface = AndroidRenderer.kool?.surfaceView ?: return@withContext null
+        if (!controller.active || !controller.foreground.value || controller.status.value != "Island ready" ||
+            !surface.isAttachedToWindow || !surface.holder.surface.isValid
+        ) return@withContext null
+        val frame = surface.holder.surfaceFrame
+        if (frame.width() < 2 || frame.height() < 2) return@withContext null
+        val bitmap = copyPhotoSurface(surface, frame.width(), frame.height()) ?: return@withContext null
+        try {
+            withContext(Dispatchers.Default) {
+                ByteArrayOutputStream().use { stream ->
+                    check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+                    stream.toByteArray()
+                }
+            }
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     @Composable
     fun Hud() = PreviewHud(controller)
 
@@ -66,6 +95,24 @@ class AndroidDiorama(context: Context) {
 
     fun close() { controller.showWorld(null) }
 }
+
+private suspend fun copyPhotoSurface(surface: GLSurfaceView, width: Int, height: Int): Bitmap? =
+    suspendCancellableCoroutine { continuation ->
+        val image = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        try {
+            PixelCopy.request(surface, image, { status ->
+                if (status == PixelCopy.SUCCESS) {
+                    continuation.resume(image) { _, dropped, _ -> dropped?.recycle() }
+                } else {
+                    image.recycle()
+                    continuation.resume(null)
+                }
+            }, Handler(Looper.getMainLooper()))
+        } catch (_: IllegalArgumentException) {
+            image.recycle()
+            continuation.resume(null)
+        }
+    }
 
 // Kool 0.19 creates a single Android backend for the process. The surface holds only
 // the application context and reattaches when the Activity is recreated.

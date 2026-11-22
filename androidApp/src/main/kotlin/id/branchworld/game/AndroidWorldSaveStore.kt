@@ -58,11 +58,16 @@ internal class AndroidWorldSaveStore(directory: File) : WorldSaveStore {
         access.withLock { read(AtomicFile(File(worlds, name)), maxBytes) }
     }
 
-    override suspend fun writeFile(name: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun writeFile(name: String, bytes: ByteArray) = writeNamed(name, bytes, replace = true)
+
+    override suspend fun createFile(name: String, bytes: ByteArray) = writeNamed(name, bytes, replace = false)
+
+    private suspend fun writeNamed(name: String, bytes: ByteArray, replace: Boolean): Boolean = withContext(Dispatchers.IO) {
         require(SaveFileName.matches(name))
         access.withLock {
             worlds.mkdirs()
             val file = AtomicFile(File(worlds, name))
+            if (!replace && file.existsOnDisk()) return@withContext false
             val stream = file.startWrite()
             try {
                 stream.write(bytes)

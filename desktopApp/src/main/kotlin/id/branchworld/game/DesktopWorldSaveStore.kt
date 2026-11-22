@@ -5,6 +5,7 @@ import id.branchworld.game.save.SaveFileTooLarge
 import id.branchworld.game.save.WorldSaveStore
 import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.nio.file.LinkOption.NOFOLLOW_LINKS
 import java.nio.file.NoSuchFileException
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption.ATOMIC_MOVE
@@ -65,18 +66,26 @@ internal class DesktopWorldSaveStore(private val directory: Path = applicationDa
         read(worlds.resolve(name), maxBytes)
     }
 
-    override suspend fun writeFile(name: String, bytes: ByteArray): Boolean = withContext(Dispatchers.IO) {
+    override suspend fun writeFile(name: String, bytes: ByteArray) = writeNamed(name, bytes, replace = true)
+
+    override suspend fun createFile(name: String, bytes: ByteArray) = writeNamed(name, bytes, replace = false)
+
+    private suspend fun writeNamed(name: String, bytes: ByteArray, replace: Boolean): Boolean = withContext(Dispatchers.IO) {
         require(SaveFileName.matches(name))
         writer.withLock {
             Files.createDirectories(worlds)
             FileChannel.open(directory.resolve(".island.lock"), CREATE, WRITE).use { channel ->
-                channel.lock().use { replace(worlds.resolve(name), bytes) }
+                channel.lock().use {
+                    val target = worlds.resolve(name)
+                    if (!replace && Files.exists(target, NOFOLLOW_LINKS)) return@withContext false
+                    commitNamed(target, bytes)
+                }
             }
         }
         true
     }
 
-    private fun replace(target: Path, bytes: ByteArray) {
+    private fun commitNamed(target: Path, bytes: ByteArray) {
         val temporary = Files.createTempFile(target.parent, ".world-", ".tmp")
         try {
             temporary.toFile().outputStream().use { stream ->

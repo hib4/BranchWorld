@@ -70,6 +70,7 @@ internal fun WorldCommand.marker(queued: Boolean): InterventionMarker? = when (t
     is SupplementForage -> InterventionMarker(tick, sequence, Intervention.Supplement, region, queued)
     is EndorsePlan -> InterventionMarker(tick, sequence, Intervention.Plan, -1, queued, option)
     is ProtectRegion -> InterventionMarker(tick, sequence, Intervention.Protect, region, queued)
+    is id.branchworld.game.simulation.CutFirebreak -> InterventionMarker(tick, sequence, Intervention.Firebreak, region, queued)
     else -> null
 }
 

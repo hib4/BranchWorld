@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="code_share">Share this world</string>
+    <string name="code_enter">Enter a world code</string>
+    <string name="code_open">Open shared world</string>
+    <string name="code_field">World code</string>
+    <string name="code_copy">Copy code</string>
+    <string name="code_copied">Copied</string>
+    <string name="code_exporting">Making the code…</string>
+    <string name="code_importing">Replaying this world…</string>
+    <string name="code_shared_island">Shared world</string>
+    <string name="code_share_detail">The code recreates the decisions and histories in this world.</string>
+    <string name="code_invalid">This world code could not be read. Check that you copied the whole code.</string>
+    <string name="code_checksum">Some of the code changed. Copy it again and try once more.</string>
+    <string name="code_newer">This world code needs a newer version of BranchWorld.</string>
+    <string name="code_different">This version of BranchWorld replayed a different history from the one in the code.</string>
+    <string name="code_too_large">This history is too large for a world code.</string>
+    <string name="code_unsupported">This history began from an earlier save or contains steering commands that cannot be shared.</string>
+    <string name="code_occupied">Another world uses this save slot. Both worlds have been kept safe.</string>
+    <string name="code_unwritable">The shared world could not be saved. Try again.</string>
+</resources>

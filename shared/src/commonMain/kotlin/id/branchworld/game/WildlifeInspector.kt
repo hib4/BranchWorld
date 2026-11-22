@@ -151,7 +151,7 @@ internal fun WildlifeMoment.description(): String {
 }
 
 @Composable
-private fun Species.label() = stringResource(when (this) {
+internal fun Species.label() = stringResource(when (this) {
     Species.Rabbit -> Res.string.species_rabbit
     Species.Deer -> Res.string.species_deer
     Species.Fox -> Res.string.species_fox

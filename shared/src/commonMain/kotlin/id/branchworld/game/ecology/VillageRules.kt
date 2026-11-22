@@ -129,7 +129,9 @@ internal class VillageRules(
     private fun foundHollowmere(
         world: SettlementWorld, village: VillageState, tick: Long, patches: List<ForagePatch>, springs: List<GridCell>,
     ): SettlementWorld {
-        val site = economy.found(1, tick, 4, patches, springs, emptyList(), VillageLots, lotSpacing = LotSpacing) ?: return world
+        // Ember Season: Sedgewick stands in the pine hollow between Heron Reach's two ridges.
+        val near = if (story == Chapter.EmberSeason) EmberHollow else null
+        val site = economy.found(1, tick, 4, patches, springs, emptyList(), VillageLots, lotSpacing = LotSpacing, near = near) ?: return world
         val bank = checkNotNull(island.drinkingBank(site.center, springs))
         var next = village.nextId
         val structures = buildList {
@@ -519,6 +521,8 @@ internal class VillageRules(
         val choice = when (petition.kind) {
             PetitionKind.Water -> if (site.stone >= 12 || PlanOption.RiverFlats !in options) PlanOption.Well else PlanOption.RiverFlats
             // A hungry village wants farmland; a fed one prefers to keep its woods and build up.
+            // Families who have watched dry storms before clear the woods from their doors.
+            PetitionKind.Ember -> PlanOption.FellAroundHomes
             PetitionKind.Growth -> when {
                 // The pasture is the richest land in reach; families take it unless the Keeper has made it a refuge.
                 PlanOption.Pasture in options && rangesFor()?.let { open(it.wet) } == true -> PlanOption.Pasture
@@ -559,7 +563,8 @@ internal class VillageRules(
                     sites = moved.sites
                     village = checkNotNull(moved.village)
                 }
-                PlanOption.BuildWithin -> Unit
+                // Rules v11: felling around the homes is carried out by the fire rules, which own the woods' stands.
+                PlanOption.BuildWithin, PlanOption.FellAroundHomes, PlanOption.KeepGrove -> Unit
             }
         }
         return world.copy(sites = sites, village = village)
@@ -644,6 +649,7 @@ internal class VillageRules(
                     economy.found(2, 0, 1, patches, springs, world.sites, VillageLots, village.structures.map { it.cell }, LotSpacing) != null
                 ) add(PlanOption.RiverFlats)
             }
+            PetitionKind.Ember -> listOf(PlanOption.FellAroundHomes, PlanOption.KeepGrove)
             PetitionKind.Growth -> buildList {
                 val farmers = village.active(site.id).any { it.trade == Trade.Farmer } && village.active(site.id).size > 1
                 if (world.sites.size == 1 && farmers && pastureSite(world, patches, springs) != null) add(PlanOption.Pasture)
@@ -690,7 +696,7 @@ internal class VillageRules(
         require(village.households.zipWithNext().all { (a, b) -> a.id < b.id })
         require(village.structures.zipWithNext().all { (a, b) -> a.id < b.id })
         require(village.petitions.zipWithNext().all { (a, b) -> a.id < b.id && a.raisedAt <= b.raisedAt })
-        require(village.households.size <= MaximumHouseholds * 2 && village.structures.size <= 24 && village.petitions.size <= 2)
+        require(village.households.size <= MaximumHouseholds * 2 && village.structures.size <= 24 && village.petitions.size <= 3)
         require(village.thirstTurns in 0..16 && village.grazing in 0..4096 && village.chronicle.size <= ChronicleLimit)
         require(village.lastGrazed?.let { it <= tick } != false && village.lastFlood?.let { it <= tick } != false)
         val cells = village.structures.map { it.cell }
@@ -703,12 +709,14 @@ internal class VillageRules(
             require(world.sites.any { it.id == structure.siteId } && structure.startedAt in SettlementTurn..tick)
             require(structure.required in 1..HomeSteps * 2 && structure.progress in 0..structure.required && structure.level in 1..2)
             require(structure.completedAt?.let { it in structure.startedAt..tick } != false)
+            require(structure.burnedAt?.let { it in SettlementTurn..structure.startedAt && structure.kind == StructureKind.Home } != false)
             require((structure.completedAt != null) == (structure.complete || structure.level == 2))
             require(structure.level == 1 || structure.kind == StructureKind.Home)
             val underway = structure.kind == StructureKind.Clearing && !structure.complete
             require(underway || structure.cell !in patchCells)
         }
-        require(world.sites.all { site -> village.structures.count { !it.complete && it.siteId == site.id } <= 1 })
+        // Burned homes wait to be raised again beside, at most, one new piece of work.
+        require(world.sites.all { site -> village.structures.count { !it.complete && it.siteId == site.id && it.burnedAt == null } <= 1 })
         for (household in village.households) {
             require(household.name in HouseholdNames.indices && household.members in 1..MaximumMembers)
             require(household.hardship in 0..LeaveHardship && household.joinedAt in SettlementTurn..tick)
