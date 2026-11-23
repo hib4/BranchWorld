@@ -11,8 +11,14 @@ import androidx.compose.ui.semantics.semantics
 import de.fabmax.kool.KoolConfigJs
 import de.fabmax.kool.createContext
 import de.fabmax.kool.pipeline.backend.gl.RenderBackendGl
-import id.branchworld.game.simulation.WorldCamera
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.viewport.WorldViewport
+import id.branchworld.renderer.camera.PreviewController
+import id.branchworld.renderer.camera.ViewportStatus
+import id.branchworld.renderer.hud.PreviewHud
+import id.branchworld.renderer.input.pointerCameraInput
+import id.branchworld.renderer.scene.DioramaSession
+import id.branchworld.simulation.projection.WorldCamera
+import id.branchworld.simulation.projection.WorldRenderSource
 import kotlinx.browser.document
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
@@ -28,17 +34,17 @@ import kotlin.coroutines.resume
  * Compose canvas, so every HUD element stays on top while the world fills the window. Pointer and key
  * input arrive through Compose and drive the same [PreviewController] as Desktop.
  */
-class WebDiorama(private val canvasId: String = DefaultCanvasId) {
+class WebDiorama(private val canvasId: String = DefaultCanvasId) : WorldViewport {
     private val controller = PreviewController()
     private var canvas: HTMLCanvasElement? = null
     private var started = false
 
     @Composable
-    fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
-        SideEffect { controller.showWorld(projection) }
+    override fun Viewport(modifier: Modifier, world: WorldRenderSource?) {
+        SideEffect { controller.showWorld(world) }
         LaunchedEffect(Unit) { start() }
         Box(modifier.onSizeChanged { controller.resize(it.width, it.height) }) {
-            if (projection != null) {
+            if (world != null) {
                 Box(Modifier.matchParentSize().pointerCameraInput(controller).semantics {
                     contentDescription = "Island camera. Drag to turn, two fingers or Shift-drag to pan, " +
                         "scroll or pinch to zoom. Arrow keys orbit, Shift and arrow keys pan, plus and minus zoom, Home resets the view."
@@ -47,17 +53,17 @@ class WebDiorama(private val canvasId: String = DefaultCanvasId) {
         }
     }
 
-    fun present(camera: WorldCamera) = controller.present(camera)
+    override fun present(camera: WorldCamera) = controller.present(camera)
 
     @Composable
-    fun Hud() = PreviewHud(controller)
+    override fun Hud() = PreviewHud(controller)
 
     fun foreground(visible: Boolean) { controller.foreground.value = visible }
 
     /** A PNG of the current frame, or null while the island is still loading. */
-    suspend fun capturePng(): ByteArray? {
+    override suspend fun capturePng(): ByteArray? {
         val target = canvas ?: return null
-        if (!controller.active || controller.status.value != "Island ready" || target.width < 2 || target.height < 2) return null
+        if (!controller.readyForPhoto || target.width < 2 || target.height < 2) return null
         val blob = suspendCancellableCoroutine<Blob?> { continuation ->
             target.toBlob({ continuation.resume(it) }, "image/png")
         } ?: return null
@@ -69,14 +75,14 @@ class WebDiorama(private val canvasId: String = DefaultCanvasId) {
         started = true
         val target = document.getElementById(canvasId) as? HTMLCanvasElement
         if (target == null) {
-            controller.status.value = "Renderer unavailable. Reload the page to try again."
+            controller.status.value = ViewportStatus.Failed("Renderer unavailable. Reload the page to try again.")
             return
         }
         // Kool asks the canvas for "webgl2" again and receives this same context. Creating it here first
         // keeps the drawing buffer for photos and lets an unsupported browser show a message instead of an alert.
         val gl = target.getContext("webgl2", WebGlOptions)
         if (gl == null) {
-            controller.status.value = "This browser cannot draw the island. Try a current Chrome, Edge, Firefox or Safari."
+            controller.status.value = ViewportStatus.Failed("This browser cannot draw the island. Try a current Chrome, Edge, Firefox or Safari.")
             return
         }
         canvas = target
@@ -93,7 +99,7 @@ class WebDiorama(private val canvasId: String = DefaultCanvasId) {
                 DioramaSession(context, controller)
                 context.run()
             } catch (error: Throwable) {
-                controller.status.value = "Renderer unavailable. Reload the page to try again."
+                controller.status.value = ViewportStatus.Failed("Renderer unavailable. Reload the page to try again.")
                 console.error("BranchWorld renderer could not start", error)
             }
         }

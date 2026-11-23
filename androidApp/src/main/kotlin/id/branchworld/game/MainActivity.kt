@@ -8,6 +8,12 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
+import id.branchworld.android.photo.AndroidWorldPhotos
+import id.branchworld.android.sound.AndroidWorldSounds
+import id.branchworld.android.storage.AndroidWorldSaveStore
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.HostShell
+import id.branchworld.game.ui.app.App
 import id.branchworld.renderer.AndroidDiorama
 
 class MainActivity : ComponentActivity() {
@@ -15,25 +21,22 @@ class MainActivity : ComponentActivity() {
     private val sounds by lazy { AndroidWorldSounds(applicationContext) }
     private val saveStore by lazy { AndroidWorldSaveStore(filesDir) }
     private val photos by lazy { AndroidWorldPhotos(this) }
+    private val services by lazy {
+        AppServices(
+            viewport = renderer,
+            saveStore = saveStore,
+            sounds = sounds,
+            photos = photos,
+            shell = HostShell(backHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) }),
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
 
         setContent {
-            App(
-                viewport = { modifier, projection -> renderer.Viewport(modifier, projection) },
-                viewportHud = { renderer.Hud() },
-                viewportCamera = renderer::present,
-                registerBackHandler = { enabled, onBack -> BackHandler(enabled = enabled, onBack = onBack) },
-                saveStore = saveStore,
-                playSound = sounds::play,
-                setAmbience = sounds::setAmbience,
-                savePhoto = { moment ->
-                    val png = renderer.capturePng()
-                    if (png == null) PhotoResult.ViewNotReady else photos.save(png, moment)
-                },
-            )
+            App(services)
         }
     }
 

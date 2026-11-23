@@ -18,40 +18,46 @@ import de.fabmax.kool.KoolConfigAndroid
 import de.fabmax.kool.createKoolContext
 import de.fabmax.kool.platform.KoolContextAndroid
 import de.fabmax.kool.platform.KoolSurfaceView
-import id.branchworld.game.simulation.WorldCamera
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.viewport.WorldViewport
+import id.branchworld.renderer.camera.PreviewController
+import id.branchworld.renderer.camera.ViewportStatus
+import id.branchworld.renderer.hud.PreviewHud
+import id.branchworld.renderer.input.Finger
+import id.branchworld.renderer.input.TouchGestureTracker
+import id.branchworld.renderer.scene.DioramaSession
+import id.branchworld.simulation.projection.WorldCamera
+import id.branchworld.simulation.projection.WorldRenderSource
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import javax.microedition.khronos.egl.EGL10
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.egl.EGLContext
 import javax.microedition.khronos.egl.EGLDisplay
 import kotlin.coroutines.resume
-import kotlin.math.hypot
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
 
-class AndroidDiorama(context: Context) {
+class AndroidDiorama(context: Context) : WorldViewport {
     private val appContext = context.applicationContext
     private val controller = AndroidRenderer.controller
 
     @Composable
-    fun Viewport(modifier: Modifier, projection: WorldRenderSource?) {
+    override fun Viewport(modifier: Modifier, world: WorldRenderSource?) {
         AndroidView(
             modifier = modifier.onSizeChanged { controller.resize(it.width, it.height) },
             factory = {
                 try {
                     AndroidRenderer.surface(appContext)
                 } catch (error: IllegalStateException) {
-                    controller.status.value = "Renderer unavailable. Reopen the app to try again."
+                    controller.status.value = ViewportStatus.Failed("Renderer unavailable. Reopen the app to try again.")
                     android.util.Log.e("BranchWorldRenderer", "Could not start the Kool surface", error)
                     View(it)
                 }
             },
             update = { view ->
                 if (view is GLSurfaceView) {
-                    controller.showWorld(projection)
-                    if (projection != null && view.renderMode != GLSurfaceView.RENDERMODE_CONTINUOUSLY) {
+                    controller.showWorld(world)
+                    if (world != null && view.renderMode != GLSurfaceView.RENDERMODE_CONTINUOUSLY) {
                         view.renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
                     }
                 }
@@ -59,11 +65,11 @@ class AndroidDiorama(context: Context) {
         )
     }
 
-    fun present(camera: WorldCamera) = controller.present(camera)
+    override fun present(camera: WorldCamera) = controller.present(camera)
 
-    suspend fun capturePng(): ByteArray? = withContext(Dispatchers.Main.immediate) {
+    override suspend fun capturePng(): ByteArray? = withContext(Dispatchers.Main.immediate) {
         val surface = AndroidRenderer.kool?.surfaceView ?: return@withContext null
-        if (!controller.active || !controller.foreground.value || controller.status.value != "Island ready" ||
+        if (!controller.readyForPhoto ||
             !surface.isAttachedToWindow || !surface.holder.surface.isValid
         ) return@withContext null
         val frame = surface.holder.surfaceFrame
@@ -82,7 +88,7 @@ class AndroidDiorama(context: Context) {
     }
 
     @Composable
-    fun Hud() = PreviewHud(controller)
+    override fun Hud() = PreviewHud(controller)
 
     fun pause() {
         controller.foreground.value = false
@@ -175,71 +181,30 @@ private class ProcessEglContext : GLSurfaceView.EGLContextFactory {
     }
 }
 
+/** Feeds the view's touches to the shared [TouchGestureTracker]. */
 private class CameraTouch(private val controller: PreviewController) : View.OnTouchListener {
-    private var x = 0f
-    private var y = 0f
-    private var span = 0f
-    // A touch is a tap until it travels past the slop, takes a second finger or lasts too long.
-    private var downX = 0f
-    private var downY = 0f
-    private var downAt = 0L
-    private var gesture = false
+    private val tracker = TouchGestureTracker(controller)
 
     override fun onTouch(view: View, event: MotionEvent): Boolean {
         if (!controller.active) return false
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            view.parent?.requestDisallowInterceptTouchEvent(true)
-            downX = event.x
-            downY = event.y
-            downAt = event.eventTime
-            gesture = false
-        }
-        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) gesture = true
-        if (event.actionMasked == MotionEvent.ACTION_CANCEL) gesture = true
-        val slop = ViewConfiguration.get(view.context).scaledTouchSlop
-        if (!gesture && event.actionMasked == MotionEvent.ACTION_MOVE && hypot(event.x - downX, event.y - downY) > slop) gesture = true
-        if (event.actionMasked == MotionEvent.ACTION_UP) {
-            if (!gesture && event.eventTime - downAt < TapMillis) {
-                val radius = TouchPickRadius * view.resources.displayMetrics.density
-                controller.tap(event.x, event.y, view.width.toFloat(), view.height.toFloat(), radius)
+        val lifting = event.actionMasked == MotionEvent.ACTION_POINTER_UP || event.actionMasked == MotionEvent.ACTION_UP
+        val down = (0 until event.pointerCount).filter { !lifting || it != event.actionIndex }
+            .map { Finger(event.getX(it), event.getY(it)) }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                view.parent?.requestDisallowInterceptTouchEvent(true)
+                tracker.press(down, event.eventTime)
             }
-            gesture = false
-        }
-        if (!gesture && event.actionMasked == MotionEvent.ACTION_MOVE) {
-            // Hold the camera still until the finger clearly means to turn it.
-            x = event.x
-            y = event.y
-            return true
-        }
-        val count = event.pointerCount
-        val lifting = event.actionMasked == MotionEvent.ACTION_POINTER_UP
-        val remaining = count - if (lifting) 1 else 0
-        val first = if (lifting && event.actionIndex == 0) 1 else 0
-        val second = (first + 1 until count).firstOrNull { !lifting || event.actionIndex != it }
-        val ax = event.getX(first)
-        val ay = event.getY(first)
-        val bx = second?.let(event::getX) ?: ax
-        val by = second?.let(event::getY) ?: ay
-        val nextX = (ax + bx) / 2
-        val nextY = (ay + by) / 2
-        val nextSpan = hypot(bx - ax, by - ay)
-        if (event.actionMasked == MotionEvent.ACTION_MOVE) {
-            val size = minOf(view.width, view.height).coerceAtLeast(1)
-            val dx = (nextX - x) / size
-            val dy = (nextY - y) / size
-            if (remaining >= 2) {
-                controller.pan(dx, dy)
-                if (span > 0f) controller.zoom(nextSpan / span)
-            } else {
-                controller.orbit(dx, -dy)
+            MotionEvent.ACTION_POINTER_DOWN -> tracker.press(down, event.eventTime)
+            MotionEvent.ACTION_MOVE ->
+                tracker.move(down, view.width, view.height, ViewConfiguration.get(view.context).scaledTouchSlop.toFloat())
+            MotionEvent.ACTION_POINTER_UP, MotionEvent.ACTION_UP -> {
+                val lifted = Finger(event.getX(event.actionIndex), event.getY(event.actionIndex))
+                tracker.release(lifted, down, event.eventTime, view.width, view.height,
+                    TouchGestureTracker.PickRadius * view.resources.displayMetrics.density)
             }
+            MotionEvent.ACTION_CANCEL -> tracker.cancel()
         }
-        x = nextX
-        y = nextY
-        span = nextSpan
         return true
     }
 }
-
-private const val TapMillis = 350L
-private const val TouchPickRadius = 24f

@@ -8,7 +8,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import id.branchworld.game.App
+import id.branchworld.game.ui.app.App
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

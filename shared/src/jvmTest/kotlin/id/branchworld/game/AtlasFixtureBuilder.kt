@@ -1,20 +1,22 @@
 package id.branchworld.game
 
-import id.branchworld.game.ecology.Chapter
-import id.branchworld.game.ecology.Intervention
-import id.branchworld.game.ecology.PlanOption
-import id.branchworld.game.ecology.RangeRulesVersion
-import id.branchworld.game.save.AtlasEntry
-import id.branchworld.game.save.ChapterRecord
-import id.branchworld.game.save.PlayerProfile
-import id.branchworld.game.save.PlayerProfileCodec
-import id.branchworld.game.save.TimelineSaveCodec
-import id.branchworld.game.terrain.IslandGenerator
-import id.branchworld.game.timeline.ChapterOutcome
-import id.branchworld.game.timeline.Timeline
+import id.branchworld.game.data.AtlasEntry
+import id.branchworld.game.data.ChapterRecord
+import id.branchworld.game.domain.IslandSessionKey
+import id.branchworld.game.data.PlayerProfile
+import id.branchworld.game.data.PlayerProfileCodec
+import id.branchworld.game.ui.legacy.Story
+import id.branchworld.simulation.core.RangeRulesVersion
+import id.branchworld.simulation.ecology.Intervention
+import id.branchworld.simulation.ecology.chapters.Chapter
+import id.branchworld.simulation.ecology.settlement.PlanOption
+import id.branchworld.simulation.save.TimelineSaveCodec
+import id.branchworld.simulation.terrain.IslandGenerator
+import id.branchworld.simulation.timeline.ChapterOutcome
+import id.branchworld.simulation.timeline.Timeline
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.test.Test
-import kotlinx.coroutines.runBlocking
 
 /**
  * Builds real histories for capture runs: The Fading Grove played past its recovery with rain and grove branches,

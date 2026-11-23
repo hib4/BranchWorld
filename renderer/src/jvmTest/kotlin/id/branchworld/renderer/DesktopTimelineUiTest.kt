@@ -8,19 +8,21 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import id.branchworld.game.App
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.viewport.worldViewport
+import id.branchworld.game.ui.app.App
+import id.branchworld.simulation.projection.WorldRenderSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -34,7 +36,7 @@ class DesktopTimelineUiTest {
         var viewport: WorldRenderSource? = null
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(viewport = { _, world -> SideEffect { viewport = world } })
+                App(AppServices(viewport = worldViewport { _, world -> SideEffect { viewport = world } }))
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
@@ -72,7 +74,7 @@ class DesktopTimelineUiTest {
         var viewport: WorldRenderSource? = null
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(viewport = { _, world -> SideEffect { viewport = world } })
+                App(AppServices(viewport = worldViewport { _, world -> SideEffect { viewport = world } }))
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }

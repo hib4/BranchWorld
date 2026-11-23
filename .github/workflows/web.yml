@@ -29,7 +29,7 @@ jobs:
 
       # The shared rules must replay identically under Kotlin/JS before a build is published.
       - name: Shared simulation tests on Kotlin/JS
-        run: ./gradlew :shared:jsNodeTest --console=plain
+        run: ./gradlew :simulation:jsNodeTest :shared:jsNodeTest --console=plain
 
       - name: Build the web bundle
         run: ./gradlew :webApp:jsBrowserDistribution --console=plain

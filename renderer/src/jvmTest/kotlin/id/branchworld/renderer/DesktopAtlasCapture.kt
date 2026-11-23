@@ -12,10 +12,9 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
@@ -26,9 +25,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import de.fabmax.kool.KoolConfigJvm
 import de.fabmax.kool.createContext
 import de.fabmax.kool.platform.swing.SwingWindowSubsystem
-import id.branchworld.game.App
-import id.branchworld.game.PhotoResult
-import id.branchworld.game.save.WorldSaveStore
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.photo.PhotoResult
+import id.branchworld.game.platform.storage.WorldSaveStore
+import id.branchworld.game.platform.viewport.worldViewport
+import id.branchworld.game.ui.app.App
+import id.branchworld.renderer.camera.Point3
+import id.branchworld.renderer.camera.PreviewController
+import id.branchworld.renderer.camera.screenPoint
+import id.branchworld.renderer.scene.DioramaSession
+import id.branchworld.renderer.scene.cellPosition
+import id.branchworld.renderer.scene.heightAt
+import kotlinx.coroutines.runBlocking
 import java.awt.Canvas
 import java.io.File
 import javax.imageio.ImageIO
@@ -36,7 +44,6 @@ import javax.swing.JFrame
 import javax.swing.SwingUtilities
 import kotlin.concurrent.thread
 import kotlin.test.Test
-import kotlinx.coroutines.runBlocking
 
 /**
  * Captures the real game at Desktop size: the Kool renderer draws the island offscreen and the actual App composes
@@ -103,8 +110,8 @@ class DesktopAtlasCapture {
                 }
                 setContent {
                     CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                        App(
-                            viewport = { modifier, projection ->
+                        App(AppServices(
+                            viewport = worldViewport(present = controller::present, capturePng = { output.capturePng() }) { modifier, projection ->
                                 SideEffect { controller.showWorld(projection) }
                                 val image by output.frame.collectAsState()
                                 Box(modifier.onSizeChanged {
@@ -114,19 +121,15 @@ class DesktopAtlasCapture {
                                     output.resize(it)
                                 }) { image?.let { Image(it, null, Modifier.matchParentSize(), contentScale = ContentScale.FillBounds) } }
                             },
-                            viewportCamera = controller::present,
                             saveStore = store,
-                            savePhoto = { moment ->
-                                val png = output.capturePng()
-                                if (png == null) PhotoResult.ViewNotReady else {
-                                    val saved = File(evidence, "saved-photo-${moment.tick}.png").apply { writeBytes(png) }
-                                    val picture = requireNotNull(ImageIO.read(saved))
-                                    check(picture.width >= 300 && picture.height >= 300)
-                                    println("Captured ${saved.name} ${picture.width}x${picture.height}")
-                                    PhotoResult.Saved("the verification folder")
-                                }
+                            photos = { png, moment ->
+                                val saved = File(evidence, "saved-photo-${moment.tick}.png").apply { writeBytes(png) }
+                                val picture = requireNotNull(ImageIO.read(saved))
+                                check(picture.width >= 300 && picture.height >= 300)
+                                println("Captured ${saved.name} ${picture.width}x${picture.height}")
+                                PhotoResult.Saved("the verification folder")
                             },
-                        )
+                        ))
                     }
                 }
                 for (step in steps) {

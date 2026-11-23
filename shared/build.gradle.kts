@@ -53,6 +53,7 @@ kotlin {
             implementation(libs.compose.uiTooling)
         }
         commonMain.dependencies {
+            api(project(":simulation"))
             api(libs.kotlinx.coroutinesCore)
             implementation(libs.kotlinx.serializationJson)
             implementation(libs.compose.runtime)

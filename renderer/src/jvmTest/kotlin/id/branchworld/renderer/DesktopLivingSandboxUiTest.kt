@@ -3,7 +3,6 @@ package id.branchworld.renderer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
@@ -17,12 +16,20 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import id.branchworld.game.App
-import id.branchworld.game.ecology.CreatureAction
-import id.branchworld.game.ecology.Species
-import id.branchworld.game.save.WorldSaveStore
-import id.branchworld.game.simulation.WorldCamera
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.storage.WorldSaveStore
+import id.branchworld.game.platform.viewport.worldViewport
+import id.branchworld.game.ui.app.App
+import id.branchworld.renderer.camera.Point3
+import id.branchworld.renderer.camera.PreviewController
+import id.branchworld.renderer.camera.screenPoint
+import id.branchworld.renderer.input.pointerCameraInput
+import id.branchworld.renderer.scene.cellPosition
+import id.branchworld.renderer.scene.heightAt
+import id.branchworld.simulation.ecology.CreatureAction
+import id.branchworld.simulation.ecology.Species
+import id.branchworld.simulation.projection.WorldCamera
+import id.branchworld.simulation.projection.WorldRenderSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -57,8 +64,10 @@ class DesktopLivingSandboxUiTest {
         val store = MemoryStore()
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(
-                    viewport = { modifier, projection ->
+                App(AppServices(viewport = worldViewport(present = {
+                        camera = it
+                        controller.present(it)
+                    }) { modifier, projection ->
                         SideEffect {
                             controller.showWorld(projection)
                             world = projection
@@ -68,13 +77,7 @@ class DesktopLivingSandboxUiTest {
                             height = it.height.toFloat()
                             controller.resize(it.width, it.height)
                         }.testTag("viewport").pointerCameraInput(controller))
-                    },
-                    viewportCamera = {
-                        camera = it
-                        controller.present(it)
-                    },
-                    saveStore = store,
-                )
+                    }, saveStore = store))
             }
         }
         waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("New world").fetchSemanticsNodes().isNotEmpty() }

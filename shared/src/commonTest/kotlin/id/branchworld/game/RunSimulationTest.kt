@@ -1,9 +1,9 @@
 package id.branchworld.game
 
-import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.TestResult
 import kotlinx.coroutines.test.runTest
+import kotlin.time.Duration.Companion.minutes
 
 /**
  * Runs a suspending simulation test on every target, including Kotlin/JS where blocking is impossible.

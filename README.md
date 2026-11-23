@@ -10,7 +10,7 @@ Use the checked-in Gradle wrapper. Its daemon toolchain selects Azul JDK 21. For
 
 ```sh
 ./gradlew :androidApp:assembleDebug :androidApp:lintDebug :desktopApp:assemble
-./gradlew :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest
+./gradlew :simulation:jvmTest :simulation:testAndroidHostTest :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest
 ```
 
 With one emulator or device connected, install and launch the debug APK. Add `-s <serial>` after `adb` when more than one device is connected.
@@ -36,7 +36,7 @@ The browser build is Kotlin/JS (Kool publishes no Wasm target) and draws with We
 ```sh
 ./gradlew :webApp:jsBrowserDevelopmentRun        # opens a development server with live reload
 ./gradlew :webApp:jsBrowserDistribution          # static site in webApp/build/dist/js/productionExecutable
-./gradlew :shared:jsNodeTest :renderer:jsNodeTest # the shared rules and replay fixtures under Kotlin/JS
+./gradlew :simulation:jsNodeTest :shared:jsNodeTest :renderer:jsNodeTest # the rules and replay fixtures under Kotlin/JS
 ```
 
 The distribution uses relative paths, so any static host serves it from any folder. Every push to `main` runs `.github/workflows/web.yml`, which checks the shared rules under Kotlin/JS and publishes the bundle to GitHub Pages. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Worlds save in the browser's IndexedDB; photos go to the browser's downloads.
@@ -82,15 +82,73 @@ adb install build/release/BranchWorld-android-local.apk
 
 **Focus island**, or `Home` in the focused Desktop viewport, returns to the overview. Settings hold sound, Reduce Motion and text size; its developer section holds timeline tick tools.
 
-Run the shared replay fixtures on a connected device with `./gradlew :shared:connectedAndroidDeviceTest`, and the phone walkthrough with `./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=id.branchworld.game.LivingSandboxDeviceTest`.
+Run the replay fixtures on a connected device with `./gradlew :simulation:connectedAndroidDeviceTest`, and the phone walkthrough with `./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=id.branchworld.game.LivingSandboxDeviceTest`.
 
 ## Architecture
 
-- `androidApp`, `desktopApp` and `webApp` own platform startup, input bridges, saving, sound and window, Activity or page lifetime. The iOS app consumes the shared module with a 2D fallback view; it has no 3D renderer yet.
-- `shared/src/commonMain` owns the authoritative simulation and the Compose interface. Living worlds run rules v12 (`ecology/LifeRules.kt`, `ecology/LifeState.kt`): each creature decides from what it could perceive on the previous tick, moves on an eight-way grid with stamina, and draws counter-based random rolls, so the result never depends on processing order. The player's hand is four tick-indexed commands (`PlaceCreature`, `RemoveCreature`, `PlacePlant`, `ClearPlant`), recorded in each history, its saves (schema 10) and its share codes. Weather, wildfire and regrowth run in the same step.
-- `renderer` owns the Kool scene, camera, creature models and platform adapters. Android hosts GLES under Compose; Desktop delivers a Vulkan colour attachment to Compose; the browser draws WebGL 2 on a page canvas beneath a transparent Compose canvas. Desktop and the browser share mouse, touch and keyboard camera input (`renderer/src/skikoMain`). `GroundPicking.kt` turns a click or tap into a ground cell or creature in plain Kotlin, and creatures glide between cells at their own simulated pace.
-- Islands are generated in shared Kotlin from a seed: terrain, drainage, soils, props and walkable ground. Kool builds chunk meshes and instances the bundled trees from a read-only projection.
-- Earlier rule sets remain in the code only so that saves made with them keep replaying exactly.
+BranchWorld follows a layered architecture: each layer depends only on the layers below it, and the deterministic rules sit in a module of their own so the compiler keeps the interface out of them.
+
+```
+androidApp / desktopApp / webApp / iosApp   startup, window or page lifetime, platform adapters
+        │                   │
+    :renderer ──────────► :shared            ui ─► data ─► domain ─► platform (ports)
+                            │
+                       :simulation           deterministic rules, saves and render projections
+```
+
+### `:simulation` — the world's rules (no Compose, no platform code)
+
+| Package | What lives there |
+|---|---|
+| `core` | `GridCell`, `SplitMix64`, `CanonicalWriter`, `CreatureHeading`, and `RulesVersions.kt`: every rule set and world generator a save can name |
+| `terrain` | Island generation, drainage, navigation |
+| `ecology` | World state and the rules of each system: `environment`, `wildlife`, `range`, `life` (rules v12), `fire`, `settlement`, `chronicle`, `chapters` (the crafted chapters), `legacy` (rules v3–v6 animals) |
+| `command` | `WorldCommand` and its tick-ordered queue: the player's acts, recorded in every history |
+| `engine` | `EcologyEngine`: one step applies commands, growth and fire, then hands over to the rules era that finishes it (`finishLivingStep` for v12, `finishEarlierStep` for v3–v11) |
+| `timeline` | Branches, replay, seeking and history browsing |
+| `save` | Save codecs (schemas 1–10) and shareable world codes |
+| `projection` | Read-only poses the renderer and interface draw: `WorldRenderProjection`, `LivingEchoProjection`, `WorldCamera`, `WorldPointer` |
+| `runtime` | `WorldClock`, the coroutine that ticks a world at its chosen speed |
+| `legacy` | Rules v1–v2 (the first walking rabbit) |
+
+Living worlds run rules v12 in `ecology/life`. `LifeRules` runs each step over its collaborators:
+- `LifeGround` holds what the animals perceive, plus movement.
+- `LifePlacement` checks the player's hand.
+- `PreyBehaviour`, `PredatorBehaviour` and `EverydayNeeds` decide what each animal does.
+
+Each creature decides from what it could perceive on the previous tick and draws counter-based random rolls, so the result never depends on processing order. Earlier rule sets stay so that saves made with them keep replaying exactly. Their replay hashes are pinned in the tests, so a refactor that changes any history fails the build.
+
+### `:shared` — the game around the rules
+
+| Layer | What lives there |
+|---|---|
+| `platform` | Ports each host implements, bundled in `AppServices`: `WorldViewport` (3D view), `WorldSoundPlayer`, `PhotoSaver`, `WorldSaveStore`. Also the shared code the hosts reuse: `KeyedWorldSaveStore` over a tiny `BlobStorage`, the save layout (`island-v3.json`, `worlds/<name>`) and `AmbienceGlide` |
+| `domain` | `IslandSessionKey` (which world), autosave and soundscape policy, `WorldInteraction` (what a tap of the hand does), and `session/`. `IslandLoad.Ready` joins one `WorldSessionCore` with role classes: `WorldPlacement`, `HistoryNavigation`, `BranchComparing`, `ChapterControls` |
+| `data` | `WorldRepository` (open, cache, autosave, import), `ProfileRepository`, `PlayerProfile` |
+| `ui` | `app` (`App`, `AppViewModel`, navigation, layout), `theme`, `components`, `home`, `share`, `world` (HUD, panels, inspector, timeline, comparison, echo, history) and `legacy` (the earlier chapters' screens and HUD) |
+
+`App(services, foreground)` is the whole contract with a host. The world screen keeps its momentary state in `WorldScreenState`, and its side effects (clock, taps, sound) live in `WorldEffects`.
+
+### `:renderer` — Kool behind the `WorldViewport` port
+
+| Package | What lives there |
+|---|---|
+| `camera` | `PreviewController` (camera state, picking, `ViewportStatus`), `PreviewCamera`, `GroundPicking`, `FocusFraming` |
+| `input` | `TouchGestureTracker`, shared by Android and the Skiko targets. `pointerCameraInput` handles mouse, wheel and keys on Desktop and the web |
+| `scene` | `DioramaSession` (per-frame orchestration), `IslandScene`, `PineForest`, terrain, water and light. `scene/life` and `scene/effects` hold creatures, villages, fire and weather details |
+| `hud`, `assets`, `diagnostics` | Status and camera reset, the asset registry, frame timing |
+
+`DesktopDiorama` (Vulkan into Compose), `AndroidDiorama` (GLES) and `WebDiorama` (WebGL 2 beneath a transparent Compose canvas) each implement `WorldViewport`. The iOS app has no 3D renderer yet and shows a drawn island.
+
+### Where new code goes
+
+| Change | Where it goes |
+|---|---|
+| A new rule | Its system's package in `:simulation`, behind a new entry in `core/RulesVersions.kt` |
+| A new player act | A `WorldCommand` with an explicit `@SerialName` |
+| What the interface does with a world | `domain/session` |
+| Storage, sound or photos for a platform | A new adapter for an existing port |
+| A screen | Its feature folder under `ui` |
 
 ## Source asset inventory
 

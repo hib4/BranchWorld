@@ -12,9 +12,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import id.branchworld.game.App
-import id.branchworld.game.simulation.WorldCamera
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.viewport.worldViewport
+import id.branchworld.game.ui.app.App
+import id.branchworld.simulation.projection.WorldCamera
+import id.branchworld.simulation.projection.WorldRenderSource
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -31,7 +33,7 @@ class DesktopVillageUiTest {
         var camera = WorldCamera()
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(viewport = { _, world -> SideEffect { viewport = world } }, viewportCamera = { camera = it })
+                App(AppServices(viewport = worldViewport(present = { camera = it }) { _, world -> SideEffect { viewport = world } }))
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }
@@ -55,7 +57,7 @@ class DesktopVillageUiTest {
         waitUntil(timeoutMillis = 15_000) { world.poses.value.tick >= 480L }
         onNodeWithText("Pause").performClick()
         val well = world.poses.value.settlements!!.first().village!!.structures
-        assertTrue(well.any { it.kind == id.branchworld.game.ecology.StructureKind.Well })
+        assertTrue(well.any { it.kind == id.branchworld.simulation.ecology.settlement.StructureKind.Well })
 
         onAllNodesWithText("Hollowmere")[0].performClick()
         waitUntil(timeoutMillis = 5_000) { camera.focus is WorldCamera.Focus.Village }
@@ -73,7 +75,7 @@ class DesktopVillageUiTest {
         var viewport: WorldRenderSource? = null
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(viewport = { _, world -> SideEffect { viewport = world } })
+                App(AppServices(viewport = worldViewport { _, world -> SideEffect { viewport = world } }))
             }
         }
         waitUntil(timeoutMillis = 5_000) { viewport != null }

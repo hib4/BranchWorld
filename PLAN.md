@@ -282,7 +282,9 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 
 **Active phase:** 10 — Living Sandbox: Create, Populate, Observe. Built and verified on Desktop and Android; awaiting human acceptance. Not committed. See Latest Handoff.
 
-**Web (2026-11-23, player request):** BranchWorld also runs in the browser (`webApp`, Kotlin/JS + Kool WebGL 2), verified in Chrome on an Apple M4 at desktop and phone sizes, with `.github/workflows/web.yml` written to publish it to GitHub Pages. This pulls the Phase 14 "evaluate Web" item forward; it does not change Phase 10's scope or acceptance. Not committed. See Latest Handoff → Web.
+**Web (2026-11-23, player request):** BranchWorld also runs in the browser (`webApp`, Kotlin/JS + Kool WebGL 2), verified in Chrome on an Apple M4 at desktop and phone sizes, with `.github/workflows/web.yml` written to publish it to GitHub Pages. This pulls the Phase 14 "evaluate Web" item forward; it does not change Phase 10's scope or acceptance. Committed as `5a90d4a`. See Latest Handoff → Web.
+
+**Architecture refactor (2026-11-23, player request, in progress):** SOLID and layered-architecture clean-up in six reviewed stages; all six stages are done and verified, nothing committed. Player-visible behaviour, saves and replay hashes are unchanged. See Latest Handoff → Architecture refactor.
 
 **Verified foundations:** see §6. Living worlds use **rules v12** and **save schema 10**, adding `life` sections to the state and to each creature only when present, so earlier saves keep their exact bytes and replay hashes. Each world has its own slot (`worlds/world-<n>.json`) beside the player profile.
 
@@ -332,6 +334,11 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | Desktop and web share camera input in `renderer/src/skikoMain` (`pointerCameraInput`), with Android-style multi-touch added | One implementation for mouse, keyboard, wheel and touch on both Skiko targets; desktop mouse behaviour unchanged | Wheel notch normalised per platform (`ScrollNotch`: 1 line on JVM, 100 CSS px in browsers) |
 | Web saves: IndexedDB per file plus a synchronous localStorage write-ahead journal | Browsers abort in-flight IndexedDB transactions on unload; closing a tab is how players leave | Journal cleared only by the write that made it (token match); reads prefer a pending journal |
 | Common tests use `runTest` (`runSimulationTest`) instead of `runBlocking` | `runBlocking` does not exist on Kotlin/JS; the same fixtures now run on JVM, Android host, iOS and JS | 30-minute wall-clock limit for soak fixtures |
+| **The deterministic rules live in their own `:simulation` module** (core, terrain, ecology, command, engine, timeline, save, projection, runtime) | The compiler now keeps Compose and platform code out of the rules; four package cycles removed | Package moves do not change saves: JSON uses property names and explicit `@SerialName`s; hashes use explicit codes |
+| **`:shared` is layered ui → data → domain → platform**; hosts pass one `AppServices` (WorldViewport, WorldSoundPlayer, PhotoSaver, WorldSaveStore) | Replaces 11 loose lambdas in `App()`; each host implements small ports and reuses the shared save layout (`KeyedWorldSaveStore` over `BlobStorage`) | Existing desktop and IndexedDB saves verified to open unchanged |
+| **An open world is one `WorldSessionCore` plus role classes joined by interface delegation** (placement, history navigation, branch comparison, earlier chapters) | Interface segregation without changing any caller; earlier-chapter controls are isolated from living worlds | `IslandLoad.Ready` kept as the composed type |
+| **Earlier story mode stays, isolated in `ui/legacy`, `domain/session/ChapterControls` and `ecology/chapters`** | Player decision during the refactor: keep behaviour, remove it from the living-sandbox code paths | Removal remains a separate product decision |
+| **Rules refactors move code verbatim and must keep every pinned replay hash** | `LifeRules` split into ground, placement, prey, predators and everyday needs; v3–v6 animals in `LegacyCreatureRules`; `advance()` hands each rules era its own finish | All 87 simulation fixtures pass on JVM and JS after each move |
 
 ### Experiment Ledger
 
@@ -354,6 +361,61 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | W-5 Web performance and size | Apple M4, Chrome headless with Metal ANGLE, Cairnwater, 5 rabbits + 1–2 wolves at 8× | 59.5–60.2 fps, p95 16.7–16.8 ms frames at 1440×900 and 390×844@3×; first asset frame 0.2–1.2 s after load; autosave 5–85 ms up to 280 KB. Production download ≈ 9 MB gzip (JS 1.9 MB, Skiko wasm 3.3 MB, models ~4 MB) | KEEP; measure on a mid-range phone and Safari next |
 
 ### Latest Handoff
+
+#### Architecture refactor (SOLID, layered modules)
+
+```text
+STATUS: all 6 stages COMPLETE and verified. Not committed.
+STAGE 1 — :simulation module: terrain, ecology/{environment,wildlife,range,life,fire,settlement,chronicle,chapters},
+  command, engine, legacy (rules v1–2), timeline, save, projection, runtime and core (GridCell, SplitMix64,
+  CanonicalWriter, CreatureHeading, RulesVersions.kt) moved out of :shared with no Compose or platform code. The four
+  package cycles (ecology<->simulation, terrain<->simulation, timeline<->save, timeline->projection) are gone.
+  Declarations used by :shared became public (about 170); the rest stay internal.
+STAGE 2 — ports and data layer in :shared: platform/{AppServices, HostShell, viewport.WorldViewport,
+  sound.WorldSoundPlayer + AmbienceGlide, photo.PhotoSaver + PhotoMeta.fileName, storage.BlobStorage +
+  KeyedWorldSaveStore}; data/{WorldRepository (was IslandSession), ProfileRepository, PlayerProfile}; domain/AmbiencePolicy;
+  AppViewModel. App(services, foreground) replaces 11 lambdas. Desktop/Android/Web dioramas implement WorldViewport;
+  app adapters live in id.branchworld.{android,desktop,web}.{storage,sound,photo} over the shared layout. Dead
+  single-slot save/restore and SaveControls removed.
+BUILDS & TESTS (stage 2): PASS :simulation:jvmTest (87) :simulation:jsNodeTest (82) :shared:jvmTest (26)
+  :shared:jsNodeTest (23) :renderer:jvmTest (30) :renderer:jsNodeTest (6) :desktopApp:test (3) :androidApp:assembleDebug
+  :androidApp:compileDebugAndroidTestKotlin :webApp:jsBrowserDistribution :shared:compileKotlinIosSimulatorArm64.
+  Replay hashes, save bytes and world codes unchanged (same fixtures as before the split).
+COMPATIBILITY: a copy of the real desktop data folder (rules 9, 10, 11, 12 worlds + profile) opens through the new
+  DesktopWorldSaveStore; the production web build opened IndexedDB saves written by the previous build, kept two
+  rabbits placed just before a reload (journal), and downloaded branchworld-271828-139.png (1440x900).
+STAGE 3 — layers inside :shared: platform (ports) <- domain (IslandSessionKey, AutosavePolicy, AmbiencePolicy,
+  WorldInteraction.useHand, session/) <- data (repositories) <- ui/{app,theme,components,home,share,world,legacy}.
+  IslandLoad.Ready is now one WorldSessionCore plus role classes joined by interface delegation: OpenWorld,
+  WorldPlacement, HistoryNavigation, BranchComparing, ChapterControls (rules v8–v11 only). App.kt 972 -> 239 lines:
+  WorldScreenState (saveable state holder), WorldEffects, HomeRoute, WorldScreen, LivingWorldHud, legacy
+  ChapterWorldHud + LegacyGuidance, WorldPanelHost; AppViewModel owns open/autosave/import. Dead code removed:
+  TitleMenu, IslandPicker, islandDescription, Shelf, IslandText. Story mode isolated in ui/legacy, behaviour unchanged.
+BUILDS & TESTS (stage 3): PASS same command set; :shared 30 JVM / 27 JS (WorldInteractionTest added), :simulation
+  87 / 82, :renderer 30 / 6 (all desktop UI flows through the new App), :desktopApp 3; Android, web, iOS builds.
+  Production web build in Chrome: placed a wolf, Look selected and followed a rabbit, reload kept the wolf, pause and
+  photo (branchworld-271828-140.png).
+STAGE 4 — renderer: packages camera/ (PreviewController, PreviewCamera, GroundPicking, FocusFraming, ViewportStatus),
+  input/ (common TouchGestureTracker used by Android CameraTouch and skiko pointerCameraInput; ScrollNotch), hud/,
+  scene/ (DioramaSession now only orchestrates; IslandScene builds and lights the island, PineForest places and clears
+  pines), scene/life/, scene/effects/, assets/, diagnostics/ (FrameTiming, DioramaOutput). ViewportStatus replaces the
+  "Island ready" strings (same visible text); PreviewController.readyForPhoto replaces three copied checks. Desktop,
+  Android and Web dioramas implement WorldViewport. Unused FireDetails.dispose removed (scene release frees its nodes).
+BUILDS & TESTS (stage 4): PASS same command set; :renderer 33 JVM / 9 JS (TouchGestureTrackerTest added); others
+  unchanged. Production web build, Chrome: 1440x900 world and creature follow identical to stage 3, 60.2 fps p95 16.7 ms;
+  390x844@3x touch: one-finger orbit, pinch zoom, and a tap placed a rabbit (4 -> 5) while drags placed nothing.
+STAGE 5 — simulation internals, moved verbatim: LegacyCreatureRules (rules v3–v6 animals) out of EcologyEngine;
+  Fire.kt's chronicle/settlement extensions moved to their owners; LifeRules (1305 lines) split into LifeGround,
+  LifePlacement, PreyBehaviour, PredatorBehaviour, EverydayNeeds, LifeStep and LifeTuning, with LifeRules running the
+  step; EcologyEngine.advance() = beginStep() then finishLivingStep() (v12) or finishEarlierStep() (v3–v11).
+  Every pinned replay hash held after each move (87/87 JVM, 82/82 JS).
+STAGE 6 — README Architecture section rewritten (modules, layers, packages, where new code goes); test commands
+  include :simulation; :simulation gains Android device tests so replay fixtures still run on a phone.
+NOT RUN: Android device tests (CameraTouch now feeds the shared tracker), iOS tests, desktop Kool capture.
+NEXT ACTION: player review of the refactor, then commit it (suggested: one commit per stage is no longer possible;
+  commit as one "Architecture refactor" change). Then run `./gradlew :androidApp:connectedDebugAndroidTest` on a phone
+  to verify touch, and return to Phase 10's NEXT ACTION below.
+```
 
 #### Web (Kotlin/JS + WebGL 2, GitHub Pages)
 

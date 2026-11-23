@@ -13,6 +13,10 @@ import de.fabmax.kool.scene.Scene
 import de.fabmax.kool.util.Uint8Buffer
 import de.fabmax.kool.util.releaseWith
 import de.fabmax.kool.util.useRaw
+import id.branchworld.renderer.camera.PreviewController
+import id.branchworld.renderer.camera.ViewportStatus
+import id.branchworld.renderer.diagnostics.DioramaOutput
+import id.branchworld.renderer.diagnostics.FrameTiming
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,7 +36,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
     private var target: Target? = null
 
     suspend fun capturePng(): ByteArray? {
-        if (!controller.active || !controller.foreground.value || controller.status.value != "Island ready") return null
+        if (!controller.readyForPhoto) return null
         val visible = frame.value ?: return null
         return withContext(Dispatchers.Default) {
             Image.makeFromBitmap(visible.asSkiaBitmap()).use { image ->
@@ -94,7 +98,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
                 Image.makeRaster(info, bytes, pixels.width * 4).use { image ->
                     frame.value = image.toComposeImageBitmap()
                 }
-                if (!current.reported && controller.status.value == "Island ready") {
+                if (!current.reported && controller.status.value == ViewportStatus.Ready) {
                     current.reported = true
                     val elapsed = controller.enteredAt.value?.elapsedNow()?.inWholeMilliseconds
                     println("BranchWorldRenderer composeAssetFrameMs=$elapsed viewport=${pixels.width}x${pixels.height}")
@@ -105,7 +109,7 @@ internal class DesktopFrameOutput(private val controller: PreviewController) : D
             } catch (error: Exception) {
                 if (target !== current) return@launch
                 current.failed = true
-                controller.status.value = "Could not display the rendered island"
+                controller.status.value = ViewportStatus.Failed("Could not display the rendered island")
                 error.printStackTrace()
             }
         }

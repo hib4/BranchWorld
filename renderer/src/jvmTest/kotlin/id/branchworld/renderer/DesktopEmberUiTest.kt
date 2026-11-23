@@ -13,9 +13,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import id.branchworld.game.App
-import id.branchworld.game.save.WorldSaveStore
-import id.branchworld.game.simulation.WorldRenderSource
+import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.storage.WorldSaveStore
+import id.branchworld.game.platform.viewport.worldViewport
+import id.branchworld.game.ui.app.App
+import id.branchworld.simulation.projection.WorldRenderSource
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -31,7 +33,7 @@ class DesktopEmberUiTest {
         val store = ProfileStore()
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(saveStore = store, viewport = { _, world -> SideEffect { viewport = world } })
+                App(AppServices(viewport = worldViewport { _, world -> SideEffect { viewport = world } }, saveStore = store))
             }
         }
         developerMode()
@@ -68,7 +70,7 @@ class DesktopEmberUiTest {
         var viewport: WorldRenderSource? = null
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
-                App(saveStore = ProfileStore(), viewport = { _, world -> SideEffect { viewport = world } })
+                App(AppServices(viewport = worldViewport { _, world -> SideEffect { viewport = world } }, saveStore = ProfileStore()))
             }
         }
         developerMode()
