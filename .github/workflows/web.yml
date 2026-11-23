@@ -18,7 +18,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      # The .glb models are stored in Git LFS; without this the site would ship 130-byte pointer files.
       - uses: actions/checkout@v4
+        with:
+          lfs: true
 
       - uses: actions/setup-java@v4
         with:
@@ -33,6 +36,13 @@ jobs:
 
       - name: Build the web bundle
         run: ./gradlew :webApp:jsBrowserDistribution --console=plain
+
+      - name: Check that no Git LFS pointers are published
+        run: |
+          if grep -rl --include='*.glb' 'git-lfs.github.com/spec' webApp/build/dist/js/productionExecutable/assets; then
+            echo "These assets are Git LFS pointers, not models" >&2
+            exit 1
+          fi
 
       - uses: actions/upload-pages-artifact@v3
         with:

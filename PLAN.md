@@ -521,7 +521,10 @@ KNOWN GAPS:
      gesture rules; a shared gesture tracker was planned but not extracted, to leave Android untouched.
   4. Continue opens a world paused (all platforms); placements made while paused persist through ON_STOP autosave or
      the journal, not a periodic save.
-  5. The Pages workflow has not run; Linux CI configuration with the Android plugin is unverified.
+  5. RESOLVED (2026-11-23): Pages now publishes; Linux CI builds the bundle. The first deploy shipped the .glb models
+     as 130-byte Git LFS pointers (checkout without `lfs: true`), so the site showed "Island assets could not load"
+     with no pines or animals. The workflow now checks out with `lfs: true` and fails if any published .glb is an LFS
+     pointer. Guard checked locally both ways; the fixed workflow has not run on CI until the next push.
 NEXT ACTION: Commit and push to main, set Pages -> Source to GitHub Actions, and confirm the workflow publishes
   https://hib4.github.io/BranchWorld/. Then open it in Safari and on a real phone and fix what differs. Phase 10's
   NEXT ACTION below is unchanged.
