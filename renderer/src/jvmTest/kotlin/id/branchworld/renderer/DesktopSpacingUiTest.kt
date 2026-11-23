@@ -23,9 +23,9 @@ class DesktopSpacingUiTest {
                 override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
             }
             setContent { CompositionLocalProvider(LocalLifecycleOwner provides owner) { App() } }
-            waitUntil(timeoutMillis = 10_000) { runCatching { onNodeWithText("Stories").fetchSemanticsNode() }.isSuccess }
-            // The Stories block's left edge: the screen gutter plus the shelf's own 10 dp padding.
-            inset = onNodeWithText("Stories").fetchSemanticsNode().boundsInRoot.left / density.density
+            waitUntil(timeoutMillis = 10_000) { runCatching { onNodeWithText("My worlds").fetchSemanticsNode() }.isSuccess }
+            // The My worlds block's left edge: the screen gutter plus the shelf's own 10 dp padding.
+            inset = onNodeWithText("My worlds").fetchSemanticsNode().boundsInRoot.left / density.density
         }
         return inset
     }

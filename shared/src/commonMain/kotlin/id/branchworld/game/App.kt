@@ -55,6 +55,15 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.viewmodel.compose.viewModel
+import id.branchworld.game.save.AtlasEntry
+import id.branchworld.game.ecology.DayLength
+import id.branchworld.game.ecology.LifeRulesVersion
+import id.branchworld.game.simulation.PlaceTool
+import id.branchworld.game.ecology.PlacementCheck
+import id.branchworld.game.simulation.PlacementPreview
+import id.branchworld.game.terrain.WatershedWorldgenVersion
+import id.branchworld.game.simulation.WorldPick
+import id.branchworld.game.ecology.WorldStart
 import branchworld.shared.generated.resources.Res
 import branchworld.shared.generated.resources.history_title
 import branchworld.shared.generated.resources.*
@@ -96,7 +105,7 @@ private class WorldSession : ViewModel() {
 }
 
 
-private enum class WorldPanel { Inspect, Grove, Village, Timeline, Diagnostics, Settings }
+private enum class WorldPanel { Inspect, Grove, Village, Timeline, Diagnostics, Settings, Moments }
 private enum class Overlay { Pause, Photo, Closing }
 
 @OptIn(FlowPreview::class)
@@ -125,6 +134,13 @@ fun App(
     var focus by remember { mutableStateOf<WorldCamera.Focus?>(null) }
     var focusRequest by remember { mutableIntStateOf(0) }
     var shapeSites by remember { mutableStateOf<List<GroundPoint>>(emptyList()) }
+    // Rules v12: the player's hand in a living world.
+    var toolName by rememberSaveable { mutableStateOf(PlaceTool.Rabbit.name) }
+    val tool = PlaceTool.valueOf(toolName)
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var handNote by remember { mutableStateOf<String?>(null) }
+    var handNoteAt by remember { mutableIntStateOf(0) }
+    var pastPick by remember { mutableStateOf<WorldPick?>(null) }
     val requestFocus: (WorldCamera.Focus) -> Unit = {
         focus = it
         focusRequest++
@@ -148,6 +164,7 @@ fun App(
     val islandKey = state.island
     var comparisonDetailsOpen by rememberSaveable(state.terrain) { mutableStateOf(false) }
     val session = (load as? IslandLoad.Ready)?.takeIf { it.key == islandKey }
+    val living = session?.key?.living == true
     val comparison = session?.comparison?.collectAsStateWithLifecycle()?.value
     val pose = session?.world?.poses?.collectAsStateWithLifecycle()?.value
     val clock = session?.clock
@@ -274,6 +291,33 @@ fun App(
             }
         }
     }
+    val noteSink: (String) -> Unit = { handNote = it; handNoteAt++ }
+    val messages = HandMessages.current()
+    LaunchedEffect(session, living, tool, isWorld) {
+        val island = session ?: return@LaunchedEffect
+        if (!living || !isWorld) return@LaunchedEffect
+        island.world.pointer.taps.collect { pick ->
+            if (overlayName != null || comparison != null) return@collect
+            when {
+                tool == PlaceTool.Inspect -> {
+                    selectedId = pick.creatureId
+                    pick.creatureId?.let { requestFocus(WorldCamera.Focus.Creature(it)) }
+                }
+                tool == PlaceTool.Eraser -> when (val outcome = island.erase(pick)) {
+                    PlaceOutcome.Placed -> if (soundEnabled) playSound?.invoke(WorldSound.UiSelect)
+                    PlaceOutcome.ViewingPast -> pastPick = pick
+                    else -> if (outcome is PlaceOutcome.Rejected && pick.creatureId == null) noteSink(messages.erase)
+                }
+                pick.ground == null -> noteSink(messages.of(if (pick.water) PlacementCheck.Water else PlacementCheck.Unreachable, tool))
+                else -> when (val outcome = island.place(tool, checkNotNull(pick.ground))) {
+                    PlaceOutcome.Placed -> if (soundEnabled) playSound?.invoke(if (tool.species != null) WorldSound.UiConfirm else WorldSound.Grove)
+                    PlaceOutcome.ViewingPast -> pastPick = pick
+                    PlaceOutcome.Busy -> noteSink(messages.busy)
+                    is PlaceOutcome.Rejected -> noteSink(messages.of(outcome.check, tool))
+                }
+            }
+        }
+    }
     LaunchedEffect(session, pose?.branchId?.takeIf { comparison == null }, comparison != null) {
         focus = null
         if (comparison == null) comparisonDetailsOpen = false
@@ -282,14 +326,37 @@ fun App(
     if (creatureFocus != null && pose?.creatures?.none { it.id == creatureFocus.id } == true) {
         LaunchedEffect(creatureFocus) { focus = null }
     }
-    val cameraRequest = WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest, targetSites = shapeSites)
+    val hover = session?.world?.pointer?.hover?.collectAsStateWithLifecycle()?.value
+    val placement = if (living && isWorld && tool.places && overlay == null) hover?.ground?.let { ground ->
+        PlacementPreview(ground, tool, remember(ground, tool, pose?.tick) { session.placementCheck(tool, ground) } == PlacementCheck.Ok)
+    } else null
+    val selected = selectedId?.takeIf { id -> pose?.creatures?.any { it.id == id } == true }
+    val cameraRequest = WorldCamera(focus, reducedMotion, opening = !isWorld, focusRequest = focusRequest, targetSites = shapeSites,
+        placement = placement, selected = selected)
     SideEffect { viewportCamera(cameraRequest) }
+    val noteText = handNote
+    LaunchedEffect(noteText, handNoteAt) {
+        if (noteText != null) {
+            delay(2_600)
+            handNote = null
+        }
+    }
 
     fun enter(key: IslandSessionKey, start: Boolean) {
         showPanel(null)
         overlayName = null
         state = state.selectIsland(key).openWorld()
         autoStart = start
+    }
+    fun createWorld(seed: Long, start: WorldStart, name: String) {
+        val number = profile?.nextWorld ?: 1
+        val slot = "world-$number.json"
+        updateProfile {
+            it.copy(nextWorld = number + 1).visit(AtlasEntry(slot, seed, WatershedWorldgenVersion, LifeRulesVersion, name = name, start = start.code))
+        }
+        selectedId = null
+        toolName = PlaceTool.Rabbit.name
+        enter(IslandSessionKey.living(seed, slot, start), start = true)
     }
     val importCode: (suspend (String) -> WorldCodeImport)? = saveStore?.let { store ->
         { code -> islands.importCode(code, store) }
@@ -352,8 +419,13 @@ fun App(
                     .safeDrawingPadding().padding(if (sideIntroduction) 24.dp else spacing.edge(16.dp))
                 val current = profile ?: PlayerProfile()
                 when (state.screen) {
-                    HomeScreen.Title -> TitleMenu(current, profileReady && !failed, ::enter,
+                    HomeScreen.Title -> LivingTitleMenu(current, profileReady && !failed, onContinue = { enter(it.key(), start = false) },
                         onScreen = { state = state.show(it) }, modifier = Modifier.matchParentSize().safeDrawingPadding())
+                    HomeScreen.NewWorld -> NewWorldScreen(onCreate = ::createWorld, onBack = { state = state.show(HomeScreen.Title) },
+                        modifier = page.widthIn(max = 640.dp))
+                    HomeScreen.Worlds -> WorldsScreen(current, onOpen = { enter(it.key(), start = false) },
+                        onNew = { state = state.show(HomeScreen.NewWorld) }, onBack = { state = state.show(HomeScreen.Title) },
+                        modifier = page.widthIn(max = 600.dp), onImportCode = importCode, onOpenCode = ::openCode)
                     HomeScreen.Settings -> Unit
                     HomeScreen.Stories -> StoriesScreen(current, onBegin = { enter(it.key, start = true) },
                         onBack = { state = state.show(HomeScreen.Title) }, modifier = page.widthIn(max = 740.dp))
@@ -410,6 +482,74 @@ fun App(
                     result = photoResult,
                     modifier = Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(12.dp)),
                 )
+            } else if (isWorld && session != null && living) {
+                if (comparison == null && overlay == null) {
+                    LivingTopBoard(title(session, profile), pose, wide,
+                        Modifier.align(Alignment.TopStart).safeDrawingPadding().padding(spacing.edge(12.dp)))
+                    if (viewportHud != null && (!sidePanel || panel == null)) {
+                        Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(12.dp))
+                            .widthIn(max = if (wide) 265.dp else 124.dp)) { viewportHud() }
+                    }
+                }
+                val card = selected?.let { id -> pose?.creatures?.firstOrNull { it.id == id } }
+                if (comparison == null && overlay == null && panel == null) {
+                    Column(Modifier.align(Alignment.BottomStart).safeDrawingPadding().padding(spacing.edge(10.dp)),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        pastPick?.let {
+                            PastEditPrompt(((pose?.tick ?: 0) / DayLength + 1).toInt(), onBranch = {
+                                val view = timelineView
+                                val name = messages.experiment((view?.branches?.size ?: 1))
+                                pastPick = null
+                                if (session.fork(name)) {
+                                    if (soundEnabled) playSound?.invoke(WorldSound.Fork)
+                                    if (tool == PlaceTool.Eraser) session.erase(it) else it.ground?.let { ground -> session.place(tool, ground) }
+                                }
+                            }, onNow = {
+                                pastPick = null
+                                operations.launch { view(session)?.let { v -> session.switchBranch(v.branchId) } }
+                            })
+                        }
+                        if (card != null) {
+                            val following = (focus as? WorldCamera.Focus.Creature)?.id == card.id
+                            CreatureCard(card, checkNotNull(pose).tick, pose.life?.packs?.firstOrNull { it.id == card.life?.packId }?.members?.size ?: 1,
+                                following, canRemove = timelineView?.editsAllowed == true,
+                                onFollow = { if (following) focus = null else requestFocus(WorldCamera.Focus.Creature(card.id)) },
+                                onRemove = {
+                                    when (session.erase(WorldPick(card.ground, creatureId = card.id))) {
+                                        PlaceOutcome.ViewingPast -> pastPick = WorldPick(card.ground, creatureId = card.id)
+                                        else -> selectedId = null
+                                    }
+                                },
+                                onClose = { selectedId = null; focus = null })
+                        }
+                        val note = handNote ?: if (pose?.life?.census?.values?.sum() == 0 && profile?.seen("living-hand") != true)
+                            ToolHint(tool) else null
+                        note?.let { HandNote(it) }
+                        Board(padding = if (tightDock) 4.dp else 6.dp, depth = 4.dp) {
+                            val playback by session.clock.playback.collectAsStateWithLifecycle()
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                TimeControls(playback.playing, playback.speed, enabled = timelineView?.seeking != true,
+                                    onToggle = session.clock::togglePlaying, onSpeed = session.clock::setSpeed)
+                                PlacePalette(tool, compact = !wide) {
+                                    toolName = it.name
+                                    if (it != PlaceTool.Inspect) updateProfile { p -> p.see("living-hand") }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    PegButton(GameIcons.Book, stringResource(Res.string.moments_title), { showPanel(WorldPanel.Moments) })
+                                    PegButton(GameIcons.Branches, stringResource(Res.string.open_timeline), { showPanel(WorldPanel.Timeline) })
+                                    PegButton(GameIcons.Menu, stringResource(Res.string.world_menu), {
+                                        clock?.pause()
+                                        overlayName = Overlay.Pause.name
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+                if (comparison != null) {
+                    ComparisonOverlay(comparison, Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)),
+                        diagnostics = diagnostics)
+                }
             } else if (isWorld && session != null) {
                 val state0 = session.clock.state
                 val paint = chapterPaint(session.chapter, session.key.sandbox)
@@ -611,7 +751,8 @@ fun App(
                         showPanel(null)
                     },
                     onSettings = { overlayName = null; showPanel(WorldPanel.Settings) },
-                    onAtlas = { leaveWorld(); state = state.show(HomeScreen.Atlas) },
+                    onAtlas = { leaveWorld(); state = state.show(if (living) HomeScreen.Worlds else HomeScreen.Atlas) },
+                    atlasLabel = stringResource(if (living) Res.string.menu_my_worlds else Res.string.menu_atlas),
                     onTitle = { leaveWorld() },
                     onDiagnostics = { overlayName = null; showPanel(WorldPanel.Diagnostics) },
                     modifier = Modifier.align(Alignment.Center).safeDrawingPadding().padding(spacing.edge(16.dp)).heightIn(max = height - 32.dp),
@@ -751,6 +892,10 @@ private fun PanelContent(
             }
         }
         WorldPanel.Settings -> Unit
+        WorldPanel.Moments -> HistoryBoard(island, bookmarks, onVisit, onForget) { ground ->
+            closePanel()
+            requestFocus(WorldCamera.Focus.WildlifeLocation(ground))
+        }
     }
 }
 
@@ -786,4 +931,37 @@ private fun WorldPanel.title(chapter: Chapter?, shaping: Boolean): StringResourc
     WorldPanel.Timeline -> Res.string.open_timeline
     WorldPanel.Diagnostics -> Res.string.diagnostics_title
     WorldPanel.Settings -> Res.string.settings_title
+    WorldPanel.Moments -> Res.string.moments_title
+}
+
+/** A living world's own name, or its island's. */
+@Composable
+private fun title(session: IslandLoad.Ready, profile: PlayerProfile?): String =
+    profile?.atlas?.firstOrNull { it.slot == session.key.slot }?.name?.takeIf { it.isNotBlank() }
+        ?: stringResource(islandTitle(session.key.terrain))
+
+private fun view(session: IslandLoad.Ready): TimelineView? = session.timelineView.value
+
+/** Words the tap handler needs outside composition, read once per composition. */
+private class HandMessages(
+    val erase: String,
+    val busy: String,
+    private val checks: Map<Pair<PlacementCheck, PlaceTool>, String>,
+    private val experimentFormat: (Int) -> String,
+) {
+    fun of(check: PlacementCheck, tool: PlaceTool) = checks[check to tool] ?: checks[check to PlaceTool.Rabbit].orEmpty()
+    fun experiment(number: Int) = experimentFormat(number)
+
+    companion object {
+        @Composable
+        fun current(): HandMessages {
+            val checks = buildMap {
+                for (check in PlacementCheck.entries) for (tool in PlaceTool.entries) put(check to tool, placementMessage(check, tool))
+            }
+            val format = stringResource(Res.string.experiment_name, 999)
+            return HandMessages(stringResource(Res.string.tool_hint_erase), stringResource(Res.string.place_busy), checks) { n ->
+                format.replace("999", n.toString())
+            }
+        }
+    }
 }

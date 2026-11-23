@@ -17,6 +17,18 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.species_deer_plural
+import branchworld.shared.generated.resources.species_foxes
+import branchworld.shared.generated.resources.species_rabbits
+import branchworld.shared.generated.resources.species_wolf
+import branchworld.shared.generated.resources.species_wolves
+import branchworld.shared.generated.resources.wildlife_alert
+import branchworld.shared.generated.resources.wildlife_court
+import branchworld.shared.generated.resources.wildlife_dig
+import branchworld.shared.generated.resources.wildlife_howl
+import branchworld.shared.generated.resources.wildlife_placed
+import branchworld.shared.generated.resources.wildlife_removed
+import branchworld.shared.generated.resources.wildlife_sleep
 import branchworld.shared.generated.resources.animal_drinking
 import branchworld.shared.generated.resources.animal_eating
 import branchworld.shared.generated.resources.animal_idle
@@ -146,6 +158,8 @@ internal fun WildlifeMoment.description(): String {
         WildlifeMilestone.Caught -> Res.string.wildlife_caught
         WildlifeMilestone.Scarcity -> Res.string.wildlife_scarcity
         WildlifeMilestone.OldAge -> Res.string.wildlife_age
+        WildlifeMilestone.Placed -> Res.string.wildlife_placed
+        WildlifeMilestone.Removed -> Res.string.wildlife_removed
     }, subject)
     return stringResource(Res.string.wildlife_history_line, tick / DayLength + 1, action)
 }
@@ -155,6 +169,15 @@ internal fun Species.label() = stringResource(when (this) {
     Species.Rabbit -> Res.string.species_rabbit
     Species.Deer -> Res.string.species_deer
     Species.Fox -> Res.string.species_fox
+    Species.Wolf -> Res.string.species_wolf
+})
+
+@Composable
+internal fun Species.plural() = stringResource(when (this) {
+    Species.Rabbit -> Res.string.species_rabbits
+    Species.Deer -> Res.string.species_deer_plural
+    Species.Fox -> Res.string.species_foxes
+    Species.Wolf -> Res.string.species_wolves
 })
 
 @Composable
@@ -180,13 +203,18 @@ private fun CreaturePose.activity(): String = stringResource(when (action) {
         else -> Res.string.animal_walking
     }
     CreatureAction.Idle -> Res.string.animal_idle
+    CreatureAction.Alert -> Res.string.wildlife_alert
+    CreatureAction.Howling -> Res.string.wildlife_howl
+    CreatureAction.Sleeping -> Res.string.wildlife_sleep
+    CreatureAction.Digging -> Res.string.wildlife_dig
+    CreatureAction.Courting -> Res.string.wildlife_court
 })
 
 private val Losses = setOf(WildlifeMilestone.Caught, WildlifeMilestone.Scarcity, WildlifeMilestone.OldAge)
 private val Founders = listOf("Clover", "Bramble", "Pippin", "Thistle", "Alder", "Wren", "Fern", "Russet", "Ember")
 private val Stems = listOf("Ash", "Beech", "Birch", "Briar", "Brook", "Fawn", "Frost", "Hazel", "Lark", "Meadow", "Mist", "Moss", "Rain", "Reed", "Rowan", "Willow")
 private val Endings = listOf("bud", "foot", "leaf", "light", "root", "spring", "step", "tail")
-private fun wildlifeName(id: Long): String {
+internal fun wildlifeName(id: Long): String {
     if (id in 1L..Founders.size.toLong()) return Founders[id.toInt() - 1]
     val index = (id - Founders.size - 1).coerceAtLeast(0)
     return Stems[(index % Stems.size).toInt()] + Endings[(index / Stems.size % Endings.size).toInt()]

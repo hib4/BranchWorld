@@ -72,6 +72,7 @@ internal class LocalDetails(scene: Scene, private val terrain: TerrainMap) {
                             Species.Rabbit -> 0.16f
                             Species.Deer -> 0.21f
                             Species.Fox -> 0.19f
+                            Species.Wolf -> 0.23f
                         }
                         val bodyScale = if (world.wildlife != null) WildlifeBodyScale else 1f
                         instance(onGround(ground, radius * bodyScale * if (juvenile) 0.73f else 1f))

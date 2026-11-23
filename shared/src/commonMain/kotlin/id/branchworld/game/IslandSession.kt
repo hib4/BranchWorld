@@ -1,6 +1,12 @@
 package id.branchworld.game
 
 import id.branchworld.game.ecology.EcologyState
+import id.branchworld.game.ecology.PlacementCheck
+import id.branchworld.game.ecology.PlantKind
+import id.branchworld.game.ecology.Species
+import id.branchworld.game.simulation.GridCell
+import id.branchworld.game.simulation.PlaceTool
+import id.branchworld.game.simulation.WorldPick
 import id.branchworld.game.ecology.Intervention
 import id.branchworld.game.ecology.PlanOption
 import id.branchworld.game.ecology.InterventionResult
@@ -84,9 +90,10 @@ internal class IslandSession {
                 val started = TimeSource.Monotonic.markNow()
                 val terrain = IslandGenerator.generate(key.terrain)
                 val generationUs = started.elapsedNow().inWholeMicroseconds
-                val timeline = Timeline.start(terrain, rulesVersion = key.rules, chapter = key.chapter)
+                val timeline = Timeline.start(terrain, rulesVersion = key.rules, chapter = key.chapter,
+                    start = key.start ?: id.branchworld.game.ecology.WorldStart.Empty)
                 println("BranchWorldTerrain seed=${key.terrain.seed} version=${key.terrain.worldgenVersion} rules=${key.rules} hash=${terrain.digest.toString(16)} props=${terrain.propCount} generationUs=$generationUs readyUs=${started.elapsedNow().inWholeMicroseconds}")
-                IslandLoad.Ready(terrain, timeline)
+                IslandLoad.Ready(terrain, timeline, worldSlot = key.worldSlot)
             }
             if (load.value === loading) publish(ready)
         } catch (error: CancellationException) {
@@ -113,7 +120,7 @@ internal class IslandSession {
         return try {
             val started = TimeSource.Monotonic.markNow()
             val world = withContext(Dispatchers.Default) { TimelineSaveCodec.restore(bytes) }
-            val island = IslandLoad.Ready(world.terrain, world.timeline, world.sharedOrigin)
+            val island = IslandLoad.Ready(world.terrain, world.timeline, world.sharedOrigin, key.worldSlot)
             check(island.key == key) { "Slot ${key.slot} holds ${island.key}" }
             println("BranchWorldSave opened slot=${key.slot} branch=${world.timeline.branchId} tick=${island.clock.state.tick} hash=${island.clock.state.canonicalHash()} restoreMs=${started.elapsedNow().inWholeMilliseconds}")
             island
@@ -144,7 +151,7 @@ internal class IslandSession {
             println("BranchWorldSave autosaved slot=${key.slot} branch=${active.id} tick=${active.head.tick} branches=${checkpoint.branches.size} bytes=${bytes.size} saveMs=${started.elapsedNow().inWholeMilliseconds}")
             autosaved.value = active.head.tick
             AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
-                active.head.tick, checkpoint.branches.size, active.name)
+                active.head.tick, checkpoint.branches.size, active.name, start = key.start?.code ?: 0)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -160,7 +167,7 @@ internal class IslandSession {
         val key = island.key
         val view = island.timelineView.value
         return AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
-            view.active.head, view.branches.size, view.active.name)
+            view.active.head, view.branches.size, view.active.name, start = key.start?.code ?: 0)
     }
 
     suspend fun importCode(code: String, store: WorldSaveStore): WorldCodeImport {
@@ -177,7 +184,7 @@ internal class IslandSession {
             val view = island.timelineView.value
             val key = island.key
             WorldCodeImport.Open(AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules,
-                key.story?.code ?: 0, view.active.head, view.branches.size, view.active.name))
+                key.story?.code ?: 0, view.active.head, view.branches.size, view.active.name, start = key.start?.code ?: 0))
         } catch (error: CancellationException) {
             throw error
         } catch (error: WorldCodeError) {
@@ -215,7 +222,7 @@ internal class IslandSession {
                 println("BranchWorldSave imported legacy slot=${key.slot} tick=${active.head.tick} bytes=${bytes.size}")
             }
             AtlasEntry(key.slot, key.terrain.seed, key.terrain.worldgenVersion, key.rules, key.chapter?.code ?: (key.story?.code ?: 0),
-                active.head.tick, checkpoint.branches.size, active.name)
+                active.head.tick, checkpoint.branches.size, active.name, start = key.start?.code ?: 0)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -305,9 +312,15 @@ internal class IslandSession {
 internal sealed interface IslandLoad {
     data object Empty : IslandLoad
     data class Loading(val key: IslandSessionKey) : IslandLoad
-    class Ready(terrain: TerrainMap, private val timeline: Timeline, val sharedOrigin: String? = null) : IslandLoad {
+    class Ready(
+        terrain: TerrainMap,
+        private val timeline: Timeline,
+        val sharedOrigin: String? = null,
+        worldSlot: String? = null,
+    ) : IslandLoad {
         val key = IslandSessionKey(terrain.key, timeline.state.rulesVersion,
-            timeline.chapter?.takeIf { timeline.state.rulesVersion >= RangeRulesVersion }, sharedOrigin?.let(WorldCode::slotForOrigin))
+            timeline.chapter?.takeIf { timeline.state.rulesVersion >= RangeRulesVersion }, sharedOrigin?.let(WorldCode::slotForOrigin),
+            worldSlot.takeIf { sharedOrigin == null }, timeline.state.life?.start)
         private val feedback = MutableStateFlow(InterventionFeedback(queued = timeline.queuedInterventions))
         val interventions = feedback.asStateFlow()
         private val timelineState = MutableStateFlow(timelineStatus())
@@ -387,6 +400,62 @@ internal sealed interface IslandLoad {
 
         fun playTo(tick: Long) {
             if (navigationAvailable) clock.playTo(tick)
+        }
+
+        // ----- rules v12: the player's hand in a living world -----
+
+        /** What [tool] would do at [ground] right now, without doing it. */
+        fun placementCheck(tool: PlaceTool, ground: GroundPoint): PlacementCheck {
+            val cell = GridCell(ground.x, ground.z)
+            return when (tool) {
+                PlaceTool.Rabbit -> timeline.creatureCheck(Species.Rabbit, cell)
+                PlaceTool.Wolf -> timeline.creatureCheck(Species.Wolf, cell)
+                PlaceTool.Deer -> timeline.creatureCheck(Species.Deer, cell)
+                PlaceTool.Fox -> timeline.creatureCheck(Species.Fox, cell)
+                PlaceTool.Tree -> timeline.plantCheck(PlantKind.Tree, cell)
+                PlaceTool.Meadow -> timeline.plantCheck(PlantKind.Meadow, cell)
+                PlaceTool.Inspect, PlaceTool.Eraser -> PlacementCheck.Ok
+            }
+        }
+
+        /**
+         * Sets down an animal or plants at [ground]. While paused the world takes one tick, so the new arrival appears
+         * at once. Placing is only possible at the head of a history; the past is changed by starting a new one.
+         */
+        fun place(tool: PlaceTool, ground: GroundPoint): PlaceOutcome {
+            if (!navigationAvailable) return PlaceOutcome.Busy
+            if (!timeline.editsAllowed) return PlaceOutcome.ViewingPast
+            val check = placementCheck(tool, ground)
+            if (check != PlacementCheck.Ok) return PlaceOutcome.Rejected(check)
+            val cell = GridCell(ground.x, ground.z)
+            val done = when (tool) {
+                PlaceTool.Rabbit -> timeline.place(Species.Rabbit, cell)
+                PlaceTool.Wolf -> timeline.place(Species.Wolf, cell)
+                PlaceTool.Deer -> timeline.place(Species.Deer, cell)
+                PlaceTool.Fox -> timeline.place(Species.Fox, cell)
+                PlaceTool.Tree -> timeline.plant(PlantKind.Tree, cell)
+                PlaceTool.Meadow -> timeline.plant(PlantKind.Meadow, cell)
+                PlaceTool.Inspect, PlaceTool.Eraser -> false
+            }
+            if (!done) return PlaceOutcome.Rejected(PlacementCheck.Occupied)
+            afterHand()
+            return PlaceOutcome.Placed
+        }
+
+        /** Lifts a creature out, or clears what the player planted at [ground]. */
+        fun erase(pick: WorldPick): PlaceOutcome {
+            if (!navigationAvailable) return PlaceOutcome.Busy
+            if (!timeline.editsAllowed) return PlaceOutcome.ViewingPast
+            val done = pick.creatureId?.let(timeline::remove)
+                ?: pick.ground?.let { timeline.clearPlant(GridCell(it.x, it.z)) } ?: false
+            if (!done) return PlaceOutcome.Rejected(PlacementCheck.Occupied)
+            afterHand()
+            return PlaceOutcome.Placed
+        }
+
+        private fun afterHand() {
+            updateTimeline()
+            clock.step()
         }
 
         /** Hollowmere's open petition, if the village is waiting for the Keeper. */
@@ -628,6 +697,15 @@ internal sealed interface IslandLoad {
         }
     }
     data class Failed(val key: IslandSessionKey) : IslandLoad
+}
+
+/** What came of the player's hand in a living world. */
+internal sealed interface PlaceOutcome {
+    data object Placed : PlaceOutcome
+    data class Rejected(val check: PlacementCheck) : PlaceOutcome
+    /** The player is looking at the past; a new history must begin there first. */
+    data object ViewingPast : PlaceOutcome
+    data object Busy : PlaceOutcome
 }
 
 internal data class TimelineView(

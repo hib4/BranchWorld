@@ -44,7 +44,23 @@ enum class WorldEventKind(internal val code: Int, internal val root: Boolean = f
     /** Young trees rose on burned ground. [WorldEvent.subject] is the fire number. */
     YoungWood(15),
     /** Animals fled a fire. [WorldEvent.subject] is the first animal seen fleeing. */
-    AnimalsFled(16);
+    AnimalsFled(16),
+    /** Rules v12: a predator caught prey. [WorldEvent.subject] is the predator, [WorldEvent.detail] the prey's species code. */
+    Hunted(17),
+    /** Rules v12: wolves joined into a pack. [WorldEvent.subject] is the pack, [WorldEvent.detail] its members. */
+    PackFormed(18),
+    /** Rules v12: hunted prey reached safety. [WorldEvent.subject] is the prey, [WorldEvent.detail] the hunter. */
+    Escaped(19),
+    /** Rules v12: an animal died of hunger. [WorldEvent.subject] is the animal, [WorldEvent.detail] its species code. */
+    Starved(20),
+    /** Rules v12: the last of a species died. [WorldEvent.detail] is the species code. */
+    Vanished(21),
+    /** Rules v12: a species doubled. [WorldEvent.subject] is the count, [WorldEvent.detail] the species code. */
+    Boom(22),
+    /** Rules v12: a species halved. [WorldEvent.subject] is the count, [WorldEvent.detail] the species code. */
+    Crash(23),
+    /** Rules v12: a placed pair raised young. [WorldEvent.subject] is the mother, [WorldEvent.detail] the species code. */
+    FirstLitter(24);
 
     internal companion object {
         fun of(code: Int) = entries.first { it.code == code }
@@ -55,7 +71,11 @@ enum class WorldEventKind(internal val code: Int, internal val root: Boolean = f
 enum class FireOutCause(internal val code: Int) { BurnedOut(1), Rain(2), CalledShower(3) }
 
 /** The Keeper's act recorded in the chronicle. */
-enum class KeeperAct(internal val code: Int) { Rain(1), Grove(2), Protect(3), Firebreak(4), Endorse(5) }
+enum class KeeperAct(internal val code: Int) {
+    Rain(1), Grove(2), Protect(3), Firebreak(4), Endorse(5),
+    /** Rules v12: the player set down, lifted out, planted or cleared. [WorldEvent.subject] is the species or plant code. */
+    Place(6), Remove(7), Plant(8), Clear(9),
+}
 
 /** A self-describing reference: a chain still reads correctly after the event itself has left the chronicle. */
 @Serializable
@@ -90,8 +110,10 @@ internal data class WorldChronicle(val events: List<WorldEvent> = emptyList(), v
         return WorldChronicle(kept + event, nextId + 1) to event.ref
     }
 
-    fun validate(tick: Long, island: IslandEcology) {
+    fun validate(tick: Long, island: IslandEcology, living: Boolean = false) {
         require(events.size <= WorldChronicleLimit && nextId >= 1)
+        require(living || events.none { it.kind.code > WorldEventKind.AnimalsFled.code ||
+            it.kind == WorldEventKind.KeeperAct && it.detail > KeeperAct.Endorse.code })
         require(events.zipWithNext().all { (a, b) -> a.id < b.id && a.tick <= b.tick })
         require(events.all { event ->
             event.id in 1 until nextId && event.tick in 1..tick && island.terrain.cellAt(event.cell.x, event.cell.z) != null &&

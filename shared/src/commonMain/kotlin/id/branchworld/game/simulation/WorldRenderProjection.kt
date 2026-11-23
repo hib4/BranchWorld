@@ -37,6 +37,8 @@ class WorldRenderSource(
     val poses: StateFlow<WorldRenderProjection>,
     /** Rules v10: the herd's seasonal way, dry range first. Static for the island, so it is computed once. */
     val herdRoute: List<GroundPoint> = emptyList(),
+    /** Taps and hovers on the world, reported by the renderer's input adapter. */
+    val pointer: WorldPointer = WorldPointer(),
 )
 
 /** Rules v10 range detail: declared refuges and which range the herd is heading for (1 wet, 2 dry). */
@@ -59,6 +61,8 @@ data class WorldRenderProjection(
     val ranges: RangePose? = null,
     /** Rules v11 fire, scars and fallen pines. */
     val fire: FirePose? = null,
+    /** Rules v12 living world. */
+    val life: LifePose? = null,
 ) {
     val leadRabbit: CreaturePose? get() = creatures.firstOrNull { it.species == Species.Rabbit }
 }
@@ -154,6 +158,10 @@ data class CreaturePose(
     val juvenile: Boolean = false,
     val intent: WildlifeIntent? = null,
     val destination: GroundPoint? = null,
+    /** Rules v12: what it is doing and why. */
+    val thought: CreatureThought? = null,
+    /** Rules v12: sex, reserves, pack and pace. */
+    val life: CreatureLifePose? = null,
 )
 
 enum class WildlifeIntent { Forage, Browse, Berries, Water, Shelter, Range, Refuge, Prey, Meet, Roam }
@@ -206,6 +214,8 @@ data class EcologyReadout(
 @Serializable
 enum class CreatureHeading(internal val canonicalId: Int) {
     PositiveX(1), NegativeX(2), PositiveZ(3), NegativeZ(4),
+    /** Rules v12 diagonal headings. */
+    PositiveXPositiveZ(5), NegativeXPositiveZ(6), PositiveXNegativeZ(7), NegativeXNegativeZ(8),
 }
 
 internal fun WorldState.renderProjection(
@@ -237,7 +247,7 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
             intent = animal.wildlife?.let {
                 when (animal.goal?.need) {
                     Need.Food -> when (animal.species) {
-                        Species.Fox -> WildlifeIntent.Berries
+                        Species.Fox, Species.Wolf -> WildlifeIntent.Berries
                         Species.Deer, Species.Rabbit -> if (patches.any { patch -> patch.cell == animal.goal.cell && patch.kind == ForageKind.Browse })
                             WildlifeIntent.Browse else WildlifeIntent.Forage
                     }
@@ -251,6 +261,8 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
                 }
             },
             destination = animal.goal?.cell?.takeIf { animal.wildlife != null }?.project(terrain),
+            thought = thought(animal),
+            life = animal.lifePose(),
         )
     },
     forage = patches.map {
@@ -320,6 +332,7 @@ internal fun EcologyState.renderProjection(terrain: TerrainMap) = WorldRenderPro
             },
         )
     },
+    life = lifePose(terrain),
     wildlife = wildlife?.let { history ->
         WildlifeReadout(creatures.count { it.species == Species.Fox }, history.catches, history.events.map {
             WildlifeMoment(it.tick, it.id, it.species, it.kind, it.cell.project(terrain))

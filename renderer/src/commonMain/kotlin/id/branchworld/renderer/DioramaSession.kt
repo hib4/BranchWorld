@@ -66,6 +66,7 @@ internal class DioramaSession(
     private var livingEcho: LivingEcho? = null
     private var herdTrail: HerdTrail? = null
     private var localDetails: LocalDetails? = null
+    private var lifeDetails: LifeDetails? = null
     private var light = coastalLight(null, false)
     private var previousClimate: ClimatePose? = null
     private var previousOpening = false
@@ -111,6 +112,7 @@ internal class DioramaSession(
             herdTrail = HerdTrail(it, world.terrain, world.herdRoute)
             if (opening.shaping != null) shapingDetails = ShapingDetails(it, world.terrain, compact = output == null)
             if (opening.fire != null) fireDetails = FireDetails(it, world.terrain, compact = output == null)
+            if (opening.life != null) lifeDetails = LifeDetails(it, world.terrain)
             controller.status.value = "Loading island…"
             output?.attach(it)
             context.addScene(it)
@@ -275,6 +277,7 @@ internal class DioramaSession(
             if (isVisible) transform.setIdentity().translate(0f, -(time * if (light.storm) 5.6f else 3.6f) % 1.7f, 0f)
         }
         wildlife?.show(snapshot, request.reducedMotion)
+        lifeDetails?.show(request.placement, request.selected?.let { wildlife?.shownAt(it) }, snapshot.life, time, request.reducedMotion)
         if (pineStands.isNotEmpty()) clearPines(snapshot.settlements.orEmpty(), snapshot.fire?.stands.orEmpty())
         settlements?.show(snapshot.settlements.orEmpty(), snapshot.tick, snapshot.climate?.dayPhase ?: 0.2f, world.terrain,
             request.reducedMotion, time)
@@ -322,6 +325,7 @@ internal class DioramaSession(
         herdTrail = null
         timingMode = null
         localDetails = null
+        lifeDetails = null
         propModels = emptyList()
         pineStands = emptyList()
         clearedCells = null
@@ -340,7 +344,7 @@ internal class DioramaSession(
     private fun buildScene(terrain: TerrainMap) = Scene("Island ${terrain.key.seed}").apply {
         mainRenderPass.clearColor = ClearColorFill(Color(0.18f, 0.41f, 0.47f))
         camera.setClipRange(0.1f, 90f)
-        (camera as? PerspectiveCamera)?.fovY = 47f.deg
+        (camera as? PerspectiveCamera)?.fovY = ViewFovYDegrees.deg
         lighting.singleDirectionalLight { setup(Vec3f(-0.55f, -1.4f, -0.9f)) }
         lighting.addDirectionalLight { setup(Vec3f(0.6f, -0.72f, 1f)) }
         val waterMaterial = CoastalWater().also { water = it }
@@ -411,7 +415,7 @@ internal class DioramaSession(
             propModels = PineVariants.mapNotNull { variant -> target.placePines(world.terrain, variant) }
             canopy = propModels.flatMap { model -> model.meshes.values.mapNotNull { it.shader as? KslPbrShader } }
             updateLandHaze(light)
-            val assets = loadCreatureAssets(world.poses.value.wildlife != null)
+            val assets = loadCreatureAssets(world.poses.value.wildlife != null, world.poses.value.life != null)
             val towns = if (world.poses.value.settlements != null) VillageModels.load(target) else null
             if (scene !== target || !currentCoroutineContext().isActive) {
                 throw CancellationException("The island scene was replaced while loading wildlife")

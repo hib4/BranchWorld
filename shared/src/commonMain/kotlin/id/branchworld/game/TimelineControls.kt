@@ -84,6 +84,7 @@ import branchworld.shared.generated.resources.shape_watch_warning
 import branchworld.shared.generated.resources.shape_watch_recovery
 import branchworld.shared.generated.resources.shape_fork_here
 import branchworld.shared.generated.resources.shape_next_harvest
+import branchworld.shared.generated.resources.timeline_watch_half_day
 import id.branchworld.game.ecology.SettlementTurn
 import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.Chapter
@@ -247,8 +248,12 @@ private fun TimelinePanel(island: IslandLoad.Ready, view: TimelineView, showTick
             val chapter = island.chapter == Chapter.FadingGrove
             val watchWarning = chapter && view.tick < 240
             val nextHarvest = (view.tick / SettlementTurn + 1) * SettlementTurn
-            OutlinedButton(onClick = { island.playTo(if (watchWarning) 240L else nextHarvest) }, enabled = !view.seeking) {
-                Text(stringResource(if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest))
+            // A living world has no harvests: watch on to the next half day instead.
+            val living = island.key.living
+            val halfDay = (view.tick / HalfDay + 1) * HalfDay
+            OutlinedButton(onClick = { island.playTo(if (living) halfDay else if (watchWarning) 240L else nextHarvest) }, enabled = !view.seeking) {
+                Text(stringResource(if (living) Res.string.timeline_watch_half_day
+                    else if (watchWarning) Res.string.shape_watch_warning else Res.string.shape_next_harvest))
             }
             if (chapter && warning != null && view.tick < FadingGroveRecovery) {
                 OutlinedButton(onClick = { island.playTo(FadingGroveRecovery) }, enabled = !view.seeking) {
@@ -508,3 +513,5 @@ internal fun InterventionResult.label(showTicks: Boolean = false): String {
 internal fun Modifier.submitTickOnEnter(submit: () -> Boolean): Modifier = onPreviewKeyEvent {
     it.type == KeyEventType.KeyDown && (it.key == Key.Enter || it.key == Key.NumPadEnter) && submit()
 }
+
+private const val HalfDay = id.branchworld.game.ecology.DayLength / 2

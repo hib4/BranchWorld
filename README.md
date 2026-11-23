@@ -1,6 +1,8 @@
 # BranchWorld
 
-BranchWorld is a Kotlin Multiplatform game about changing a living world and comparing the futures that follow. The Android and Desktop builds open generated 3D islands with living populations of rabbits and deer.
+**Create a world. Fill it with life. Watch what it becomes.**
+
+BranchWorld is a Kotlin Multiplatform living-world sandbox. You create a small 3D island, set down rabbits, wolves, deer, foxes, trees and grass by hand, and watch them live on their own: rabbits graze, dig warrens and raise litters; wolves form packs, howl at dusk and hunt together; populations rise and fall; fire and rain change the land. Nothing is scripted. Every consequence comes from deterministic rules written once in shared Kotlin and run identically on Android, Desktop and iOS.
 
 ## Build and run
 
@@ -49,41 +51,34 @@ mkdir -p build/release
 adb install build/release/BranchWorld-android-local.apk
 ```
 
-### Play and compare
+### Play
 
-BranchWorld opens on **The Fading Grove**, a river valley entering its dry season at seed `104729`. Choose **Begin story** to start time or **Continue** to load the local save. **Explore islands** also opens **Cairnwater**, a lake between stone ridges, and **Heron Reach**, a cape that shelters reed beds and tidal shallows. Camera motion settings are in **Menu**.
+**Create.** On the title choose **New world**. Pick an island (The Fading Grove, Cairnwater or Heron Reach) or type or roll a seed, choose **Empty land** (grass, trees and water, no animals) or **Wild** (rabbits, deer and foxes already live there), give it a name and choose **Create world**. **Continue** reopens your last world; **My worlds** lists every world you have made.
+
+**Populate.** The dock holds a palette of wooden pegs: **Look**, **Rabbit**, **Wolf**, **Deer**, **Fox**, **Tree**, **Grass** and **Lift out**. Choose one, then click or tap the island. A peg on the ground shows where it would go: green where it can, madder where it cannot, and a short note says why (open water, unreachable ground, nothing takes root there, the island is full). Animals set down while time is paused appear at once. **Lift out** removes an animal or something you planted.
+
+**Observe.** Use **Play**/**Pause** and **1×**, **2×**, **4×** or **8×** to set the pace. Choose **Look** and tap an animal to open its card: its name, sex and age, what it is doing and why ("Chasing Clover with the pack", "Hiding from Fern"), its food, water, energy and stamina, its pack and its litters. **Follow** keeps the camera with it. The name board counts every species on the island.
+
+**Experiment and discover.** **What happened** lists the moments the world produced (a pack forming, a first kill, an escape, a first litter, a boom, a crash, an animal that starved, a fire) with **Why?** to follow each back to its causes and **Show me** to go there. **Timeline** lets you go back to any moment and start another history beside the first, compare the two, and share a world as a code. Worlds save automatically.
 
 | Action | Android | Desktop |
 | --- | --- | --- |
-| Orbit | Drag one finger | Drag the primary mouse button or focus the viewport and use the arrow keys |
-| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or hold Shift and use the arrow keys in the focused viewport |
-| Zoom | Pinch | Scroll or press `+` and `-` in the focused viewport |
+| Set down or select | Tap the island | Click the island |
+| Orbit | Drag one finger | Drag the primary mouse button, or focus the viewport and use the arrow keys |
+| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or Shift and the arrow keys |
+| Zoom | Pinch | Scroll, or `+` and `-` in the focused viewport |
 
-Use **Focus island**, or `Home` in the focused Desktop viewport, to return to the overview. In **Inspect**, select Thistle the rabbit, Alder the deer, or Russet the fox to follow them. Their behavior changes with the available forage, water, and cover. **Wildlife history** records births, new feeding grounds, and losses. Select an event to go to the animal or the place it happened. **Landmarks** describes local soil conditions, and **Settlements** shows how nearby communities are doing.
+**Focus island**, or `Home` in the focused Desktop viewport, returns to the overview. Settings hold sound, Reduce Motion and text size; its developer section holds timeline tick tools.
 
-**Shape** opens a paused preview. **Call rain** can replenish Hollowmere’s drinking bank and help its next harvest. **Restore grove** marks the individual planting sites. Groves need time to root in suitable soil, then hold moisture and provide forage and shelter. Each history has one intervention before natural rain replenishes the watershed. Choose a power and confirm it, or use **Cancel intervention** before playback applies it.
-
-**Menu** → **Show diagnostics** exposes the seed, playback speeds, and wildlife counters. Enable **Timeline tick tools** there to enter an exact point for replay or comparison.
-
-**Menu** → **Save world** captures the current tick and pending interventions in one local slot. **Continue** restores the world in a paused state. Older saves retain their original rules and geography, and an existing single-island save opens as **Main** at its saved tick.
-
-In **The Fading Grove**, let Hollowmere reach its warning. Use **Timeline** → **Watch the river recover** to see how Main fares. Choose **Return to the drought warning** → **Fork here**, name a rain history, and use **Shape** to call a shower over the suggested field and drinking bank. Watch two harvests, then watch through recovery. Return to the warning again, name a grove history, and restore the grove at C2. Watch through recovery in that history too.
-
-From either fork, open **Timeline** → **Compare branches**. Living Echo matches the two histories to the same moment. Select a history by name to switch the world in place. In **Details**, choose the two forks, then return to **Island view**. Select **Harvest** and focus **Drinking bank** or **Farm field** to see where the rain helped. Select **After rain** and focus **Grove sites**. Pale trees show where the grove grew in the other history. **Details** shows the recorded events and actual values. Pick an intervention there to replay its result. **Continue this history** opens the view you chose at that moment. **Back** returns to where you entered.
-
-Save through **Menu** and relaunch with **Continue** to reopen all three histories.
-
-The shared fixture starts each fork at tick `240`. It compares water and crops at `360`, then rooted habitat and wildlife use at `900`.
-
-Run the common replay fixture and the Android gesture, world clock, and Activity recreation test on a connected device with `./gradlew :shared:connectedAndroidDeviceTest :androidApp:connectedDebugAndroidTest`.
+Run the shared replay fixtures on a connected device with `./gradlew :shared:connectedAndroidDeviceTest`, and the phone walkthrough with `./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=id.branchworld.game.LivingSandboxDeviceTest`.
 
 ## Architecture
 
-- `androidApp` and `desktopApp` own platform startup, system input bridges, and window or Activity lifetime. The existing iOS scaffold consumes the shared module and is outside the launch gate.
-- `shared/src/commonMain` owns the Compose shell, navigation state, and viewport slot. Compose restores the shell across Android recreation. A separate versioned checkpoint restores the world, with platform adapters for atomic local saves.
-- `renderer` owns the Kool scene, creature model pool, camera, and platform adapters. Android hosts GLES under Compose. Desktop delivers a Vulkan color attachment to Compose. The Living Echo layer draws sites from an immutable comparison of two matching shared snapshots. The bunny, deer, and fox GLBs are from Kenney Cube Pets.
-- Shared Kotlin generates terrain, drainage, soils, props, and traversability from the seed and worldgen version. Kool builds chunk meshes, fills the generated channels and basins, and instances the bundled trees from a read-only terrain projection.
-- Rules v8 adds branch-local interventions, soil retention, and settlement water welfare. Rules v7 introduced local habitat, competition for forage, and fox pursuits. Each history records wildlife milestones alongside its commands and snapshots. Rules v6 introduced seasonal recharge and soil moisture. Saved histories retain their original rules and terrain.
+- `androidApp` and `desktopApp` own platform startup, input bridges and window or Activity lifetime. The iOS app consumes the shared module with a 2D fallback view; it has no 3D renderer yet.
+- `shared/src/commonMain` owns the authoritative simulation and the Compose interface. Living worlds run rules v12 (`ecology/LifeRules.kt`, `ecology/LifeState.kt`): each creature decides from what it could perceive on the previous tick, moves on an eight-way grid with stamina, and draws counter-based random rolls, so the result never depends on processing order. The player's hand is four tick-indexed commands (`PlaceCreature`, `RemoveCreature`, `PlacePlant`, `ClearPlant`), recorded in each history, its saves (schema 10) and its share codes. Weather, wildfire and regrowth run in the same step.
+- `renderer` owns the Kool scene, camera, creature models and platform adapters. Android hosts GLES under Compose; Desktop delivers a Vulkan colour attachment to Compose. `GroundPicking.kt` turns a click or tap into a ground cell or creature in plain Kotlin, and creatures glide between cells at their own simulated pace.
+- Islands are generated in shared Kotlin from a seed: terrain, drainage, soils, props and walkable ground. Kool builds chunk meshes and instances the bundled trees from a read-only projection.
+- Earlier rule sets remain in the code only so that saves made with them keep replaying exactly.
 
 ## Source asset inventory
 
@@ -93,16 +88,14 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 | --- | --- | --- |
 | KayKit Forest (`environment/kaykit-forest`) | 105 glTF models with BIN and PNG dependencies. FBX and OBJ/MTL variants. | Static trees, rocks, and vegetation for the diorama and island. |
 | Kenney Nature (`environment/kenney-nature`) | 329 GLB models. FBX, OBJ/MTL, DAE, STL, and PNG previews. | Static rocks, ground props, and vegetation for the diorama and terrain. |
-| Kenney Cube Pets (`animals/kenney-cube-pets`) | 24 GLB models plus FBX and OBJ/MTL. | Runtime rabbit, deer, and fox use the CC0 models and their idle, walk, run, and eat clips. |
+| Kenney Cube Pets (`animals/kenney-cube-pets`) | 24 GLB models plus FBX and OBJ/MTL. | Runtime rabbit, deer, fox and wolf use the CC0 models and their idle, walk, run and eat clips; the wolf is the dog model with a grey coat applied in the renderer. |
 | Vuena Pets (`animals/vuena-pets`) | Three GLB and FBX models with PNG textures. | Skinned cat, fox, and owl with embedded clips including idle, walk, eat, and sleep. Candidates for additional wildlife. |
-| KayKit Medieval (`buildings/kaykit-medieval`) | 221 glTF/BIN models plus FBX, OBJ/MTL, and PNG textures. | Static buildings and props for settlements. |
-| KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future inhabitants. |
+| KayKit Medieval (`buildings/kaykit-medieval`) | 221 glTF/BIN models plus FBX, OBJ/MTL, and PNG textures. | Static buildings and props; candidates for placeable structures. |
+| KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future placeable people. |
 | KayKit Character Animations (`characters/kaykit-character-animations`) | 14 GLB and 14 FBX animation files plus two mannequin variants in each format. | Separate Rig Medium and Rig Large motion clips. Candidate motion library for compatible characters. |
 | Kenney Interface Sounds (`audio/kenney-interface-sounds`) | 100 OGG audio files. | Six clips are bundled as small mono WAVs: fork and save feedback, plus `select_002`, `confirmation_002`, `back_002` and `open_002` for the menus (converted with ffmpeg to 22.05 kHz mono). |
 | Fredoka and Nunito (`assets/fonts`) | Static TTF instances from Google Fonts, SIL Open Font License 1.1 (`Fredoka-OFL.txt`, `Nunito-OFL.txt`). | Fredoka Medium, SemiBold and Bold for titles and controls and Nunito Medium, Bold and ExtraBold for interface text, bundled in `shared/src/commonMain/composeResources/font`. |
 
 The runtime tree set uses Kenney Nature’s `tree_pineRoundA`, `tree_pineRoundB`, and `tree_pineTallA_detailed`, with in-engine matte materials and normalized ground pivots. The original BranchWorld surf, wind, rain, and bird layers can be regenerated with `python3 assets/audio/branchworld/generate_coast.py`. World Sounds controls the ambience and interaction cues. Reduce Motion holds decorative effects and camera transitions while keeping weather and lighting visible.
-
-Hollowmere (rules v9) uses KayKit Medieval homes A/B in four colours, the well, scaffolding, stores, fence and lumber, all sharing one runtime copy of `hexagons_medieval.png`, plus Kenney Nature furrows, wheat, stumps and log stacks. Villagers are built by `python3 -I tools/assets/build_villagers.py .`, which combines the KayKit Ranger, Rogue and Barbarian bodies (quiver and bear hat removed) with ten renamed `Rig_Medium` clips: idle, walk, carry, chop, dig, hammer, pick, gather, sit and wave.
 
 Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on Android and Desktop.

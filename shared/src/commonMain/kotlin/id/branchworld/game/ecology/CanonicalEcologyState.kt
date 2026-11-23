@@ -51,6 +51,7 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
             writeLong(it.prey ?: 0L)
             writeLong(it.huntUntil)
         }
+        animal.life?.let(::writeCreatureLife)
     }
     environment?.let {
         writeInt(if (it.weather == Weather.Dry) 0 else 1)
@@ -129,7 +130,56 @@ internal fun EcologyState.canonicalBytes(): ByteArray = CanonicalWriter().run {
         writeFire(it)
         writeChronicle(checkNotNull(chronicle))
     }
+    life?.let(::writeLife)
     bytes()
+}
+
+/** Rules v12 per-creature section. Absent in earlier rules, so their canonical bytes are unchanged. */
+private fun CanonicalWriter.writeCreatureLife(life: CreatureLife) = with(life) {
+    writeInt(sex.code)
+    writeInt(origin.code)
+    writeInt(stamina)
+    writeInt(stride)
+    writeLong(threat)
+    writeLong(alarmUntil)
+    writeInt(if (heard) 1 else 0)
+    writeInt(packId)
+    writeLong(busyUntil)
+    writeLong(pregnantUntil)
+    writeLong(chaseFrom)
+    writeInt(kills)
+    writeInt(litters)
+}
+
+/** Rules v12 living-world section, appended after the rules-v11 layout. */
+private fun CanonicalWriter.writeLife(life: LifeState) = with(life) {
+    writeInt(start.code)
+    writeLong(placed)
+    writeLong(removed)
+    writeInt(planted)
+    writeInt(cleared)
+    writeInt(nextPackId)
+    writeInt(packs.size)
+    for (pack in packs) {
+        writeInt(pack.id)
+        writeLong(pack.formedAt)
+        writeCell(pack.den)
+        writeLong(pack.target)
+        writeLong(pack.huntFrom)
+        writeLong(pack.lastKillAt)
+    }
+    writeInt(warrens.size)
+    for (warren in warrens) {
+        writeCell(warren.cell)
+        writeLong(warren.dugAt)
+    }
+    writeInt(census.size)
+    for (entry in census) {
+        writeInt(entry.species.canonicalId)
+        writeInt(entry.low)
+        writeInt(entry.high)
+    }
+    writeInt(firsts)
 }
 
 /** Rules v11 appends fire and Chronicle to the rules-v10 layout. */

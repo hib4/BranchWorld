@@ -9,6 +9,10 @@ data class WorldCamera(
     val opening: Boolean = false,
     val focusRequest: Int = 0,
     val targetSites: List<GroundPoint> = emptyList(),
+    /** Rules v12: where the chosen tool would act. */
+    val placement: PlacementPreview? = null,
+    /** Rules v12: the creature the player picked out. */
+    val selected: Long? = null,
 ) {
     sealed interface Focus {
         data class Region(val index: Int, val rain: Boolean = false) : Focus

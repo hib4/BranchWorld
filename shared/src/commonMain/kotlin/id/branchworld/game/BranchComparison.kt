@@ -47,6 +47,8 @@ import branchworld.shared.generated.resources.shape_shortage_event
 import branchworld.shared.generated.resources.shape_recovered_event
 import id.branchworld.game.ecology.ShapingRulesVersion
 import branchworld.shared.generated.resources.Res
+import branchworld.shared.generated.resources.species_wolves
+import id.branchworld.game.ecology.Species
 import branchworld.shared.generated.resources.comparison_catches
 import branchworld.shared.generated.resources.comparison_foxes
 import branchworld.shared.generated.resources.comparison_births
@@ -264,6 +266,16 @@ internal fun ComparisonTable(view: ComparisonView, left: ComparedBranch, right: 
                         rightWildlife.foxes.toString(), if (foxDelta > 0) "+$foxDelta" else foxDelta.toString(), compact)
                     MetricRow(stringResource(Res.string.comparison_catches), leftWildlife.catches.toString(),
                         rightWildlife.catches.toString(), if (catchDelta > 0) "+$catchDelta" else catchDelta.toString(), compact)
+                }
+                // Living worlds: the wolves the player set down and their pups.
+                val leftLife = left.projection.life
+                val rightLife = right.projection.life
+                if (leftLife != null && rightLife != null) {
+                    val first = leftLife.census[Species.Wolf] ?: 0
+                    val second = rightLife.census[Species.Wolf] ?: 0
+                    val change = second - first
+                    MetricRow(stringResource(Res.string.species_wolves), first.toString(), second.toString(),
+                        if (change > 0) "+$change" else change.toString(), compact)
                 }
                 val a = left.settlement
                 val b = right.settlement

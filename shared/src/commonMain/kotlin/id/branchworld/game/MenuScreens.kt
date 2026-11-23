@@ -186,7 +186,7 @@ internal fun AtlasScreen(
 }
 
 @Composable
-private fun AtlasRow(entry: AtlasEntry, profile: PlayerProfile, onOpen: () -> Unit) {
+internal fun AtlasRow(entry: AtlasEntry, profile: PlayerProfile, onOpen: () -> Unit) {
     val key = entry.key()
     val record = profile.chapters.firstOrNull { it.slot == entry.slot }
     val marks = profile.bookmarks.count { it.slot == entry.slot }
@@ -293,11 +293,14 @@ internal fun SettingsSheet(
                 onChange(settings.copy(textScale = sizes[it].first))
             }
             Text(stringResource(Res.string.settings_controls), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
-            for (line in listOf(Res.string.controls_look, Res.string.controls_zoom, Res.string.controls_follow, Res.string.controls_pause)) {
+            for (line in listOf(Res.string.controls_place, Res.string.controls_look, Res.string.controls_zoom, Res.string.controls_follow,
+                Res.string.controls_pause)) {
                 Text(stringResource(line), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
             }
             Text(stringResource(Res.string.settings_developer), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
             WoodSwitchRow(stringResource(Res.string.shape_tick_tools), null, settings.tickTools) { onChange(settings.copy(tickTools = it)) }
+            WoodSwitchRow(stringResource(Res.string.settings_earlier_stories), stringResource(Res.string.settings_earlier_stories_detail),
+                settings.earlierStories) { onChange(settings.copy(earlierStories = it)) }
             Text(stringResource(Res.string.settings_saved), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
         }
     }

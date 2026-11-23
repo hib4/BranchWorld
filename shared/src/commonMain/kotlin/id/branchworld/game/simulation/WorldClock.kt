@@ -12,12 +12,14 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
-internal enum class WorldSpeed(val multiplier: Int) {
+/** Faster speeds advance several ticks per published frame, so the interface is never asked to redraw faster than it can. */
+internal enum class WorldSpeed(val multiplier: Int, val ticksPerStep: Int = 1) {
     Normal(1),
     Double(2),
-    Quadruple(4);
+    Quadruple(4, 2),
+    Octuple(8, 4);
 
-    val tickInterval: Duration get() = 1.seconds / (WorldTicksPerSecond * multiplier)
+    val tickInterval: Duration get() = 1.seconds * ticksPerStep / (WorldTicksPerSecond * multiplier)
 }
 
 internal class WorldPlayback(
@@ -69,6 +71,13 @@ internal class WorldClock<S>(private val simulation: ClockSimulation<S>) {
 
     fun steer(left: Boolean) = simulation.steer(left)
 
+    /** Advances exactly one tick while paused, so something the player just did shows at once. */
+    fun step() {
+        if (settings.value.playing || simulation.tick == Long.MAX_VALUE) return
+        simulation.advance()
+        publish()
+    }
+
     fun publish() {
         projection.value = simulation.project(projection.value)
     }
@@ -81,7 +90,12 @@ internal class WorldClock<S>(private val simulation: ClockSimulation<S>) {
                 currentCoroutineContext().ensureActive()
                 // A rapid pause and resume still invalidates the wait that was already in flight.
                 if (!isActive() || settings.value !== playback) break
-                simulation.advance()
+                var stepped = 0
+                while (stepped < playback.speed.ticksPerStep && simulation.tick < Long.MAX_VALUE && simulation.tick != playback.stopAt) {
+                    simulation.advance()
+                    stepped++
+                    if (settings.value !== playback) break
+                }
                 publish()
                 if (simulation.tick == playback.stopAt || simulation.tick == Long.MAX_VALUE) pause()
             }

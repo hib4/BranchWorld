@@ -130,10 +130,10 @@ class LastCrossingTest {
             val state = engine.state
             val habitat = assertNotNull(state.habitat)
             println("RANGE_SOAK,$seed,${state.canonicalHash()},residents=${state.settlements!!.sites.map { it.residents }}," +
-                "species=${Species.entries.map { s -> state.creatures.count { it.species == s } }},herd=${habitat.herd}," +
+                "species=${PreLifeSpecies.map { s -> state.creatures.count { it.species == s } }},herd=${habitat.herd}," +
                 "ms=${started.elapsedNow().inWholeMilliseconds}")
             assertTrue(state.settlements.sites.isNotEmpty())
-            assertTrue(Species.entries.all { species -> state.creatures.any { it.species == species } })
+            assertTrue(PreLifeSpecies.all { species -> state.creatures.any { it.species == species } })
             assertTrue(habitat.herd.crossings >= 18)
         }
     }

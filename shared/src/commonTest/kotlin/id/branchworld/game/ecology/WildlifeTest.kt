@@ -114,7 +114,7 @@ class WildlifeTest {
                 }
             }
             val state = engine.state
-            val live = Species.entries.associateWith { species -> state.creatures.count { it.species == species } }
+            val live = PreLifeSpecies.associateWith { species -> state.creatures.count { it.species == species } }
             val sampled = timing.sorted()
             println("Wildlife long run seed=$seed live=$live catches=${state.wildlife?.catches} " +
                 "births=${state.ledger.births} deaths=${state.ledger.deaths} events=$moments firstFlight=$flight actions=$actions " +
@@ -198,7 +198,7 @@ class WildlifeTest {
     }
 
     private fun trajectory(state: EcologyState): List<Long> =
-        Species.entries.map { species -> state.creatures.count { it.species == species }.toLong() } +
+        PreLifeSpecies.map { species -> state.creatures.count { it.species == species }.toLong() } +
             listOf(state.ledger.births, state.ledger.deaths, assertNotNull(state.wildlife).catches)
 
     private fun terrain(seed: Long = 104729) = IslandGenerator.generate(TerrainKey(seed, 2))

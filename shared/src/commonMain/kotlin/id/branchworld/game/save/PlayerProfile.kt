@@ -9,6 +9,7 @@ internal const val ProfileFile = "profile.json"
 internal const val ProfileVersion = 1
 private const val MaxProfileBytes = 512 * 1024
 private const val MaxBookmarks = 64
+private const val LivingRules = 12
 
 /** Player-facing preferences. Presentation only: none of these touch authoritative simulation state. */
 @Serializable
@@ -19,6 +20,8 @@ internal data class GameSettings(
     /** Text scale in percent: 100, 115 or 130. */
     val textScale: Int = 100,
     val tickTools: Boolean = false,
+    /** Developer mode: the crafted stories and earlier sandbox, hidden from players since living worlds. */
+    val earlierStories: Boolean = false,
 )
 
 /** A history the player chose to close a chapter with. Outcome numbers come from that branch's real head state. */
@@ -51,6 +54,10 @@ internal data class AtlasEntry(
     val branchName: String = "",
     /** Larger is more recent. A counter, not a wall-clock time. */
     val order: Long = 0,
+    /** The name the player gave a living world. */
+    val name: String = "",
+    /** How a living world began: a [id.branchworld.game.ecology.WorldStart] code, 0 for other islands. */
+    val start: Int = 0,
 )
 
 @Serializable
@@ -65,6 +72,8 @@ internal data class PlayerProfile(
     val bookmarks: List<Bookmark> = emptyList(),
     val hints: List<String> = emptyList(),
     val legacyImported: Boolean = false,
+    /** The number the next living world's slot takes. */
+    val nextWorld: Int = 1,
 ) {
     val lastPlayed: AtlasEntry? get() = atlas.maxByOrNull { it.order }
 
@@ -72,7 +81,9 @@ internal data class PlayerProfile(
 
     fun visit(entry: AtlasEntry): PlayerProfile {
         val order = (atlas.maxOfOrNull { it.order } ?: 0) + 1
-        return copy(atlas = atlas.filterNot { it.slot == entry.slot } + entry.copy(order = order))
+        // An autosave summary carries no name; the one the player gave is kept.
+        val name = entry.name.ifEmpty { atlas.firstOrNull { it.slot == entry.slot }?.name.orEmpty() }
+        return copy(atlas = atlas.filterNot { it.slot == entry.slot } + entry.copy(order = order, name = name))
     }
 
     fun record(chapter: ChapterRecord) = copy(chapters = chapters.filterNot { it.chapter == chapter.chapter } + chapter)
@@ -87,6 +98,9 @@ internal data class PlayerProfile(
     fun seen(hint: String) = hint in hints
 
     fun see(hint: String) = if (seen(hint)) this else copy(hints = hints + hint)
+
+    /** Living worlds the player has made, most recent first. */
+    val worlds: List<AtlasEntry> get() = atlas.filter { it.rules >= LivingRules }.sortedByDescending { it.order }
 }
 
 internal object PlayerProfileCodec {

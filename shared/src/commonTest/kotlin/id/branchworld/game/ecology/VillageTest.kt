@@ -180,9 +180,9 @@ class VillageTest {
             val village = assertNotNull(state.settlements?.village)
             println("VILLAGE_SOAK,$seed,${state.canonicalHash()},residents=${state.settlements!!.sites.map { it.residents }}," +
                 "households=${village.households.count { it.active }},structures=${village.structures.size}," +
-                "species=${Species.entries.map { s -> state.creatures.count { it.species == s } }},ms=${started.elapsedNow().inWholeMilliseconds}")
+                "species=${PreLifeSpecies.map { s -> state.creatures.count { it.species == s } }},ms=${started.elapsedNow().inWholeMilliseconds}")
             assertTrue(state.settlements.sites.isNotEmpty())
-            assertTrue(Species.entries.all { species -> state.creatures.any { it.species == species } })
+            assertTrue(PreLifeSpecies.all { species -> state.creatures.any { it.species == species } })
             if (grazed) grazing.add(seed)
             println("VILLAGE_SOAK_EVENTS,$seed,${village.chronicle.groupingBy { it.kind }.eachCount()}")
         }

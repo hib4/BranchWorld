@@ -1,6 +1,8 @@
 package id.branchworld.game.simulation
 
 import id.branchworld.game.ecology.PlanOption
+import id.branchworld.game.ecology.PlantKind
+import id.branchworld.game.ecology.Species
 
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.TerrainMap
@@ -110,6 +112,47 @@ internal data class CutFirebreak(
     override val sequence: Long,
     val region: Int,
 ) : WorldCommand
+
+/** The player sets an animal down on a cell (rules v12). */
+@Serializable
+@SerialName("place_creature")
+internal data class PlaceCreature(
+    override val tick: Long,
+    override val sequence: Long,
+    val species: Species,
+    val cell: GridCell,
+) : WorldCommand
+
+/** The player lifts an animal out of the world (rules v12). */
+@Serializable
+@SerialName("remove_creature")
+internal data class RemoveCreature(
+    override val tick: Long,
+    override val sequence: Long,
+    val entityId: Long,
+) : WorldCommand
+
+/** The player plants a young tree or a patch of grass on a cell (rules v12). */
+@Serializable
+@SerialName("place_plant")
+internal data class PlacePlant(
+    override val tick: Long,
+    override val sequence: Long,
+    val kind: PlantKind,
+    val cell: GridCell,
+) : WorldCommand
+
+/** The player clears a planted tree or grass patch (rules v12). */
+@Serializable
+@SerialName("clear_plant")
+internal data class ClearPlant(
+    override val tick: Long,
+    override val sequence: Long,
+    val cell: GridCell,
+) : WorldCommand
+
+/** Commands only a rules-v12 living world accepts. */
+internal val WorldCommand.living get() = this is PlaceCreature || this is RemoveCreature || this is PlacePlant || this is ClearPlant
 
 /** Single-owner simulation. All changes to authoritative state happen in [advance]. */
 internal class WorldEngine(initial: WorldState, private val navigation: TerrainNavigation? = null) {

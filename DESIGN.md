@@ -1,6 +1,6 @@
 ---
 name: BranchWorld
-description: Shape a world. Change its fate. Discover what could have been.
+description: Create a world. Fill it with life. Watch what it becomes.
 colors:
   beech: "#E9CDA2"
   beech-light: "#F6E2C2"
@@ -123,8 +123,8 @@ spacing:
   xl: "24px"
 components:
   block-large-painted:
-    backgroundColor: "{colors.weld}"
-    textColor: "{colors.walnut}"
+    backgroundColor: "{colors.leaf}"
+    textColor: "{colors.pale-ink}"
     typography: "{typography.headline-small}"
     rounded: "{rounded.lg}"
     padding: "6px 20px 12px"
@@ -153,6 +153,20 @@ components:
   block-compact:
     backgroundColor: "{colors.beech-light}"
     textColor: "{colors.walnut}"
+    typography: "{typography.title-small}"
+    rounded: "{rounded.compact}"
+    padding: "6px 8px 12px"
+    height: "48px"
+  palette-chosen:
+    backgroundColor: "{colors.leaf}"
+    textColor: "{colors.pale-ink}"
+    typography: "{typography.title-small}"
+    rounded: "{rounded.compact}"
+    padding: "6px 8px 12px"
+    height: "48px"
+  palette-lift-out-chosen:
+    backgroundColor: "{colors.madder}"
+    textColor: "{colors.pale-ink}"
     typography: "{typography.title-small}"
     rounded: "{rounded.compact}"
     padding: "6px 8px 12px"
@@ -186,29 +200,29 @@ components:
 
 Every control is a painted wooden piece set down on the diorama, like a toy on a play table. The live 3D island is always the subject and always full-bleed behind the interface; the interface is a small set of chunky oiled-beech pieces resting on it. A piece has a face, a visible thickness band under that face, and a soft contact shadow on the table. Nothing floats in glass, nothing is printed on paper.
 
-The material language carries meaning. Bare wood means available but quiet; paint means chosen or primary. Each crafted chapter owns one plant-dye paint (The Fading Grove weld, The Last Crossing woad, sandbox leaf, earlier rules umber), and that paint follows the chapter everywhere: its Continue/Begin block, its stamped numeral, its story card, its Atlas row. Letters are stamped in rounded Fredoka; anything you read for longer than a glance is set in Nunito. Density is low: few pieces, large faces, generous touch targets, and the island visible between them.
+The material language carries meaning. Bare wood means available but quiet; paint means chosen or primary, and each plant-dye paint has one role: leaf for creating and placing, woad for a chosen state, madder for lifting out and refusals. The same toy language reaches into the 3D world: the placement ghost is a painted peg standing on the island, green where a tool can act and madder where it cannot, and a picked creature stands in a turning cream ring. Letters are stamped in rounded Fredoka; anything you read for longer than a glance is set in Nunito. Density is low: few pieces, large faces, generous touch targets, and the island visible between them.
 
-New states (a village petition, a guide note, a chapter closing) arrive as new pieces placed on the table with a short drop and settle. Pressing a piece sinks its face into its own thickness. The rejected predecessor, the dark-glass, vellum and gold "Keeper's Atlas" shell, is the anti-reference: none of its translucency, ornament or parchment returns.
+New states (a creature's card, a short note about where something can go, the prompt to start a new history in the past) arrive as new pieces placed on the table with a short drop and settle. Pressing a piece sinks its face into its own thickness. Dark glass, vellum, parchment and gold ornament are the anti-reference: none of them belong on this table.
 
 **Key Characteristics:**
 - Island full-bleed at every size; the interface is a few placed pieces, never a frame or panel wall.
 - Pieces are physical: face, 6 dp thickness band in the paint's darker edge tone, two-skirt contact shadow, 1 dp top highlight.
-- Bare beech = quiet/available; plant-dye paint = chosen/primary; one paint per chapter.
+- Bare beech = quiet/available; plant-dye paint = chosen/primary; one paint per role.
 - Fredoka stamps every label and heading at 0 letter-spacing, mixed case; Nunito carries reading text.
 - Motion is set-down (drop and settle) and press (face sinks); Reduce Motion snaps both.
 
 ## Colors
 
-Oiled beech and walnut ink as the ground, with five plant-dye paints used only where a piece is chosen, primary, or belongs to a chapter.
+Oiled beech and walnut ink as the ground, with five plant-dye paints used only where a piece is chosen or primary, each for one role.
 
 ### Primary
-- **Woad Blue** (woad): the system's chosen-state paint. Selected option in a block choice, the switch knob when on, Material `primary`, and The Last Crossing's chapter paint. Carries beech-light ink (about 5.4:1).
-- **Weld Yellow** (weld): The Fading Grove's chapter paint and the primary "Shape" action in the dock. The only paint that carries walnut ink (about 8.2:1).
+- **Leaf Green** (leaf): the creating paint. Continue and New world on the title, Create world, the chosen animal or plant in the palette, the chosen island and start, Open on a world, the valid placement ghost; Material `tertiary`. Carries pale ink.
+- **Woad Blue** (woad): the chosen-state paint. The current speed, Look when chosen, Following on a creature card, the selected option in a block choice, the switch knob when on, Material `primary`. Carries beech-light ink (about 5.4:1).
 
 ### Secondary
-- **Madder Red** (madder): Material `secondary` and `error`, and Ember Season's chapter paint (Phase 09). A paint for faces with pale ink. Ember Season's chapter stamp is the one stamped numeral in madder, set large enough (the 28 dp peg) for pale ink to read; other small numerals stay off madder.
-- **Leaf Green** (leaf): sandbox chapter paint and Material `tertiary`; carries pale ink.
-- **Umber Brown** (umber): paint for islands under earlier rules (no chapter); carries beech-light ink (about 4.9:1).
+- **Madder Red** (madder): the taking-away and refusal paint. Lift out when chosen, the refused placement ghost, low meters, Material `secondary` and `error`. A paint for faces with pale ink; small text stays off madder.
+- **Weld Yellow** (weld): the middle level of a creature's meters. The only paint that carries walnut ink (about 8.2:1).
+- **Umber Brown** (umber): developer-only pieces that open content kept from earlier rule sets; carries beech-light ink (about 4.9:1).
 
 ### Neutral
 - **Oiled Beech** (beech): the face of every board and every bare block; the app's surface and background role.
@@ -218,12 +232,12 @@ Oiled beech and walnut ink as the ground, with five plant-dye paints used only w
 - **Soft Walnut** (walnut-soft): secondary text (taglines, details, dates) on beech, about 6.0:1; disabled ink.
 - **Pale Ink** (pale-ink): text on leaf and madder.
 - **Edge tones** (weld-edge, madder-edge, woad-edge, leaf-edge, umber-edge): each paint's thickness band, about 62% of the paint's value. A paint never appears without its edge tone below it.
-- **Scrim** (scrim): warm walnut at 55% under modal boards (pause, chapter closing, photo hint states).
+- **Scrim** (scrim): warm walnut at 55% under modal boards (pause, settings, photo hint states).
 
 ### Named Rules
 **The Bare-or-Painted Rule.** A piece is either bare beech or painted; paint means chosen or primary. On any surface at most one or two pieces are painted, and the rest stay bare.
 
-**The One Paint per Chapter Rule.** A chapter's paint comes from `chapterPaint` and nowhere else. A surface about The Fading Grove is weld wherever it is painted; never reassign a dye to a different chapter for contrast or variety.
+**The One Paint per Role Rule.** Each paint means one thing everywhere: leaf creates and places, woad marks what is chosen, madder takes away or refuses. Never reassign a dye for contrast or variety.
 
 **The Ink Follows the Paint Rule.** Text colour on a piece is decided by `inkOn(paint)`: walnut on beech, beech-light and weld; pale ink on leaf and madder; beech-light on woad and umber. Do not pick ink per screen.
 
@@ -239,9 +253,9 @@ All sizes ship in sp and follow the system font scale and the in-game text-size 
 ### Hierarchy
 - **Display** (700, 52/42/34, line 54/46/38): the BranchWorld name sign only; medium on wide unshort windows, small elsewhere.
 - **Headline** (600, 30/26/23, line 34/30/28): menu page titles (large), board sheet titles and the Large block label (small).
-- **Title** (600, 20/17/15, line 24/22/20): Medium block labels, Atlas row names, objective titles on phones, setting names, Compact block labels.
-- **Body** (500, 17/15/14, line 24/21/19): guide text, petitions, premises; body-small for block details, dates and taglines.
-- **Label** (600/500, 17/15/13): Small block labels and stamped pegs (day, numerals, "current").
+- **Title** (600, 20/17/15, line 24/22/20): Medium block labels, world row names, the world's name on phones, setting names, Compact block labels.
+- **Body** (500, 17/15/14, line 24/21/19): a creature's current thought, hand notes, start descriptions; body-small for block details, dates, meters' labels and taglines.
+- **Label** (600/500, 17/15/13): Small block labels and stamped pegs (day, population counts, "current").
 
 ### Named Rules
 **The Stamped Letters Rule.** Every label and heading is Fredoka, mixed case, at 0 letter-spacing. No tracked uppercase, no kicker lines above titles.
@@ -252,10 +266,10 @@ All sizes ship in sp and follow the system font scale and the in-game text-size 
 
 The island fills the window; pieces anchor to its corners and edges inside the safe-content area, leaving the centre of the island open.
 
-- **Title:** a name sign top-left and a shelf board bottom-left (max 352 dp wide) holding one Large painted Continue/Begin block over two rows of two Small bare blocks (Stories, World Atlas / Sandbox, Settings). Gutter 24 dp when the width is 600 dp or more, 12 dp on phones; under 440 dp tall the tagline drops and the primary block becomes Medium.
-- **Menu pages:** a heading board (peg back button + headline-large) over scrolling content, page widths capped at 740 dp (Stories), 600 dp and 640 dp; story cards cap at 312 dp in a flow row, Atlas rows at 460 dp.
+- **Title:** a name sign top-left and a shelf board bottom-left (max 352 dp wide). With a world already made: one Large leaf Continue block (the world's name and day as its detail), a Small New world block, and a row of My worlds / Settings. With none yet: a Large leaf New world block and the My worlds / Settings row. Gutter 24 dp when the width is 600 dp or more, 12 dp on phones; under 440 dp tall the tagline drops and the primary block becomes Medium.
+- **Menu pages:** a heading board (peg back button + headline-large) over scrolling content. New world caps at 640 dp (island cards at 145 dp in a flow row, a seed board, a Life board with Empty land / Wild and the name field, then Create world); My worlds caps at 600 dp with world rows at 460 dp.
 - **In-world HUD breakpoints:** *wide* is width at least 760 dp and height at least 420 dp; *shortLandscape* is not wide, at least 640 dp wide and wider than 1.45x its height; *tightDock* is under 460 dp wide. Side panels are used when wide or shortLandscape (up to 54% width, max 480 dp; 42% / 332 dp for the short-landscape side stack).
-- **HUD composition:** objective board top-left (max 330 dp), viewport pegs top-right, and a bottom-left column of guide, petition (up to 52% of height when wide, 40% otherwise) and the action dock. The dock keeps an 8 dp gap at every width; only its board padding tightens from 6 dp to 4 dp under tightDock. When not wide, secondary dock actions become round peg buttons and the primary becomes a Compact block without its icon.
+- **HUD composition:** the world's name board top-left (max 360 dp: name, day, population pegs), viewport pegs top-right, and a bottom-left column of the past-edit prompt, the creature card (max 340 dp), the hand note and the action dock. The dock is one board holding, in a flow row, the time controls (play/pause peg and 1×/2×/4×/8× Compact blocks), the palette (eight Compact blocks: labelled when wide, icon-only otherwise) and three pegs (What happened, Timeline, Menu). Its board padding tightens from 6 dp to 4 dp under tightDock.
 - **Insets:** every board, menu and overlay sits inside the safe *drawing* area (status bar, navigation bar, display cutout). The side back-gesture zones are not reserved: pieces there are tapped, not swiped. The one horizontal drag, the timeline scrubber, opts out of system edge gestures on Android.
 - **Phone spacing:** windows under 600 dp wide (`LocalSpacing`, compact) put pieces 12 dp from the screen edge and pad boards 12 dp, so text starts about 24 dp in. Larger windows keep each surface's own gutter (10–24 dp) and 16 dp board padding.
 - **Pause board:** on short, wide windows (at least 620 dp wide and under 440 dp tall) the actions form rows of four equal Small blocks with Resume painted first, board max 820 dp. Otherwise Resume is a full-width painted block above a two-column grid of bare blocks, board max 428 dp.
@@ -286,7 +300,7 @@ Chunky rounded rectangles, sized by piece: boards 18 dp; Large blocks 18 dp, Med
 ### Blocks (buttons)
 Tactile and toy-like: a block is a wooden piece you press.
 - **Shape:** rounded per size (18 / 14 / 14 / 10 dp); minimum heights Large 78, Medium 56, Small 52, Compact 48 dp; 6 dp face plus 6 dp thickness padding vertically, horizontal padding 20 / 18 / 12 / 8 dp; 10 dp between icon and label.
-- **Painted (primary/chosen):** chapter or woad paint with `inkOn` ink; optional 22 dp icon (26 dp on Large); optional detail line in body-small.
+- **Painted (primary/chosen):** the role's paint with `inkOn` ink; optional 22 dp icon (26 dp on Large); optional detail line in body-small.
 - **Bare:** beech, or beech-light when sitting on a board, with walnut ink and grain.
 - **Hover:** bare goes to beech-light; painted shifts 7% toward white (walnut-ink paints) or black (light-ink paints).
 - **Focus:** a 2.5 px walnut outline drawn 3 px outside the face, following the sink.
@@ -296,7 +310,7 @@ Tactile and toy-like: a block is a wooden piece you press.
 ### Pegs
 - **Peg button:** a round beech peg, 48 dp target, one 18 dp walnut icon, 4 dp thickness; close, back, camera reset. Always carries a screen-reader label.
 - **Stamped peg:** a small beech-light (or painted) tab with label-medium text and 10/4 dp padding; quiet information such as "Day 1 · dawn".
-- **Chapter stamp:** a stamped peg carrying the chapter numeral that flips (340 ms, X-axis turn) from bare beech-light to its chapter paint when the chapter unlocks.
+- **Population peg:** a stamped peg holding a 16 dp species icon and its count; announced as "Rabbits 4". Only species present are shown.
 
 ### Boards (cards and containers)
 - **Corner Style:** 18 dp.
@@ -311,14 +325,28 @@ Tactile and toy-like: a block is a wooden piece you press.
 - **Wood switch row:** name in title-medium, one detail line in soft walnut, and a 54 x 30 dp slider: a groove (#B98F5C) with a knob that slides and shifts from beech-light to woad when on. Whole row is the 56 dp toggle target.
 
 ### Navigation (title shelf and action dock)
-- **Title shelf:** one Large painted block for the next action (chapter paint, island and day stamped as its detail) above two rows of bare Small blocks.
-- **Action dock:** a 4 dp-deep board holding a flow row, 8 dp apart, of bare Small blocks on wide windows or round peg buttons otherwise, with the one painted primary action ("Shape", chapter paint).
+- **Title shelf:** one Large leaf block for the next action (Continue with the world's name and day, or New world) above bare Small blocks.
+- **Action dock:** a 4 dp-deep board; see HUD composition.
 
-### Chapter closing
-The closing board states each history's outcome as a fixed eight-line list in the same order for every history of a chapter (people and homes, places, departures, two chapter-specific facts, wildlife, growth plan, who answered), with an explicit zero line ("nobody left", "no well") instead of omitting a fact, so histories compare row by row.
+### Placement palette
+A selectable group of eight Compact blocks: Look, Rabbit, Wolf, Deer, Fox, Tree, Grass, Lift out, each with its line icon. Exactly one is always chosen: leaf for an animal or plant, woad for Look, madder for Lift out. On phones the blocks are icon-only and keep their spoken labels.
+
+### Time controls
+A round play/pause peg followed by four Compact speed blocks (1×, 2×, 4×, 8×) in a selectable group; the current speed is woad. Space and the number keys mirror them on Desktop.
+
+### Creature card
+A board (max 340 dp) for the creature the player picked: species icon, name in headline, "species, sex · age" in soft walnut and a close peg; the creature's current thought in body-large (a polite live region); four labelled meters (food, water, energy, stamina) as 10 dp rounded bars, leaf above 45%, weld above 20%, madder below; one line of facts (set down or born here, pack size, catches, litters, carrying young); then Follow (woad when following) and Lift out.
+
+### Hand note and past-edit prompt
+- **Hand note:** a small board with one body-medium line that says what the chosen tool does, or why a spot was refused; it fades after a few seconds.
+- **Past-edit prompt:** when the player reaches into a past moment, a board names the day and offers "Start a new history here" (woad, branch icon) or "Back to now".
+
+### Placement ghost and selection ring (in the 3D world)
+- **Ghost:** a painted peg standing on the hovered cell: a raised band round the cell, a stake and a round knob, leaf when the tool can act there and madder when it cannot. It bobs gently unless Reduce Motion is on, and is slightly smaller for plants.
+- **Selection ring:** a cream band with walnut notches round the picked creature, turning slowly and following it as it moves.
 
 ### Island mini-map (signature)
-A painted map drawn from the island's real generated terrain, inlaid in a beech-edge frame with a sea inset; biomes shaded by height, muted toward beech-edge when the chapter is locked. Story cards place the chapter stamp in its top-left corner.
+A painted map drawn from the island's real generated terrain, inlaid in a beech-edge frame with a sea inset; biomes shaded by height. It shows each island on New world and each world in My worlds.
 
 ## Do's and Don'ts
 
@@ -326,15 +354,16 @@ A painted map drawn from the island's real generated terrain, inlaid in a beech-
 - **Do** keep the island full-bleed and visible between pieces; on phone portrait the title leaves the middle of the screen as island only.
 - **Do** build every control from Board, Block, PegButton, Peg, BlockChoice or WoodSwitchRow so thickness, press, focus and Reduce Motion come for free.
 - **Do** paint at most the one or two pieces that are chosen or primary; everything else is bare beech.
-- **Do** take chapter colour only from `chapterPaint` and text colour only from `inkOn`.
+- **Do** paint by role (leaf create, woad chosen, madder take away) and take text colour only from `inkOn`.
 - **Do** keep touch targets at least 48 dp and text in sp so the 1.3x scale reflows rather than clips.
-- **Do** honour Reduce Motion: set-down, press sink, switch slide and chapter flip all snap to their end state.
+- **Do** honour Reduce Motion: set-down, press sink, switch slide, the drop-in of placed animals and the ghost's bob all snap to their end state.
+- **Do** say why when a placement is refused, in plain words, beside the madder ghost.
 
 ### Don't:
-- **Don't** bring back the rejected "Keeper's Atlas" shell: no dark glass, vellum or parchment sheets, gold ornament or translucent HUD panels.
+- **Don't** use dark glass, vellum or parchment sheets, gold ornament or translucent HUD panels.
+- **Don't** put objectives, requests or nagging guide notes in play; the world is never waiting for the player.
 - **Don't** use tracked uppercase kickers or eyebrow lines over titles; headings are stamped Fredoka in mixed case.
 - **Don't** build menus as icon-title-subtitle lists; a menu is a few blocks on a shelf.
 - **Don't** draw a piece without its thickness band or add strokes and borders to outline it.
 - **Don't** set small text in madder on beech; madder is a face paint with pale ink. Warnings on beech use walnut ink.
-- **Don't** drop or reorder a closing outcome line when its value is zero; state the zero.
 - **Don't** expose tick counters, hashes or diagnostics outside the developer setting.

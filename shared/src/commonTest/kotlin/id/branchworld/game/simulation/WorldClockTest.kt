@@ -35,7 +35,7 @@ class WorldClockTest {
     private fun verifyEcologyPlayback(seed: Long) = runBlocking {
         withTimeout(15.seconds) {
             val terrain = IslandGenerator.generate(TerrainKey(seed))
-            val inputs = mapOf(0L to listOf(true), 299L to listOf(true, false), 600L to listOf(true))
+            val inputs = mapOf(0L to listOf(true), 300L to listOf(true, false), 600L to listOf(true))
             val checkpoints = listOf(0L, 300L, 600L, 900L)
             val engine = EcologyEngine(terrain)
             val expected = checkpoints.associateWith { target ->
@@ -51,12 +51,13 @@ class WorldClockTest {
                 clock.setSpeed(speed)
                 val driver = launch { clock.run({ true }) { waits.pace(it) } }
                 clock.togglePlaying()
-                for (tick in 0L..900L) {
+                // Fast speeds advance several ticks per frame; every frame still lands on the same ticks and states.
+                for (tick in 0L..900L step speed.ticksPerStep.toLong()) {
                     val wait = waits.receive()
                     assertEquals(tick, clock.state.tick)
-                    assertEquals(50.milliseconds / speed.multiplier, wait.interval)
+                    assertEquals(50.milliseconds * speed.ticksPerStep / speed.multiplier, wait.interval)
                     expected[tick]?.let { assertContentEquals(it, clock.state.canonicalBytes()) }
-                    if (tick % speed.multiplier == 0L) {
+                    run {
                         val projection = clock.render.value
                         assertEquals(tick, projection.tick)
                         assertEquals(clock.state.creatures.map { it.id }, projection.creatures.map { it.id })
@@ -77,7 +78,7 @@ class WorldClockTest {
         withTimeout(10.seconds) {
             val checkpoints = listOf(300L, 600L, 900L)
             val reference = terrain?.let { WorldEngine.onTerrain(it) } ?: WorldEngine(WorldState.start(104729))
-            val inputs = mapOf(0L to listOf(true), 299L to listOf(true, false), 600L to listOf(true))
+            val inputs = mapOf(0L to listOf(true), 300L to listOf(true, false), 600L to listOf(true))
             val expected = checkpoints.associateWith { tick ->
                 while (reference.state.tick < tick) {
                     inputs[reference.state.tick]?.forEach { left ->
@@ -94,12 +95,12 @@ class WorldClockTest {
                 clock.setSpeed(speed)
                 val driver = launch { clock.run({ true }) { waits.pace(it) } }
                 clock.togglePlaying()
-                for (tick in 0L..900L) {
+                for (tick in 0L..900L step speed.ticksPerStep.toLong()) {
                     val wait = waits.receive()
                     assertEquals(tick, clock.state.tick)
-                    assertEquals(50.milliseconds / speed.multiplier, wait.interval)
+                    assertEquals(50.milliseconds * speed.ticksPerStep / speed.multiplier, wait.interval)
                     expected[tick]?.let { assertContentEquals(it, clock.state.canonicalBytes()) }
-                    if (tick % speed.multiplier == 0L) {
+                    if (tick > 0L) {
                         assertEquals(tick, clock.render.value.tick)
                         assertEquals(clock.state.bunnyCell.x, clock.render.value.leadRabbit?.ground?.x)
                         if (terrain != null) {
@@ -149,13 +150,15 @@ class WorldClockTest {
             clock.setSpeed(WorldSpeed.Quadruple)
             clock.togglePlaying()
             val resumed = waits.receive()
-            assertEquals(12.5.milliseconds, resumed.interval)
+            assertEquals(25.milliseconds, resumed.interval)
             assertEquals(1L, clock.render.value.tick)
             active = false
             resumed.release.complete(Unit)
             driver.cancelAndJoin()
             assertEquals(1L, clock.render.value.tick)
 
+            // Back to one tick a frame so the kept command is checked on the very next tick.
+            clock.setSpeed(WorldSpeed.Normal)
             val reopened = launch { clock.run({ true }) { waits.pace(it) } }
             waits.receive().release.complete(Unit)
             waits.receive()

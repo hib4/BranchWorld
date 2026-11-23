@@ -6,6 +6,15 @@ import id.branchworld.game.ecology.EcologyEngine
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.FireRulesVersion
+import id.branchworld.game.ecology.LifeRulesVersion
+import id.branchworld.game.ecology.PlantKind
+import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.WorldStart
+import id.branchworld.game.simulation.ClearPlant
+import id.branchworld.game.simulation.GridCell
+import id.branchworld.game.simulation.PlaceCreature
+import id.branchworld.game.simulation.PlacePlant
+import id.branchworld.game.simulation.RemoveCreature
 import id.branchworld.game.ecology.IslandEcology
 import id.branchworld.game.ecology.PlanOption
 import id.branchworld.game.ecology.RangeRulesVersion
@@ -74,7 +83,8 @@ internal object WorldCode {
         out.number(Version)
         out.number(key.worldgenVersion)
         out.number(rules)
-        out.number(chapter?.code ?: 0)
+        // A living world has no chapter; the same field carries how it began.
+        out.number(root.life?.start?.code ?: chapter?.code ?: 0)
         out.varInt(((key.seed shl 1) xor (key.seed shr 63)).toULong())
         out.number(recipes.size)
         for (branch in recipes) {
@@ -110,13 +120,15 @@ internal object WorldCode {
         if (version != Version) fail(WorldCodeProblem.Invalid)
         val worldgen = input.int()
         val rules = input.int()
-        if (worldgen > WatershedWorldgenVersion || rules > FireRulesVersion) fail(WorldCodeProblem.Newer)
+        if (worldgen > WatershedWorldgenVersion || rules > LifeRulesVersion) fail(WorldCodeProblem.Newer)
         if (!(worldgen == 1 && rules in EnvironmentalRulesVersion..CivilizationRulesVersion ||
-                worldgen == WatershedWorldgenVersion && rules in WatershedRulesVersion..FireRulesVersion)
+                worldgen == WatershedWorldgenVersion && rules in WatershedRulesVersion..LifeRulesVersion)
         ) fail(WorldCodeProblem.Invalid)
         val chapterId = input.int()
-        val chapter = Chapter.of(chapterId)
-        if (chapterId != 0 && chapter == null) fail(WorldCodeProblem.Newer)
+        val living = rules >= LifeRulesVersion
+        val start = if (living) WorldStart.entries.firstOrNull { it.code == chapterId } ?: fail(WorldCodeProblem.Newer) else WorldStart.Empty
+        val chapter = if (living) null else Chapter.of(chapterId)
+        if (!living && chapterId != 0 && chapter == null) fail(WorldCodeProblem.Newer)
         val zigzag = input.varInt()
         val seed = (zigzag shr 1).toLong() xor -(zigzag and 1uL).toLong()
         val branchCount = input.int()
@@ -145,7 +157,7 @@ internal object WorldCode {
         val slot = slotFor(check)
         try {
             val terrain = IslandGenerator.generate(TerrainKey(seed, worldgen))
-            val checkpoint = rebuild(terrain, rules, chapter, recipes, active, viewed)
+            val checkpoint = rebuild(terrain, rules, chapter, recipes, active, viewed, start)
             if (heads(checkpoint.branches) != expectedHeads) fail(WorldCodeProblem.Different)
             val save = TimelineSaveCodec.encode(checkpoint, origin)
             return DecodedWorldCode(slot, origin, TimelineSaveCodec.restore(save), save)
@@ -202,9 +214,10 @@ internal object WorldCode {
         recipes: List<Recipe>,
         active: Int,
         viewed: Long,
+        start: WorldStart,
     ): TimelineCheckpoint {
         val island = IslandEcology(terrain)
-        val root = EcologyEngine(terrain, rulesVersion = rules, recordHistory = false, newChapter = chapter, island = island)
+        val root = EcologyEngine(terrain, rulesVersion = rules, recordHistory = false, newChapter = chapter, newStart = start, island = island)
         if (root.story != chapter) fail(WorldCodeProblem.Invalid)
         val requiredForks = recipes.groupBy(Recipe::parent).mapValues { (_, children) ->
             children.mapTo(mutableSetOf(), Recipe::fork)
@@ -326,7 +339,16 @@ internal object WorldCode {
                 is EndorsePlan -> { byte(5); number(command.petitionId); number(command.option.code) }
                 is CutFirebreak -> { byte(6); number(command.region) }
                 is SetDestination -> fail(WorldCodeProblem.Unsupported)
+                is PlaceCreature -> { byte(7); number(command.species.canonicalId); cell(command.cell) }
+                is RemoveCreature -> { byte(8); number(command.entityId) }
+                is PlacePlant -> { byte(9); number(command.kind.code); cell(command.cell) }
+                is ClearPlant -> { byte(10); cell(command.cell) }
             }
+        }
+
+        private fun cell(cell: GridCell) {
+            number(cell.x - TerrainMap.MinCell)
+            number(cell.z - TerrainMap.MinCell)
         }
     }
 
@@ -363,8 +385,18 @@ internal object WorldCode {
                 PlanOption.entries.firstOrNull { it.code == code } ?: fail(WorldCodeProblem.Invalid)
             })
             6 -> CutFirebreak(tick, sequence, int())
+            7 -> PlaceCreature(tick, sequence, int().let { code ->
+                Species.entries.firstOrNull { it.canonicalId == code } ?: fail(WorldCodeProblem.Invalid)
+            }, cell())
+            8 -> RemoveCreature(tick, sequence, long())
+            9 -> PlacePlant(tick, sequence, int().let { code ->
+                PlantKind.entries.firstOrNull { it.code == code } ?: fail(WorldCodeProblem.Invalid)
+            }, cell())
+            10 -> ClearPlant(tick, sequence, cell())
             else -> fail(WorldCodeProblem.Invalid)
         }
+
+        private fun cell() = GridCell(int() + TerrainMap.MinCell, int() + TerrainMap.MinCell)
     }
 
     private fun fail(problem: WorldCodeProblem): Nothing = throw WorldCodeError(problem)

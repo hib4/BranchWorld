@@ -69,7 +69,7 @@ class FireTest {
             }
             val state = engine.state
             val fire = checkNotNull(state.fire)
-            for (species in Species.entries) assertTrue(state.creatures.any { it.species == species }, "$seed lost $species")
+            for (species in PreLifeSpecies) assertTrue(state.creatures.any { it.species == species }, "$seed lost $species")
             assertTrue(state.settlements!!.village!!.households.any { it.active }, "$seed lost its village")
             assertTrue(fire.fires in 1..12, "$seed had ${fire.fires} fires")
             assertTrue(fire.scars.all { state.tick - it.at < ScrubAge + FireStep })
@@ -80,7 +80,7 @@ class FireTest {
             val replayTicksPerSecond = Soak * 1_000_000 / replayStart.elapsedNow().inWholeMicroseconds.coerceAtLeast(1)
             assertEquals(state.canonicalHash(), replayed.canonicalHash())
             results += "seed=$seed fires=${fire.fires} tiles=${fire.tilesBurned} homes=${fire.homesBurned} rainedOut=${rainedOut.size} " +
-                "species=${Species.entries.map { s -> state.creatures.count { it.species == s } }} households=${state.settlements.village.households.count { it.active }} " +
+                "species=${PreLifeSpecies.map { s -> state.creatures.count { it.species == s } }} households=${state.settlements.village.households.count { it.active }} " +
                 "hash=${state.canonicalHash()} medianUs=${samples[samples.size / 2] / 1_000} p95Us=$p95 maxUs=${samples.last() / 1_000} " +
                 "replayTicksPerSecond=$replayTicksPerSecond"
             // A generous ceiling that still catches an accidental quadratic fire step. The measured target is in PLAN.md.

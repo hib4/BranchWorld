@@ -16,10 +16,24 @@ internal fun ComposeUiTest.tap(label: String) {
     node.performClick()
 }
 
-/** From the title screen: Stories, then Begin on the first chapter, as a new player would. */
+/**
+ * Living worlds are the front door; the crafted stories and the earlier sandbox are kept behind developer mode.
+ * Turns it on from the title screen's Settings so those menus appear.
+ */
+@OptIn(ExperimentalTestApi::class)
+internal fun ComposeUiTest.developerMode() {
+    waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Settings").fetchSemanticsNodes().isNotEmpty() }
+    if (onAllNodesWithText("Stories").fetchSemanticsNodes().isNotEmpty()) return
+    tap("Settings")
+    tap("Show earlier content")
+    tap("Close")
+    waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Stories").fetchSemanticsNodes().isNotEmpty() }
+}
+
+/** From the title screen in developer mode: Stories, then Begin on the first chapter. */
 @OptIn(ExperimentalTestApi::class)
 internal fun ComposeUiTest.beginFadingGrove() {
-    waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Stories").fetchSemanticsNodes().isNotEmpty() }
+    developerMode()
     tap("Stories")
     tap("Begin")
 }

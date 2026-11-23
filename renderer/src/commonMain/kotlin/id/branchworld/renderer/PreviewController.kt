@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import id.branchworld.game.WorldCameraReset
 import id.branchworld.game.simulation.WorldCamera
+import id.branchworld.game.simulation.WorldPick
 import id.branchworld.game.simulation.WorldRenderSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -102,6 +103,25 @@ internal class PreviewController {
         focusAnimation?.cancel()
         _tracking.value = false
         camera.update { it.zoom(factor) }
+    }
+
+    /** What lies under a pixel of a [width]×[height] view of the island. */
+    fun pick(x: Float, y: Float, width: Float, height: Float, radius: Float): WorldPick? {
+        val world = renderWorld ?: return null
+        if (width < 2f || height < 2f) return null
+        return pickWorld(camera.value, width, height, x, y, world.terrain, world.poses.value.creatures, radius)
+    }
+
+    /** A tap or click that did not turn into a drag. The interface decides what it means. */
+    fun tap(x: Float, y: Float, width: Float, height: Float, radius: Float) {
+        val world = renderWorld ?: return
+        pick(x, y, width, height, radius)?.let(world.pointer::tap)
+    }
+
+    /** The pointer resting over the island, or null when it leaves. */
+    fun hover(x: Float?, y: Float?, width: Float, height: Float, radius: Float) {
+        val world = renderWorld ?: return
+        world.pointer.hover(if (x == null || y == null) null else pick(x, y, width, height, radius))
     }
 
     fun focus(scope: CoroutineScope): Job {

@@ -7,45 +7,45 @@
 android
 
 ## Users
-Cozy strategy and diorama players: people who enjoy tending calm, crafted miniature worlds, watching them live, and returning to a world they care about. They play in short and long sessions, often pausing to look, follow a creature or read what happened.
+Sandbox and simulation players: people who like to set something up, let it run and see what happens. They enjoy small living worlds, following one animal for a while, and asking "what if" by changing a world and watching it answer. They play in short and long sessions, often pausing to look closely or speeding time up to see where things lead.
 
 ## Product Purpose
-BranchWorld is a 3D world-shaping game about living islands. The player is the Keeper: they watch an island's ecology and villages, make a few consequential interventions (call rain, restore a grove, protect habitat, answer a village's request), rewind to a turning point, try another way, and compare the futures that result. Success is a player who cares about an island, understands why its futures differ, and wants to come back to it or to the next story.
+BranchWorld is a 3D living-world sandbox. The player creates a small island world, sets down animals, plants and (later) structures directly in the 3D scene, and watches them live on their own: rabbits graze, dig warrens and raise litters; wolves form packs and hunt together; populations boom and crash; fire and rain change the land. The core loop is **Create → Populate → Observe → Experiment → Discover**. Success is a player who keeps returning to their worlds because something surprising always happens, and who understands why it happened.
 
 ## Positioning
-Playable counterfactual history. Two futures are simulated independently from the same past by the same deterministic rules, and the difference is shown in the world itself (the Living Echo), not in a chart. No outcome is scripted.
+A living world that writes its own stories. Nothing is scripted and there are no objectives: every chase, escape, boom and collapse comes from deterministic rules shared by every platform. The player can rewind any world and try it another way, then compare the two histories in the world itself.
 
 ## Operating Context
-- One shared Compose Multiplatform interface runs on Android phones (portrait, touch) and Desktop (landscape window, mouse and keyboard); both are equal targets. iOS compiles but is not yet a shipping target.
-- The live 3D island (Kool renderer) is always behind the interface, from the title screen onward; the interface sits over it.
-- Play is paused often: to read a village's request, compare histories, inspect a creature or choose an intervention.
-- Crafted stories: The Fading Grove (Chapter I, drought) and The Last Crossing (Chapter II, a deer herd's seasonal pasture against a growing village). Sandbox on any island. A World Atlas keeps every island's histories, closed chapters and marked moments.
+- One shared Compose Multiplatform interface runs on Android phones (portrait and landscape, touch) and Desktop (window, mouse and keyboard); both are equal targets. iOS runs the same shared rules but shows a 2D fallback view without placement.
+- The live 3D island (Kool renderer) is always behind the interface, from the title screen onward.
+- Title: Continue, New world, My worlds, Settings. New world: island or seed, Empty land or Wild, a name.
+- In the world: a name board with population pegs, and a dock with time controls (pause, 1×–8×), the placement palette and What happened, Timeline and Menu pegs. Taps and clicks on the island place, select or lift out.
+- Play is often paused to place things, read a creature's card or look back through what happened.
 
 ## Capabilities and Constraints
-- Deterministic shared-Kotlin simulation; every number and event shown comes from real state. Never display fabricated outcomes.
-- Autosave per island, profile with settings and progression, legacy save import.
-- Timeline with branches, rewind to the turning point, Living Echo comparison, chronicle of village events.
-- Interventions are limited (one charge until rain refills it); villages raise petitions the Keeper may answer.
-- Diagnostics (tick tools) stay behind a developer setting.
+- Deterministic shared-Kotlin simulation (rules v12): perception, alarms, flight, warrens, mating and litters, packs, dens, cooperative hunts, starvation, wildfire and regrowth. Every number and event shown comes from real state; outcomes are never fabricated.
+- Placement is a small set of recorded commands (set down, lift out, plant, clear) with stated reasons when refused and caps measured against a performance budget.
+- Each world has its own autosaved slot; the timeline keeps branches that can be compared and shared as codes; a chronicle records moments with their causes.
+- Diagnostics stay behind a developer setting.
 
 ## Brand Commitments
-- Name: BranchWorld. Tagline: "Shape a world. Change its fate. Discover what could have been."
-- Vocabulary: Keeper, intervention, world-shaping, alternate futures, living histories. Never religious-role terms for the player.
-- Place names are part of the content: Hollowmere, Reedford, Cairnholt, Westmead, Cairnwater, Heron Reach.
+- Name: BranchWorld. Tagline: "Create a world. Fill it with life. Watch what it becomes."
+- Vocabulary: world, life, set down, lift out, watch, experiment, history. The player is simply the player; never religious-role terms.
+- Island names (The Fading Grove, Cairnwater, Heron Reach) and creature names are part of the content.
 
 ## Evidence on Hand
-- Real in-engine captures under `build/verification/*` (Desktop Vulkan and Pixel 9 AVD).
+- Real in-engine captures under `build/verification/living-sandbox-10` (Desktop Vulkan and Pixel 9 AVD).
 - Asset packs: KayKit Forest, Medieval, Adventurers, Character Animations; Kenney Nature, Cube Pets, Interface Sounds (`assets/`).
 - No player testimonials, sales, review scores or player counts exist; none may be invented.
 
 ## Product Principles
-1. The island is the subject; the interface serves looking at it.
-2. Every consequence is real and traceable to the simulation.
-3. Calm, not idle: the player always knows what is happening and what they could do next.
-4. Choices are tradeoffs, never a correct button.
+1. The world is the subject; the interface serves looking at it and reaching into it.
+2. Nothing is scripted: every consequence is real and traceable to the simulation.
+3. The player never has to act; a world left alone keeps living.
+4. Every placement is a question the world answers in its own time.
 5. Histories are kept, never silently discarded.
 
 ## Accessibility & Inclusion
 - Touch targets at least 48 dp; text in sp that follows system font scale, verified to 1.3×.
 - Reduce Motion setting for camera and decorative motion.
-- Keyboard and system Back reach every exit; screen-reader labels on icon-only controls.
+- Keyboard and system Back reach every exit; screen-reader labels on icon-only controls, including the palette and population pegs.

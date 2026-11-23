@@ -8,19 +8,23 @@ import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.ExperimentalSerializationApi
 
 @Serializable
-enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2), Fox(3) }
+enum class Species(internal val canonicalId: Int) { Rabbit(1), Deer(2), Fox(3), /** Rules v12. */ Wolf(4) }
 @Serializable
 enum class ForageKind(internal val canonicalId: Int) { Meadow(1), Browse(2) }
 @Serializable
 enum class CreatureAction(internal val canonicalId: Int) {
     Idle(0), Walking(1), Eating(2), Drinking(3), Resting(4),
     Fleeing(5), Stalking(6), Chasing(7),
+    /** Rules v12. */
+    Alert(8), Howling(9), Sleeping(10), Digging(11), Courting(12),
 }
 
 @Serializable
 internal enum class Need(internal val canonicalId: Int) {
     Food(1), Water(2), Rest(3), Waypoint(4), Roam(5),
     Flee(6), Hunt(7), Meet(8),
+    /** Rules v12. */
+    Mate(9), Den(10), Rally(11), Hide(12),
 }
 
 internal const val EcologyRulesVersion = 3
@@ -65,6 +69,9 @@ internal data class Creature(
     val waypoint: GridCell? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val wildlife: WildlifeLife? = null,
+    /** Rules v12 sex, stamina, alarm and pack. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val life: CreatureLife? = null,
 )
 
 @Serializable
@@ -103,8 +110,12 @@ internal data class EcologyState(
     /** Rules v11 world events with their recorded causes. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val chronicle: WorldChronicle? = null,
+    /** Rules v12 living sandbox: placed life, packs, warrens and census. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val life: LifeState? = null,
 ) {
     val rulesVersion: Int get() = when {
+        life != null -> LifeRulesVersion
         fire != null -> FireRulesVersion
         habitat != null -> RangeRulesVersion
         settlements?.village != null -> VillageRulesVersion

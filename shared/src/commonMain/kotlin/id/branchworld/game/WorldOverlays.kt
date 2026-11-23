@@ -74,6 +74,8 @@ internal fun PauseMenu(
     onTitle: () -> Unit,
     onDiagnostics: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Where the worlds list lives: "My worlds" in a living world. */
+    atlasLabel: String = stringResource(Res.string.menu_atlas),
 ) {
     BoxWithConstraints(modifier) {
         // A short, wide window gets one band of four columns so every action is visible without scrolling.
@@ -84,7 +86,7 @@ internal fun PauseMenu(
             add(Triple(stringResource(if (marked) Res.string.pause_marked else Res.string.pause_mark), onMark, !marked))
             add(Triple(stringResource(Res.string.pause_photo), onPhoto, true))
             add(Triple(stringResource(Res.string.menu_settings), onSettings, true))
-            add(Triple(stringResource(Res.string.menu_atlas), onAtlas, true))
+            add(Triple(atlasLabel, onAtlas, true))
             add(Triple(stringResource(Res.string.pause_title_screen), onTitle, true))
             if (diagnostics) add(Triple(stringResource(Res.string.diagnostics_title), onDiagnostics, true))
         }

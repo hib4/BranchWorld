@@ -30,7 +30,7 @@ class DesktopWorldCodeUiTest {
             }
         }
         waitUntil(timeoutMillis = 10_000) { viewport != null }
-        tap("World Atlas")
+        tap("My worlds")
         tap("Enter a world code")
         onNode(hasSetTextAction()).performTextReplacement(Fixture)
         tap("Open shared world")

@@ -10,6 +10,8 @@ import id.branchworld.game.ecology.ShapingRulesVersion
 import id.branchworld.game.ecology.VillageRulesVersion
 import id.branchworld.game.ecology.RangeRulesVersion
 import id.branchworld.game.ecology.FireRulesVersion
+import id.branchworld.game.ecology.LifeRulesVersion
+import id.branchworld.game.simulation.living
 import id.branchworld.game.simulation.CallRainRegion
 import id.branchworld.game.simulation.CutFirebreak
 import id.branchworld.game.simulation.EndorsePlan
@@ -41,6 +43,7 @@ internal data class RestoredTimeline(val terrain: TerrainMap, val timeline: Time
 
 internal object TimelineSaveCodec {
     const val MaxBytes = 16 * 1024 * 1024
+    private const val LifeSchema = 10
     private const val FireSchema = 9
     private const val RangeSchema = 8
     private const val VillageSchema = 7
@@ -67,6 +70,7 @@ internal object TimelineSaveCodec {
         val rules = root.rulesVersion
         val worldgen = root.terrain.key.worldgenVersion
         val schema = when (rules) {
+            LifeRulesVersion -> LifeSchema
             FireRulesVersion -> FireSchema
             RangeRulesVersion -> RangeSchema
             VillageRulesVersion -> VillageSchema
@@ -92,7 +96,7 @@ internal object TimelineSaveCodec {
                 val checkpoint = Timeline.root(engine.state, engine.pendingCommands())
                 return RestoredTimeline(terrain, Timeline.restore(terrain, checkpoint))
             }
-            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema, RangeSchema, FireSchema -> Unit
+            2, CivilizationSchema, WatershedSchema, WildlifeSchema, ShapingSchema, VillageSchema, RangeSchema, FireSchema, LifeSchema -> Unit
             else -> throw IncompatibleSave()
         }
         val rules = version(header["rulesVersion"]?.jsonPrimitive?.intOrNull)
@@ -118,6 +122,7 @@ internal object TimelineSaveCodec {
         VillageSchema -> worldgen == WatershedWorldgenVersion && rules == VillageRulesVersion
         RangeSchema -> worldgen == WatershedWorldgenVersion && rules == RangeRulesVersion
         FireSchema -> worldgen == WatershedWorldgenVersion && rules == FireRulesVersion
+        LifeSchema -> worldgen == WatershedWorldgenVersion && rules == LifeRulesVersion
         WildlifeSchema -> worldgen == WatershedWorldgenVersion && rules == WildlifeRulesVersion
         else -> false
     }
@@ -161,7 +166,9 @@ internal object TimelineSaveCodec {
             require(branch.head.tick != branch.start.tick || branch.head == branch.start)
             require(branch.commands.all { it.tick > branch.start.tick && it.tick <= branch.head.tick })
             require(branch.pending.all { it.tick > branch.head.tick })
-            if (rules >= ShapingRulesVersion) {
+            if (rules < LifeRulesVersion) require((branch.commands + branch.pending).none { it.living })
+            else require((branch.commands + branch.pending).all { it.living })
+            if (rules in ShapingRulesVersion until LifeRulesVersion) {
                 val queued = branch.pending.filter { it is CallRainRegion || it is ReforestRegion || it is ProtectRegion || it is CutFirebreak }
                 require(queued.size <= 1 && queued.all { it.tick - branch.head.tick == 1L })
                 val endorsed = branch.pending.filterIsInstance<EndorsePlan>()

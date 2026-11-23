@@ -1,6 +1,6 @@
 <resources>
     <string name="branchworld_title">BranchWorld</string>
-    <string name="branchworld_tagline">Every decision creates another world.</string>
+    <string name="branchworld_tagline">Create a world. Fill it with life. Watch what it becomes.</string>
     <string name="open_world">Open world</string>
     <string name="world_title">Island %1$s</string>
     <string name="island_seed">Island seed</string>
@@ -413,8 +413,8 @@
     <string name="echo_village_legend">Pale houses and dashed outlines belong to the other history.</string>
 
     <!-- Phase 08: title, stories, atlas, sandbox, settings, pause, closing and guide -->
-    <string name="title_tagline_short">Shape a world. Change its fate.</string>
-    <string name="title_tagline">Shape a world. Change its fate. Discover what could have been.</string>
+    <string name="title_tagline_short">Create a world. Fill it with life.</string>
+    <string name="title_tagline">Create a world. Fill it with life. Watch what it becomes.</string>
     <string name="menu_continue">Continue</string>
     <string name="menu_continue_detail">%1$s · day %2$d</string>
     <string name="menu_stories">Stories</string>
@@ -475,7 +475,7 @@
     <string name="settings_controls">Controls</string>
     <string name="controls_look">Drag, or arrow keys: look around the island</string>
     <string name="controls_zoom">Pinch, scroll, or + and −: move closer or further</string>
-    <string name="controls_follow">Tap an animal or a family: follow it</string>
+    <string name="controls_follow">Choose Look, then tap an animal: follow it</string>
     <string name="controls_pause">Esc or Back: pause menu and every way out</string>
     <string name="settings_developer">For developers</string>
     <string name="settings_saved">Settings are kept on this device.</string>

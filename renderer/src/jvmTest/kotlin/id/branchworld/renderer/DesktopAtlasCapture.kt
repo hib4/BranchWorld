@@ -60,7 +60,7 @@ class DesktopAtlasCapture {
     fun captureTheJourney() {
         val root = File(System.getProperty("user.dir")).parentFile
         // The newest phase's request wins; captures land beside the request that asked for them.
-        val request = listOf("living-worlds-09", "atlas-08").map { File(root, "build/verification/$it/capture.txt") }
+        val request = listOf("living-sandbox-10", "living-worlds-09", "atlas-08").map { File(root, "build/verification/$it/capture.txt") }
             .firstOrNull { it.exists() } ?: return
         val (fixture, outName, size) = request.readText().trim().split(" ")
         val (width, height) = size.split("x").map { it.toInt() }
@@ -77,6 +77,15 @@ class DesktopAtlasCapture {
             frame.isVisible = true
         }
         val controller = PreviewController()
+        var viewportWidth = 1f
+        var viewportHeight = 1f
+        // Where a cell's ground is drawn, so a step can tap the world exactly as a player's click would land.
+        fun cellPixel(x: Int, z: Int): Pair<Float, Float> {
+            val terrain = checkNotNull(controller.renderWorld).terrain
+            val center = cellPosition(x, z, terrain.cellAt(x, z)?.elevationTwice ?: 0)
+            val y = terrain.heightAt(center.x, center.z)
+            return checkNotNull(controller.camera.value.screenPoint(Point3(center.x, y, center.z), viewportWidth, viewportHeight))
+        }
         val output = DesktopFrameOutput(controller)
         val window = SwingWindowSubsystem(providedCanvas = canvas, makeFocusable = false)
         thread(name = "branchworld-capture-renderer", isDaemon = true) {
@@ -99,6 +108,8 @@ class DesktopAtlasCapture {
                                 SideEffect { controller.showWorld(projection) }
                                 val image by output.frame.collectAsState()
                                 Box(modifier.onSizeChanged {
+                                    viewportWidth = it.width.toFloat()
+                                    viewportHeight = it.height.toFloat()
                                     controller.resize(it.width, it.height)
                                     output.resize(it)
                                 }) { image?.let { Image(it, null, Modifier.matchParentSize(), contentScale = ContentScale.FillBounds) } }
@@ -146,6 +157,29 @@ class DesktopAtlasCapture {
                         "last" -> onAllNodesWithText(argument).let { it[it.fetchSemanticsNodes().size - 1] }
                             .apply { runCatching { performScrollTo() } }.performClick()
                         "desc" -> onAllNodesWithContentDescription(argument)[0].performClick()
+                        // A click on the 3D world at a cell, through the same picking a mouse click uses.
+                        "tapcell" -> {
+                            waitForIdle()
+                            val (x, z) = argument.split(" ").map { it.toInt() }
+                            val (px, py) = cellPixel(x, z)
+                            controller.tap(px, py, viewportWidth, viewportHeight, 16f)
+                            waitForIdle()
+                        }
+                        "hovercell" -> {
+                            waitForIdle()
+                            val (x, z) = argument.split(" ").map { it.toInt() }
+                            val (px, py) = cellPixel(x, z)
+                            controller.hover(px, py, viewportWidth, viewportHeight, 16f)
+                            waitForIdle()
+                        }
+                        // A click on the first creature of a species, where it is drawn.
+                        "tapanimal" -> {
+                            waitForIdle()
+                            val animal = checkNotNull(controller.renderWorld).poses.value.creatures.first { it.species.name == argument }
+                            val (px, py) = cellPixel(animal.ground.x, animal.ground.z)
+                            controller.tap(px, py - 4f, viewportWidth, viewportHeight, 24f)
+                            waitForIdle()
+                        }
                         "shot" -> {
                             waitForIdle()
                             // Dialogs and popups compose in their own roots; paint each over the screen where it sits.

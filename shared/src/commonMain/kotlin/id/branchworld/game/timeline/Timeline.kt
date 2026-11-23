@@ -1,6 +1,11 @@
 package id.branchworld.game.timeline
 
 import id.branchworld.game.ecology.EcologyEngine
+import id.branchworld.game.ecology.PlacementCheck
+import id.branchworld.game.ecology.PlantKind
+import id.branchworld.game.ecology.Species
+import id.branchworld.game.ecology.WorldStart
+import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.ecology.EcologyState
 import id.branchworld.game.ecology.EnvironmentalRulesVersion
 import id.branchworld.game.ecology.FadingGroveSeed
@@ -224,7 +229,7 @@ internal class Timeline private constructor(
             for (command in (interventionTrail(leftId, range.last) + interventionTrail(rightId, range.last)).distinct()) {
                 add(HistoryMoment(command.marker.tick, HistoryMoment.Kind.Intervention, command))
             }
-            if (left.shaping != null && terrain.key.seed == FadingGroveSeed) {
+            if (left.shaping != null && left.life == null && terrain.key.seed == FadingGroveSeed) {
                 add(HistoryMoment(FadingGroveRecovery, HistoryMoment.Kind.AfterRain))
             }
         }.filter { it.tick in range }.distinct().sortedBy { it.tick }
@@ -262,6 +267,21 @@ internal class Timeline private constructor(
     fun steer(left: Boolean) {
         if (editsAllowed && engine.queueSteering(left)) commandCount++
     }
+
+    /** Rules v12: whether [species] could be set down on [cell] at the head of this history. */
+    fun creatureCheck(species: Species, cell: GridCell): PlacementCheck =
+        if (commandLimitReached) PlacementCheck.IslandFull else engine.creatureCheck(species, cell)
+
+    fun plantCheck(kind: PlantKind, cell: GridCell): PlacementCheck =
+        if (commandLimitReached) PlacementCheck.PlantsFull else engine.plantCheck(kind, cell)
+
+    fun place(species: Species, cell: GridCell): Boolean = editsAllowed && engine.place(species, cell).also { if (it) commandCount++ }
+
+    fun plant(kind: PlantKind, cell: GridCell): Boolean = editsAllowed && engine.plant(kind, cell).also { if (it) commandCount++ }
+
+    fun remove(id: Long): Boolean = editsAllowed && engine.remove(id).also { if (it) commandCount++ }
+
+    fun clearPlant(cell: GridCell): Boolean = editsAllowed && engine.clearPlant(cell).also { if (it) commandCount++ }
 
     fun intervene(kind: Intervention, region: Int): Boolean {
         if (!editsAllowed || !engine.intervene(kind, region)) return false
@@ -352,8 +372,9 @@ internal class Timeline private constructor(
             terrain: TerrainMap,
             rulesVersion: Int = if (terrain.watershed == null) EnvironmentalRulesVersion else VillageRulesVersion,
             chapter: Chapter? = null,
+            start: WorldStart = WorldStart.Empty,
         ): Timeline {
-            val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false, newChapter = chapter)
+            val engine = EcologyEngine(terrain, rulesVersion = rulesVersion, recordHistory = false, newChapter = chapter, newStart = start)
             return Timeline(terrain, root(engine.state, emptyList()), engine)
         }
 

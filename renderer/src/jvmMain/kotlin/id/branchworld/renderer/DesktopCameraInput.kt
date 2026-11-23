@@ -56,10 +56,21 @@ internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifie
     }.onPointerEvent(PointerEventType.Move) { event ->
         val change = event.changes.first()
         if (drag.move(change.position, minOf(size.width, size.height))) change.consume()
+        else if (!event.buttons.isPrimaryPressed && !event.buttons.isSecondaryPressed) {
+            controller.hover(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(), MousePickRadius * density)
+        }
+    }.onPointerEvent(PointerEventType.Enter) { event ->
+        val change = event.changes.first()
+        controller.hover(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(), MousePickRadius * density)
+    }.onPointerEvent(PointerEventType.Exit) {
+        controller.hover(null, null, size.width.toFloat(), size.height.toFloat(), 0f)
     }.onPointerEvent(PointerEventType.Release) { event ->
         val change = event.changes.first()
         if (drag.move(change.position, minOf(size.width, size.height))) change.consume()
-        drag.stop()
+        // A press and release that barely moved is a click on the world, not a turn of the camera.
+        if (drag.stop() && !drag.panning) {
+            controller.tap(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(), MousePickRadius * density)
+        }
     }
 }
 
@@ -69,21 +80,39 @@ private fun PreviewController.moveByKey(x: Float, y: Float, panning: Boolean) {
 
 private class ViewportDrag(private val controller: PreviewController) {
     private var previous: Offset? = null
+    private var origin: Offset? = null
+    private var dragging = false
     private var pan = false
+    val panning get() = pan
 
     fun start(position: Offset, pan: Boolean) {
         previous = position
+        origin = position
+        dragging = false
         this.pan = pan
     }
 
     fun move(position: Offset, side: Int): Boolean {
         val start = previous ?: return false
         if (start == position) return false
+        // Small wobbles during a click neither turn the camera nor stop it counting as a click.
+        if (!dragging && (position - checkNotNull(origin)).getDistance() < ClickSlop) return true
+        dragging = true
         previous = position
         val delta = (position - start) / side.coerceAtLeast(1).toFloat()
         if (pan) controller.pan(delta.x, delta.y) else controller.orbit(delta.x, -delta.y)
         return true
     }
 
-    fun stop() { previous = null }
+    /** Ends the press; true when it never became a drag. */
+    fun stop(): Boolean {
+        val click = origin != null && !dragging
+        previous = null
+        origin = null
+        dragging = false
+        return click
+    }
 }
+
+private const val ClickSlop = 4f
+private const val MousePickRadius = 16f

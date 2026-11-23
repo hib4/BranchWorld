@@ -379,7 +379,7 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
             else -> home
         }
         val habitat = when (animal.species) {
-            Species.Fox -> edges
+            Species.Fox, Species.Wolf -> edges
             else -> island.roamCells(animal.species)
         }
         val radius = if (animal.species == Species.Rabbit) 5 else 8
@@ -425,7 +425,7 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
                     }
                     Species.Deer -> (if (it.kind == ForageKind.Browse) 24 else 0) -
                         spacing(it.cell, herd?.cell ?: home).coerceAtMost(16) * 2
-                    Species.Fox -> -spacing(it.cell, home).coerceAtMost(20) * 2
+                    Species.Fox, Species.Wolf -> -spacing(it.cell, home).coerceAtMost(20) * 2
                 }
                 steps * 6 - habitat - it.availableBrowse(conditions != null) / 9 - (conditions?.moisture(it.cell) ?: terrain.soilMoisture(it.cell, recharge)) / 5
             }.thenBy { it.id })
@@ -433,11 +433,11 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
     }
 
     private fun edible(patch: ForagePatch, species: Species, protectRoots: Boolean) = patch.availableBrowse(protectRoots) >= when (species) {
-        Species.Fox -> 14
+        Species.Fox, Species.Wolf -> 14
         else -> 5
     } && when (species) {
         Species.Rabbit -> patch.kind == ForageKind.Meadow || patch.availableBrowse(protectRoots) >= 22
-        Species.Fox -> patch.kind == ForageKind.Browse
+        Species.Fox, Species.Wolf -> patch.kind == ForageKind.Browse
         Species.Deer -> true
     }
 
@@ -450,7 +450,7 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
         val nutrition = when (animal.species) {
             Species.Rabbit -> if (patch.kind == ForageKind.Meadow) 4 else 3
             Species.Deer -> if (patch.kind == ForageKind.Browse) 5 else 3
-            Species.Fox -> 4
+            Species.Fox, Species.Wolf -> 4
         }
         patches[index] = patch.copy(biomass = patch.biomass - eaten)
         return animal.copy(food = minOf(MaxReserve, animal.food + eaten * nutrition), action = CreatureAction.Eating)
@@ -518,7 +518,7 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
             val pairRange = when (species) {
                 Species.Rabbit -> 21
                 Species.Deer -> 15
-                Species.Fox -> 38
+                Species.Fox, Species.Wolf -> 38
             }
             val secondIndex = adults.firstOrNull { it > firstIndex && distances[cellId(animals[it].cell)] in 0..pairRange }
                 ?: continue
@@ -540,7 +540,7 @@ internal class Wildlife(private val island: IslandEcology, private val rulesVers
         val (food, water, energy) = when (animal.species) {
             Species.Rabbit -> ReserveThresholds(660, 490, 490)
             Species.Deer -> ReserveThresholds(740, 610, 610)
-            Species.Fox -> ReserveThresholds(620, 420, 320)
+            Species.Fox, Species.Wolf -> ReserveThresholds(620, 420, 320)
         }
         return animal.matureAt <= tick && animal.breedAfter <= tick && animal.food >= food &&
             animal.water >= water && animal.energy >= energy &&

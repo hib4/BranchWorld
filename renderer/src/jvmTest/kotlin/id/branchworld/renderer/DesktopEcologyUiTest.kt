@@ -32,7 +32,7 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class DesktopEcologyUiTest {
     @Test
-    fun titleBeginsTheFirstStoryWithoutVisitingTheStoryShelf() = runDesktopComposeUiTest(width = 390, height = 720) {
+    fun titleOpensANewLivingWorldOnAPhone() = runDesktopComposeUiTest(width = 390, height = 720) {
         val owner = object : LifecycleOwner {
             override val lifecycle = LifecycleRegistry.createUnsafe(this).apply { currentState = Lifecycle.State.RESUMED }
         }
@@ -43,10 +43,15 @@ class DesktopEcologyUiTest {
             }
         }
         waitUntil(timeoutMillis = 10_000) { viewport != null }
-        val island = viewport
-        onNodeWithText("Begin").performClick()
-        onNodeWithText("Shape").assertExists()
-        assertSame(island, viewport)
+        // The stories are hidden; the title leads straight to making a world.
+        assertTrue(onAllNodesWithText("Stories").fetchSemanticsNodes().isEmpty())
+        tap("New world")
+        tap("Create world")
+        waitUntil(timeoutMillis = 15_000) { viewport?.poses?.value?.life != null }
+        // A phone shows the palette as icon pegs, and no story controls.
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithContentDescription("Wolf").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodesWithText("Shape").fetchSemanticsNodes().isEmpty())
+        assertTrue(viewport!!.poses.value.creatures.isEmpty())
     }
 
     @Test
@@ -65,6 +70,7 @@ class DesktopEcologyUiTest {
         }
         waitUntil(timeoutMillis = 5_000) { viewport?.terrain?.watershed?.landscape == IslandLandscape.Valley }
         val valley = viewport
+        developerMode()
         tap("Sandbox")
         tap("Cairnwater")
         tap("Shape this island")
@@ -77,6 +83,7 @@ class DesktopEcologyUiTest {
         waitUntil { camera.focus == WorldCamera.Focus.Landmark(LandmarkKind.Basin) }
         tap("Close")
         returnToTitle()
+        developerMode()
         tap("Sandbox")
         tap("Heron Reach")
         tap("Shape this island")
@@ -148,6 +155,7 @@ class DesktopEcologyUiTest {
         assertEquals(0L, opening.tick)
         assertEquals(9, opening.creatures.size)
         assertEquals(2, opening.wildlife?.foxes)
+        developerMode()
         tap("Stories")
         onNodeWithText("The Fading Grove").assertExists()
         tap("Begin")
@@ -174,6 +182,8 @@ class DesktopEcologyUiTest {
         waitUntil(timeoutMillis = 5_000) { camera.focus == null }
 
         returnToTitle()
+        // An earlier story is picked up again from its card.
+        tap("Stories")
         tap("Continue")
         waitUntil { onAllNodesWithText("Play").fetchSemanticsNodes().isNotEmpty() || onAllNodesWithContentDescription("Play").fetchSemanticsNodes().isNotEmpty() }
         assertSame(world, viewport)

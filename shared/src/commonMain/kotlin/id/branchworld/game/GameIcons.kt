@@ -82,6 +82,56 @@ internal object GameIcons {
         moveTo(12f, 3f); lineTo(13.6f, 10.4f); lineTo(21f, 12f); lineTo(13.6f, 13.6f); lineTo(12f, 21f)
         lineTo(10.4f, 13.6f); lineTo(3f, 12f); lineTo(10.4f, 10.4f); close()
     }
+    val Rabbit = icon("rabbit") {
+        // Two tall ears over a round head and a low body.
+        moveTo(9f, 10f); curveTo(7.5f, 6f, 7.8f, 2.8f, 9.2f, 3f); curveTo(10.6f, 3.2f, 10.6f, 6.5f, 10.4f, 10f)
+        moveTo(13.4f, 10f); curveTo(13.6f, 6.5f, 14.4f, 3.4f, 15.6f, 3.8f); curveTo(16.8f, 4.2f, 15.8f, 7.5f, 14.6f, 10.4f)
+        moveTo(8.6f, 13.6f); curveTo(8.6f, 10.6f, 15.4f, 10.6f, 15.4f, 13.6f); curveTo(15.4f, 15.6f, 13.8f, 16.2f, 12f, 16.2f)
+        curveTo(10.2f, 16.2f, 8.6f, 15.6f, 8.6f, 13.6f)
+        moveTo(6.5f, 20f); curveTo(6.5f, 16.8f, 17.5f, 16.8f, 17.5f, 20f)
+    }
+    val Wolf = icon("wolf") {
+        // A long muzzle and upright pointed ears.
+        moveTo(5f, 9f); lineTo(7.5f, 3.5f); lineTo(10f, 8f); lineTo(14f, 8f); lineTo(16.5f, 3.5f); lineTo(19f, 9f)
+        lineTo(18f, 14f); lineTo(14f, 19.5f); lineTo(12f, 20.5f); lineTo(10f, 19.5f); lineTo(6f, 14f); close()
+        moveTo(9.5f, 12f); lineTo(9.6f, 12f); moveTo(14.4f, 12f); lineTo(14.5f, 12f)
+    }
+    val Deer = icon("deer") {
+        // Branching antlers over a slender head.
+        moveTo(9f, 9f); lineTo(6f, 3.5f); moveTo(7.4f, 6f); lineTo(4.5f, 6.5f)
+        moveTo(15f, 9f); lineTo(18f, 3.5f); moveTo(16.6f, 6f); lineTo(19.5f, 6.5f)
+        moveTo(8.5f, 9.5f); curveTo(10f, 8f, 14f, 8f, 15.5f, 9.5f); lineTo(14f, 18f); curveTo(13.2f, 20.5f, 10.8f, 20.5f, 10f, 18f); close()
+    }
+    val Fox = icon("fox") {
+        // A sharp triangular face with a white-tipped cheek line.
+        moveTo(4f, 5f); lineTo(9f, 8.5f); lineTo(15f, 8.5f); lineTo(20f, 5f); lineTo(18.5f, 12f); lineTo(12f, 19.5f)
+        lineTo(5.5f, 12f); close()
+        moveTo(7.5f, 12.5f); lineTo(12f, 15f); lineTo(16.5f, 12.5f)
+    }
+    val Pine = icon("tree") {
+        moveTo(12f, 2.8f); lineTo(16.5f, 9.5f); lineTo(14f, 9.5f); lineTo(18f, 15.5f); lineTo(6f, 15.5f); lineTo(10f, 9.5f)
+        lineTo(7.5f, 9.5f); close()
+        moveTo(12f, 15.5f); lineTo(12f, 20.5f)
+    }
+    val Grass = icon("grass") {
+        moveTo(4f, 20f); lineTo(20f, 20f)
+        moveTo(7f, 20f); curveTo(6.5f, 15f, 5f, 12f, 3.5f, 10.5f)
+        moveTo(10.5f, 20f); curveTo(10.5f, 13f, 9.5f, 8f, 8.5f, 5.5f)
+        moveTo(13.5f, 20f); curveTo(13.8f, 13f, 15f, 8.5f, 16.5f, 6f)
+        moveTo(17f, 20f); curveTo(17.5f, 16f, 19f, 13f, 20.5f, 11.5f)
+    }
+    val Lift = icon("lift-out") {
+        // An open hand lifting away.
+        moveTo(7f, 13f); lineTo(7f, 7.5f); moveTo(10f, 12f); lineTo(10f, 5f); moveTo(13f, 12f); lineTo(13f, 5.5f)
+        moveTo(16f, 12.5f); lineTo(16f, 7.5f)
+        moveTo(7f, 13f); curveTo(7f, 18f, 9f, 20.5f, 12.5f, 20.5f); curveTo(16f, 20.5f, 18f, 18.5f, 18f, 15f)
+        lineTo(18f, 11f); moveTo(16f, 12.5f); lineTo(18f, 11f)
+    }
+    val Fast = icon("faster", filled = true) {
+        moveTo(4f, 6f); lineTo(12f, 12f); lineTo(4f, 18f); close()
+        moveTo(12f, 6f); lineTo(20f, 12f); lineTo(12f, 18f); close()
+    }
+
     val Dice = icon("roll") {
         moveTo(5f, 5f); lineTo(19f, 5f); lineTo(19f, 19f); lineTo(5f, 19f); close()
         moveTo(9.5f, 9f); lineTo(9.5f, 9.1f); moveTo(14.5f, 15f); lineTo(14.5f, 15.1f); moveTo(12f, 12f); lineTo(12f, 12.1f)

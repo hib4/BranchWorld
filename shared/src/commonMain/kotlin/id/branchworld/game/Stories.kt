@@ -62,6 +62,8 @@ internal enum class Story(val chapter: Chapter, val key: IslandSessionKey, val n
 internal fun AtlasEntry.key(): IslandSessionKey = IslandSessionKey(
     TerrainKey(seed, worldgen), rules, Chapter.entries.firstOrNull { it.code == chapter }?.takeIf { rules >= RangeRulesVersion },
     slot.takeIf(SharedWorldSlot::matches),
+    slot.takeIf(LivingWorldSlot::matches),
+    id.branchworld.game.ecology.WorldStart.entries.firstOrNull { it.code == start },
 )
 
 /** The name an island goes by in menus: its story, or the island itself in the sandbox. */

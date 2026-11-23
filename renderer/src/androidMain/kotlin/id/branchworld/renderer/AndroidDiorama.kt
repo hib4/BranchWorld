@@ -8,6 +8,7 @@ import android.os.Looper
 import android.view.MotionEvent
 import android.view.PixelCopy
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -178,11 +179,37 @@ private class CameraTouch(private val controller: PreviewController) : View.OnTo
     private var x = 0f
     private var y = 0f
     private var span = 0f
+    // A touch is a tap until it travels past the slop, takes a second finger or lasts too long.
+    private var downX = 0f
+    private var downY = 0f
+    private var downAt = 0L
+    private var gesture = false
 
     override fun onTouch(view: View, event: MotionEvent): Boolean {
         if (!controller.active) return false
         if (event.actionMasked == MotionEvent.ACTION_DOWN) {
             view.parent?.requestDisallowInterceptTouchEvent(true)
+            downX = event.x
+            downY = event.y
+            downAt = event.eventTime
+            gesture = false
+        }
+        if (event.actionMasked == MotionEvent.ACTION_POINTER_DOWN) gesture = true
+        if (event.actionMasked == MotionEvent.ACTION_CANCEL) gesture = true
+        val slop = ViewConfiguration.get(view.context).scaledTouchSlop
+        if (!gesture && event.actionMasked == MotionEvent.ACTION_MOVE && hypot(event.x - downX, event.y - downY) > slop) gesture = true
+        if (event.actionMasked == MotionEvent.ACTION_UP) {
+            if (!gesture && event.eventTime - downAt < TapMillis) {
+                val radius = TouchPickRadius * view.resources.displayMetrics.density
+                controller.tap(event.x, event.y, view.width.toFloat(), view.height.toFloat(), radius)
+            }
+            gesture = false
+        }
+        if (!gesture && event.actionMasked == MotionEvent.ACTION_MOVE) {
+            // Hold the camera still until the finger clearly means to turn it.
+            x = event.x
+            y = event.y
+            return true
         }
         val count = event.pointerCount
         val lifting = event.actionMasked == MotionEvent.ACTION_POINTER_UP
@@ -213,3 +240,6 @@ private class CameraTouch(private val controller: PreviewController) : View.OnTo
         return true
     }
 }
+
+private const val TapMillis = 350L
+private const val TouchPickRadius = 24f

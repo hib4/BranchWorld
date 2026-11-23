@@ -1,6 +1,11 @@
 package id.branchworld.game.ecology
 
 import id.branchworld.game.simulation.CallRainRegion
+import id.branchworld.game.simulation.ClearPlant
+import id.branchworld.game.simulation.PlaceCreature
+import id.branchworld.game.simulation.PlacePlant
+import id.branchworld.game.simulation.RemoveCreature
+import id.branchworld.game.simulation.living
 import id.branchworld.game.simulation.CreatureHeading
 import id.branchworld.game.simulation.CutFirebreak
 import id.branchworld.game.simulation.EndorsePlan
@@ -23,6 +28,8 @@ internal class EcologyEngine(
     recordHistory: Boolean = true,
     /** The crafted story a new rules-v10 history begins. Ignored when resuming a checkpoint. */
     newChapter: Chapter? = null,
+    /** How a new rules-v12 living world begins. Ignored when resuming a checkpoint. */
+    newStart: WorldStart = WorldStart.Empty,
     /** Static habitat for [terrain]. Callers validating many states of one island on one thread may share it. */
     private val island: IslandEcology = IslandEcology(terrain),
 ) {
@@ -32,7 +39,8 @@ internal class EcologyEngine(
     private val ranges by lazy { island.baseline.let { SeasonalRanges(island, it.springs, it.patches) } }
     private val villageRules by lazy { VillageRules(island, economy) { if (rulesVersion >= RangeRulesVersion) ranges else null } }
     private val fireRules by lazy { FireRules(island) }
-    val story: Chapter? = chapterOf(rulesVersion, terrain.key.seed,
+    private val lifeRules by lazy { LifeRules(island) }
+    val story: Chapter? = if (rulesVersion >= LifeRulesVersion) null else chapterOf(rulesVersion, terrain.key.seed,
         checkpoint?.habitat ?: if (rulesVersion >= RangeRulesVersion) HabitatState(newChapter?.code ?: 0) else null)
     private val chapter = story != null
     private val drought = story == Chapter.FadingGrove
@@ -49,6 +57,14 @@ internal class EcologyEngine(
 
     var state: EcologyState = checkpoint ?: island.initialState().let {
         when (rulesVersion) {
+            LifeRulesVersion -> {
+                // A living world: terrain, wild plants, weather and fire, but no village, story or founders.
+                val land = it.copy(creatures = emptyList(), nextEntityId = 1,
+                    environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain, recharge = openingRecharge),
+                    shaping = ShapingState(), fire = FireState.start(terrain.key.seed), chronicle = WorldChronicle(),
+                    wildlife = WildlifeHistory(), life = LifeState(newStart))
+                if (newStart == WorldStart.Wild) lifeRules.seedWild(land) else land
+            }
             FireRulesVersion, RangeRulesVersion, VillageRulesVersion, ShapingRulesVersion, WildlifeRulesVersion, WatershedRulesVersion -> {
                 val opening = it.copy(environment = Environment.start(terrain.key.seed, watershed = true, firstRain = openingRain, recharge = openingRecharge),
                     settlements = SettlementWorld(village = if (rulesVersion >= VillageRulesVersion) VillageState() else null),
@@ -72,14 +88,19 @@ internal class EcologyEngine(
 
     init {
         require(state.rulesVersion == rulesVersion)
-        require((rulesVersion in WatershedRulesVersion..FireRulesVersion) == (terrain.watershed != null))
+        require((rulesVersion in WatershedRulesVersion..LifeRulesVersion) == (terrain.watershed != null))
         require(story != Chapter.LastCrossing || terrain.key.seed == CrossingSeed)
         require(story != Chapter.EmberSeason || terrain.key.seed == EmberSeed && rulesVersion >= FireRulesVersion)
-        require((state.fire == null) == (state.chronicle == null) && (state.fire == null || state.habitat != null))
-        require(state.environment?.recharge?.let { it in 0..255 && state.settlements != null } != false)
+        require((state.fire == null) == (state.chronicle == null) && (state.fire == null || state.habitat != null || state.life != null))
+        require(state.life == null || state.settlements == null && state.habitat == null && state.fire != null && state.shaping != null)
+        require(state.life != null || state.creatures.none {
+            it.life != null || it.species == Species.Wolf || it.heading.canonicalId > CreatureHeading.NegativeZ.canonicalId ||
+                it.action.canonicalId > CreatureAction.Chasing.canonicalId || (it.goal?.need?.canonicalId ?: 0) > Need.Meet.canonicalId
+        })
+        require(state.environment?.recharge?.let { it in 0..255 && (state.settlements != null || state.life != null) } != false)
         require(state.settlements == null || state.environment != null)
         require(state.wildlife == null || state.environment?.recharge != null)
-        require(state.shaping == null || state.wildlife != null && state.settlements != null)
+        require(state.shaping == null || state.wildlife != null && (state.settlements != null || state.life != null))
         require(state.terrain == island.identity && state.tick >= 0)
         require(state.springs.all(island.navigation::contains))
         require(state.patches.zipWithNext().all { (first, next) -> first.id < next.id })
@@ -95,7 +116,9 @@ internal class EcologyEngine(
                 (it.waypoint == null || island.navigation.contains(it.waypoint))
         })
         require(Species.entries.all { species -> state.creatures.count { it.species == species } <= species.populationLimit(rulesVersion) })
-        if (state.wildlife == null) {
+        if (state.life != null) {
+            lifeRules.validate(state)
+        } else if (state.wildlife == null) {
             require(state.creatures.all { it.species in LegacySpecies && it.wildlife == null &&
                 it.action.canonicalId <= CreatureAction.Resting.canonicalId &&
                 (it.goal?.need?.canonicalId ?: 0) <= Need.Roam.canonicalId })
@@ -121,10 +144,14 @@ internal class EcologyEngine(
         validTarget(command) && (command !is EndorsePlan || state.settlements?.let {
             villageRules.endorse(it, command.tick, command.petitionId, command.option)
         } == true) &&
-            (command !is SetDestination || state.creatures.any { it.id == command.entityId && it.species == Species.Rabbit }) &&
+            (command !is SetDestination || state.life == null && state.creatures.any { it.id == command.entityId && it.species == Species.Rabbit }) &&
             inputs.submit(state.tick, command)
 
-    private fun validTarget(command: WorldCommand) = when (command) {
+    private fun validTarget(command: WorldCommand) = if (command.living != (state.life != null)) false else when (command) {
+        is PlaceCreature -> island.navigation.contains(command.cell)
+        is RemoveCreature -> command.entityId > 0
+        is PlacePlant -> island.navigation.contains(command.cell)
+        is ClearPlant -> island.navigation.contains(command.cell)
         is SetDestination -> command.entityId > 0 && island.navigation.contains(command.cell)
         is ReforestRegion -> state.environment != null && command.region in 0 until RegionCount
         is SupplementForage -> state.environment != null && state.shaping == null && command.region in 0 until RegionCount
@@ -140,6 +167,7 @@ internal class EcologyEngine(
 
     /** Persistence checks invariants that are stronger than synthetic simulation fixtures require. */
     fun validateSavedState() {
+        if (state.life != null) return validateLivingState()
         val baseline = island.baseline
         val ledger = state.ledger
         require(state.springs == baseline.springs)
@@ -194,6 +222,38 @@ internal class EcologyEngine(
             else economy.validate(it, state.tick, state.patches, state.springs, state.shaping != null)
             require(it.gatheredFood.toULong() + it.gatheredWood.toULong() <= ledger.consumed.toULong())
         }
+    }
+
+    /** Rules v12 persistence checks: the player's hand is accounted for in the ledger and the biomass balance. */
+    private fun validateLivingState() {
+        val baseline = island.baseline
+        val ledger = state.ledger
+        val life = checkNotNull(state.life)
+        require(state.springs == baseline.springs)
+        require(state.nextEntityId >= 1 && life.placed <= state.nextEntityId - 1)
+        require(ledger.births == state.nextEntityId - 1 - life.placed)
+        require(ledger.deaths >= 0 && ledger.deaths + life.removed == state.nextEntityId - 1 - state.creatures.size)
+        require(ledger.consumed >= 0 && ledger.regrown >= 0 && ledger.introduced >= 0)
+        checkNotNull(state.wildlife).validate(state, island)
+        require(state.creatures.all { it.matureAt >= 0 && it.breedAfter >= 0 && it.depletedTicks in 0 until SurvivalTicks })
+        val natural = state.patches.filterNot { it.planted }
+        require(natural.map { it.copy(biomass = it.capacity) } == baseline.patches)
+        val planted = state.patches.filter { it.planted }
+        require(planted.size == life.planted - life.cleared && planted.size <= MaxPlanted)
+        require(planted.all { lifeRules.validPlanted(it, state.springs) })
+        val supply = ledger.introduced.toULong() + ledger.regrown.toULong()
+        val required = ledger.consumed.toULong() + state.patches.sumOf { it.biomass }.toULong()
+        val initial = baseline.patches.sumOf { it.biomass }.toULong()
+        require(required >= initial && required - initial == supply)
+        val environment = requireNotNull(state.environment)
+        checkNotNull(state.shaping).validate(state.tick, false)
+        if (state.tick < openingRain) {
+            val opening = Environment.start(state.terrain.key.seed, true, openingRain, openingRecharge)
+            val recharge = opening.recharge?.let { (it - 2 * (state.tick / 10).toInt()).coerceAtLeast(0) }
+            require(environment == opening.copy(recharge = recharge))
+        } else require(environment.nextChange - state.tick in 0..360)
+        fireRules.validate(checkNotNull(state.fire), state.chronicle, state.tick, null)
+        checkNotNull(state.chronicle).validate(state.tick, island, living = true)
     }
 
     private fun shapingBlock(kind: Intervention, region: Int, shaping: ShapingState, weather: Weather, sites: List<GridCell>): ShapeBlock? = when {
@@ -273,7 +333,8 @@ internal class EcologyEngine(
                 command.tick == nextTick && when (command) {
                     is ReforestRegion -> kind == Intervention.Reforest && command.region == region
                     is SupplementForage -> kind == Intervention.Supplement && command.region == region
-                    is CallRainRegion, is SetDestination, is EndorsePlan, is ProtectRegion, is CutFirebreak -> false
+                    is CallRainRegion, is SetDestination, is EndorsePlan, is ProtectRegion, is CutFirebreak,
+                    is PlaceCreature, is RemoveCreature, is PlacePlant, is ClearPlant -> false
                 }
             }) return false
         }
@@ -289,6 +350,32 @@ internal class EcologyEngine(
         }
     }
 
+    // ----- rules v12: the player's hand in a living world -----
+
+    private fun queuedArrivals(): List<PlaceCreature> = inputs.pending().filterIsInstance<PlaceCreature>()
+    private fun queuedPlants(): List<PlacePlant> = inputs.pending().filterIsInstance<PlacePlant>()
+
+    /** Whether [species] could be set down on [cell] now, counting placements already queued. */
+    fun creatureCheck(species: Species, cell: GridCell): PlacementCheck =
+        lifeRules.checkCreature(state, species, cell, queuedArrivals().map { it.species })
+
+    fun plantCheck(kind: PlantKind, cell: GridCell): PlacementCheck =
+        lifeRules.checkPlant(state, kind, cell, queuedPlants().map { it.cell })
+
+    fun place(species: Species, cell: GridCell): Boolean = creatureCheck(species, cell) == PlacementCheck.Ok &&
+        inputs.submitNext(state.tick) { tick, sequence -> PlaceCreature(tick, sequence, species, cell) }
+
+    fun plant(kind: PlantKind, cell: GridCell): Boolean = plantCheck(kind, cell) == PlacementCheck.Ok &&
+        inputs.submitNext(state.tick) { tick, sequence -> PlacePlant(tick, sequence, kind, cell) }
+
+    fun remove(id: Long): Boolean = state.life != null && state.creatures.any { it.id == id } &&
+        inputs.pending().none { it is RemoveCreature && it.entityId == id } &&
+        inputs.submitNext(state.tick) { tick, sequence -> RemoveCreature(tick, sequence, id) }
+
+    fun clearPlant(cell: GridCell): Boolean = state.life != null && state.patches.any { it.planted && it.cell == cell } &&
+        inputs.pending().none { it is ClearPlant && it.cell == cell } &&
+        inputs.submitNext(state.tick) { tick, sequence -> ClearPlant(tick, sequence, cell) }
+
     fun steeringTarget(left: Boolean): GridCell? = if (left) island.navigation.west else island.navigation.east
 
     fun steer(left: Boolean) {
@@ -296,6 +383,7 @@ internal class EcologyEngine(
     }
 
     fun queueSteering(left: Boolean): Boolean {
+        if (state.life != null) return false
         val rabbit = state.creatures.firstOrNull { it.species == Species.Rabbit } ?: return false
         val target = steeringTarget(left) ?: return false
         return inputs.submitNext(state.tick) { tick, sequence -> SetDestination(tick, sequence, rabbit.id, target) }
@@ -322,9 +410,55 @@ internal class EcologyEngine(
         fun keeperAct(act: KeeperAct, subject: Int, cell: GridCell): EventRef? = chronicle?.let { log ->
             log.record(tick, WorldEventKind.KeeperAct, cell, subject, act.code).also { chronicle = it.first }.second
         }
+        // Rules v12: what the player set down, lifted out, planted or cleared on this tick.
+        val removals = mutableListOf<Long>()
+        val arrivals = mutableListOf<Arrival>()
+        var lifeState = previous.life
+        val acted = mutableSetOf<Pair<KeeperAct, Int>>()
+        fun livingAct(act: KeeperAct, subject: Int, cell: GridCell) {
+            if (acted.add(act to subject)) keeperAct(act, subject, cell)
+        }
         val results = buildList {
             for (command in appliedCommands) {
                 when (command) {
+                    is PlaceCreature -> {
+                        val queued = arrivals.map { it.species }
+                        val gone = previous.copy(creatures = previous.creatures.filter { it.id !in removals })
+                        if (lifeRules.checkCreature(gone, command.species, command.cell, queued) == PlacementCheck.Ok) {
+                            arrivals.add(Arrival(command.species, command.cell))
+                            livingAct(KeeperAct.Place, command.species.canonicalId, command.cell)
+                        }
+                    }
+                    is RemoveCreature -> {
+                        val animal = previous.creatures.firstOrNull { it.id == command.entityId }
+                        if (animal != null && command.entityId !in removals) {
+                            removals.add(command.entityId)
+                            livingAct(KeeperAct.Remove, animal.species.canonicalId, animal.cell)
+                        }
+                    }
+                    is PlacePlant -> {
+                        val current = checkNotNull(lifeState)
+                        val planted = previous.copy(patches = patches)
+                        if (lifeRules.checkPlant(planted, command.kind, command.cell, emptyList()) == PlacementCheck.Ok) {
+                            val patch = lifeRules.plantPatch(command.kind, command.cell)
+                            patches.add(patch)
+                            patches.sortBy(ForagePatch::id)
+                            introduced += patch.biomass
+                            lifeState = current.copy(planted = current.planted + 1)
+                            livingAct(KeeperAct.Plant, command.kind.code, command.cell)
+                        }
+                    }
+                    is ClearPlant -> {
+                        val current = checkNotNull(lifeState)
+                        val index = patches.indexOfFirst { it.planted && it.cell == command.cell }
+                        if (index >= 0) {
+                            felledBiomass += patches[index].biomass
+                            val kind = if (patches[index].kind == ForageKind.Browse) PlantKind.Tree else PlantKind.Meadow
+                            patches.removeAt(index)
+                            lifeState = current.copy(cleared = current.cleared + 1)
+                            livingAct(KeeperAct.Clear, kind.code, command.cell)
+                        }
+                    }
                     is EndorsePlan -> {
                         val before = endorsed
                         endorsed = endorsed?.let { villageRules.applyEndorsement(it, tick, command.petitionId, command.option) }
@@ -418,6 +552,31 @@ internal class EcologyEngine(
             fire = outcome.fire
             chronicle = outcome.chronicle
             endorsed = outcome.settlements
+        }
+        if (lifeState != null) {
+            val view = fire?.let { fireView(it, tick) }
+            val turn = lifeRules.advance(previous.copy(life = lifeState), tick, checkNotNull(environment?.recharge), patches, view,
+                removals, arrivals, checkNotNull(chronicle))
+            val ledger = previous.ledger
+            return previous.copy(
+                tick = tick,
+                patches = patches,
+                creatures = turn.animals,
+                nextEntityId = turn.nextId,
+                environment = environment,
+                wildlife = turn.history,
+                shaping = shaping,
+                fire = fire,
+                chronicle = turn.chronicle,
+                life = turn.life,
+                ledger = EcologyLedger(
+                    consumed = ledger.consumed + afterGrowth - patches.sumOf { it.biomass } + felledBiomass,
+                    regrown = ledger.regrown + afterGrowth - before,
+                    births = ledger.births + turn.born,
+                    deaths = ledger.deaths + turn.died,
+                    introduced = ledger.introduced + introduced,
+                ),
+            ).also { state = it }
         }
         val range = habitat?.let { RangeTurn(ranges, endorsed?.disturbedCells(island).orEmpty(), it) }
         val view = fire?.let { fireView(it, tick) }

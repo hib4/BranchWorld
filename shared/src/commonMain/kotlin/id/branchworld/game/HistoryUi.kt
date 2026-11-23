@@ -17,6 +17,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import branchworld.shared.generated.resources.Res
+import id.branchworld.game.ecology.KeeperAct
+import id.branchworld.game.ecology.PlantKind
+import id.branchworld.game.ecology.Species
+import branchworld.shared.generated.resources.history_boom
+import branchworld.shared.generated.resources.history_crash
+import branchworld.shared.generated.resources.history_escaped
+import branchworld.shared.generated.resources.history_first_litter
+import branchworld.shared.generated.resources.history_hunted
+import branchworld.shared.generated.resources.history_keeper_cleared
+import branchworld.shared.generated.resources.history_keeper_placed
+import branchworld.shared.generated.resources.history_keeper_planted
+import branchworld.shared.generated.resources.history_keeper_removed
+import branchworld.shared.generated.resources.history_pack_formed
+import branchworld.shared.generated.resources.history_starved
+import branchworld.shared.generated.resources.history_vanished
+import branchworld.shared.generated.resources.history_wildlife_placed
+import branchworld.shared.generated.resources.history_wildlife_removed
+import branchworld.shared.generated.resources.plant_meadow
+import branchworld.shared.generated.resources.plant_tree
 import branchworld.shared.generated.resources.echo_branch_start
 import branchworld.shared.generated.resources.echo_pasture_request
 import branchworld.shared.generated.resources.echo_warning
@@ -42,6 +61,7 @@ import branchworld.shared.generated.resources.history_herd_pushed
 import branchworld.shared.generated.resources.history_home_burned
 import branchworld.shared.generated.resources.history_home_rebuilt
 import branchworld.shared.generated.resources.history_keeper
+import branchworld.shared.generated.resources.history_your_hand
 import branchworld.shared.generated.resources.history_keeper_acted
 import branchworld.shared.generated.resources.history_land
 import branchworld.shared.generated.resources.history_lightning
@@ -111,13 +131,16 @@ internal fun HistoryBoard(
     val terrain = island.world.terrain
 
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        // A living world has no villages, and the player's own acts read as their hand.
+        val living = island.key.living
         for (entry in HistoryFilter.entries) {
+            if (living && entry == HistoryFilter.Village) continue
             Block(stringResource(when (entry) {
                 HistoryFilter.All -> Res.string.history_all
                 HistoryFilter.Wildlife -> Res.string.history_wildlife
                 HistoryFilter.Village -> Res.string.history_village
                 HistoryFilter.Land -> Res.string.history_land
-                HistoryFilter.Keeper -> Res.string.history_keeper
+                HistoryFilter.Keeper -> if (living) Res.string.history_your_hand else Res.string.history_keeper
                 HistoryFilter.Marked -> Res.string.history_marked
             }), { filter = entry }, selected = filter == entry,
                 paint = if (filter == entry) Wood.Woad else Wood.BeechLight, size = BlockSize.Compact)
@@ -208,6 +231,8 @@ private fun HistoryEntry.describe(chapter: Chapter?): String = when (this) {
         WildlifeMilestone.Caught -> Res.string.history_wildlife_caught
         WildlifeMilestone.Scarcity -> Res.string.history_wildlife_scarcity
         WildlifeMilestone.OldAge -> Res.string.history_wildlife_age
+        WildlifeMilestone.Placed -> Res.string.history_wildlife_placed
+        WildlifeMilestone.Removed -> Res.string.history_wildlife_removed
     }, event.species.label().lowercase())
     is HistoryEntry.Range -> stringResource(when (event.kind) {
         RangeEventKind.HerdSetOut -> Res.string.history_herd_departed
@@ -226,6 +251,7 @@ private fun HistoryEntry.describe(chapter: Chapter?): String = when (this) {
 
 @Composable
 internal fun worldEventLabel(kind: WorldEventKind, event: WorldEvent?): String {
+    if (event != null) livingEventLabel(kind, event)?.let { return it }
     if (kind == WorldEventKind.FireOut && event != null) return when (event.detail) {
         FireOutCause.Rain.code -> stringResource(Res.string.history_fire_rain)
         FireOutCause.CalledShower.code -> stringResource(Res.string.history_fire_shower)
@@ -256,5 +282,41 @@ internal fun worldEventLabel(kind: WorldEventKind, event: WorldEvent?): String {
         WorldEventKind.MeadowReturned -> Res.string.history_meadow
         WorldEventKind.YoungWood -> Res.string.history_young_wood
         WorldEventKind.AnimalsFled -> Res.string.history_fled
+        WorldEventKind.Hunted -> Res.string.history_hunted
+        WorldEventKind.PackFormed -> Res.string.history_pack_formed
+        WorldEventKind.Escaped -> Res.string.history_escaped
+        WorldEventKind.Starved -> Res.string.history_starved
+        WorldEventKind.Vanished -> Res.string.history_vanished
+        WorldEventKind.Boom -> Res.string.history_boom
+        WorldEventKind.Crash -> Res.string.history_crash
+        WorldEventKind.FirstLitter -> Res.string.history_first_litter
     })
 }
+
+/** Rules v12 events, named with the animals involved. */
+@Composable
+private fun livingEventLabel(kind: WorldEventKind, event: WorldEvent): String? {
+    fun species(code: Int) = Species.entries.firstOrNull { it.canonicalId == code }
+    return when (kind) {
+        WorldEventKind.Hunted -> stringResource(Res.string.history_hunted, wildlifeName(event.subject.toLong()),
+            species(event.detail)?.label()?.lowercase().orEmpty())
+        WorldEventKind.Escaped -> stringResource(Res.string.history_escaped, wildlifeName(event.subject.toLong()),
+            wildlifeName(event.detail.toLong()))
+        WorldEventKind.Starved -> stringResource(Res.string.history_starved, wildlifeName(event.subject.toLong()))
+        WorldEventKind.Vanished -> stringResource(Res.string.history_vanished, species(event.detail)?.label()?.lowercase().orEmpty())
+        WorldEventKind.Boom -> stringResource(Res.string.history_boom, species(event.detail)?.plural().orEmpty(), event.subject)
+        WorldEventKind.Crash -> stringResource(Res.string.history_crash, species(event.detail)?.plural().orEmpty(), event.subject)
+        WorldEventKind.FirstLitter -> stringResource(Res.string.history_first_litter, wildlifeName(event.subject.toLong()))
+        WorldEventKind.KeeperAct -> when (event.detail) {
+            KeeperAct.Place.code -> stringResource(Res.string.history_keeper_placed, species(event.subject)?.plural()?.lowercase().orEmpty())
+            KeeperAct.Remove.code -> stringResource(Res.string.history_keeper_removed, species(event.subject)?.label()?.lowercase().orEmpty())
+            KeeperAct.Plant.code -> stringResource(Res.string.history_keeper_planted, plantName(event.subject))
+            KeeperAct.Clear.code -> stringResource(Res.string.history_keeper_cleared, plantName(event.subject))
+            else -> null
+        }
+        else -> null
+    }
+}
+
+@Composable
+private fun plantName(code: Int) = stringResource(if (code == PlantKind.Tree.code) Res.string.plant_tree else Res.string.plant_meadow)

@@ -34,7 +34,7 @@ class DesktopEmberUiTest {
                 App(saveStore = store, viewport = { _, world -> SideEffect { viewport = world } })
             }
         }
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Stories").fetchSemanticsNodes().isNotEmpty() }
+        developerMode()
         tap("Stories")
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Ember Season").fetchSemanticsNodes().isNotEmpty() }
         // Chapter III is the last card on the shelf.
@@ -71,7 +71,7 @@ class DesktopEmberUiTest {
                 App(saveStore = ProfileStore(), viewport = { _, world -> SideEffect { viewport = world } })
             }
         }
-        waitUntil(timeoutMillis = 10_000) { onAllNodesWithText("Stories").fetchSemanticsNodes().isNotEmpty() }
+        developerMode()
         tap("Stories")
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithText("Ember Season").fetchSemanticsNodes().isNotEmpty() }
         onAllNodesWithText("Begin").fetchSemanticsNodes().size.let { count -> onAllNodesWithText("Begin")[count - 1].performScrollToAndClick() }

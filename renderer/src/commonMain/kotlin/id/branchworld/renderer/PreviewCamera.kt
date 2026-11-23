@@ -87,6 +87,10 @@ internal fun creatureViewYaw(terrain: TerrainMap, animal: CreaturePose, camera: 
         CreatureHeading.PositiveX -> Tau / 4f
         CreatureHeading.NegativeZ -> Tau / 2f
         CreatureHeading.NegativeX -> -Tau / 4f
+        CreatureHeading.PositiveXPositiveZ -> Tau / 8f
+        CreatureHeading.NegativeXPositiveZ -> -Tau / 8f
+        CreatureHeading.PositiveXNegativeZ -> Tau * 3f / 8f
+        CreatureHeading.NegativeXNegativeZ -> -Tau * 3f / 8f
     }
     fun penalty(offset: Float): Float {
         val yaw = camera.yaw + offset
