@@ -6,13 +6,9 @@
 
 BranchWorld follows a layered architecture: each layer depends only on the layers below it, and the deterministic rules sit in a module of their own so the compiler keeps the interface out of them.
 
-```
-androidApp / desktopApp / webApp / iosKit+iosApp   startup, window or page lifetime, platform adapters
-        │                   │
-    :renderer ──────────► :shared            ui ─► data ─► domain ─► platform (ports)
-                            │
-                       :simulation           deterministic rules, saves and render projections
-```
+Inside `:shared`, the interface sits on data, data on domain, and domain on the platform ports. Each platform plugs in through those ports. The apps handle startup, the window or page lifetime, and the platform adapters, and `:simulation` holds the deterministic rules, saves and render projections.
+
+![Layers inside shared](images/layers.svg)
 
 ## `:simulation` — the world's rules (no Compose, no platform code)
 

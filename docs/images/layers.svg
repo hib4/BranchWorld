@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="352" viewBox="0 0 800 352" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="layers-title layers-desc" id="layers-root">
+        <title id="layers-title">Layers inside shared</title>
+        <desc id="layers-desc">Inside the shared module the interface depends on data, data on domain, and domain on platform ports; domain runs on the deterministic simulation, and each platform supplies adapters for the ports.</desc>
+        <defs>
+      <style>#layers-root { --color-paper:   #FFFFFF;   
+      --color-ink:     #19191C;   
+      --color-muted:   #5E5E61;   
+      --color-accent:  #7F52FF;   
+      --font-sans:     'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-serif:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-mono:     'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #layers-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #layers-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#layers-root .diagram-container { overflow-x: visible; }
+}</style>
+          <marker id="layers-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5E5E61"/></marker>
+          <linearGradient id="layers-kotlin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7F52FF"/><stop offset="0.5" stop-color="#C811E2"/><stop offset="1" stop-color="#E54857"/></linearGradient>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#FFFFFF"/>
+
+        <!-- Zone -->
+        <rect x="40" y="40" width="720" height="104" rx="8" fill="#19191c" stroke="#19191c" stroke-width="1.2" fill-opacity="0.02" stroke-opacity="0.24"/>
+        <rect x="52" y="44" width="48" height="12" rx="2" fill="#FFFFFF"/>
+        <text x="76" y="53" fill="#6B6B6E" font-size="7" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">SHARED</text>
+
+        <!-- Arrows (behind nodes) -->
+        <line x1="212" y1="100" x2="236" y2="100" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#layers-arrow)"/>
+        <line x1="388" y1="100" x2="412" y2="100" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#layers-arrow)"/>
+        <line x1="564" y1="100" x2="588" y2="100" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#layers-arrow)"/>
+        <line x1="488" y1="128" x2="488" y2="208" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#layers-arrow)"/>
+        <line x1="664" y1="208" x2="664" y2="128" stroke="#5E5E61" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#layers-arrow)"/>
+
+        <!-- Layers inside shared -->
+        <rect x="60" y="72" width="152" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="60" y="72" width="152" height="56" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="136" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">UI</text>
+        <text x="136" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">ui · Compose screens</text>
+        <rect x="236" y="72" width="152" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="236" y="72" width="152" height="56" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="312" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Data</text>
+        <text x="312" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">data · repositories</text>
+        <rect x="412" y="72" width="152" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="412" y="72" width="152" height="56" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="488" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Domain</text>
+        <text x="488" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">domain · world sessions</text>
+        <rect x="588" y="72" width="152" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="588" y="72" width="152" height="56" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="664" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Platform ports</text>
+        <text x="664" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">platform · interfaces</text>
+
+        <!-- Below -->
+        <rect x="408" y="208" width="160" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="408" y="208" width="160" height="56" rx="6" fill="#7f52ff" stroke="url(#layers-kotlin)" stroke-width="1.5" fill-opacity="0.08"/>
+        <text x="488" y="234" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">World rules</text>
+        <text x="488" y="250" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">simulation · deterministic</text>
+        <rect x="600" y="208" width="128" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="600" y="208" width="128" height="56" rx="6" fill="#19191c" stroke="#19191c" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="664" y="234" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Adapters</text>
+        <text x="664" y="250" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">apps + renderer</text>
+
+        <!-- Callout -->
+        <text x="364" y="230" fill="#7F52FF" font-size="12" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="end">the rules know nothing of</text>
+        <text x="364" y="246" fill="#7F52FF" font-size="12" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="end">screens or platforms</text>
+        <path d="M 372 236 Q 388 236 404 236" fill="none" stroke="#7f52ff" stroke-width="1" stroke-dasharray="4,3" stroke-opacity="0.50"/>
+        <circle cx="406" cy="236" r="2" fill="#7F52FF"/>
+
+        <!-- Legend strip -->
+        <line x1="40" y1="296" x2="760" y2="296" stroke="#19191c" stroke-width="0.8" stroke-opacity="0.14"/>
+        <text x="40" y="312" fill="#5E5E61" font-size="8" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.18em">LEGEND</text>
+        <rect x="40" y="324" width="14" height="10" rx="2" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="60" y="332" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Layer in shared</text>
+        <rect x="160" y="324" width="14" height="10" rx="2" fill="#19191c" stroke="#19191c" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="180" y="332" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Platform code</text>
+        <rect x="272" y="324" width="14" height="10" rx="2" fill="#7f52ff" stroke="url(#layers-kotlin)" stroke-width="1" fill-opacity="0.08"/>
+        <text x="292" y="332" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Deterministic core</text>
+        <line x1="400" y1="329" x2="428" y2="329" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#layers-arrow)"/>
+        <text x="436" y="332" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Depends on</text>
+        <line x1="512" y1="329" x2="540" y2="329" stroke="#5E5E61" stroke-width="1" stroke-dasharray="4,3" marker-end="url(#layers-arrow)"/>
+        <text x="548" y="332" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Implements</text>
+      </svg>
