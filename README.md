@@ -25,16 +25,6 @@ Some handy links:
 * **Experiment** – Rewind to any moment, try another way, and compare the two histories.
 * **Discover** – Every boom, crash and wildfire is recorded, with its causes.
 
-## Kotlin Multiplatform
-
-<p align="center">
-  <img src="docs/images/architecture.svg" alt="The Android, Desktop, Web and iOS apps use a shared 3D view and interface, which run on one set of deterministic world rules." width="800">
-</p>
-
-* **One set of rules** – The world's rules are pure common Kotlin and replay identically on every platform.
-* **One interface** – Every screen is written once with Compose Multiplatform.
-* **One scene** – The 3D world is described once; Kool draws it on Android, Desktop and the web, RealityKit on iOS.
-
 ## How to play
 
 | Action | Touch | Mouse and keyboard |

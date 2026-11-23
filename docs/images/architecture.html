@@ -8,13 +8,13 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --color-paper:   #F6E2C2;   /* beech-light */
-      --color-ink:     #2B1D12;   /* walnut */
-      --color-muted:   #5B4330;   /* walnut-soft */
-      --color-accent:  #A13C27;   /* madder, darkened to clear 4.5:1 as text */
-      --font-sans:     'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
-      --font-serif:    'Instrument Serif', Georgia, serif;
-      --font-mono:     'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+      --color-paper:   #FFFFFF;   /* Kotlin white */
+      --color-ink:     #19191C;   /* Kotlin ink */
+      --color-muted:   #5E5E61;   /* Kotlin secondary text */
+      --color-accent:  #7F52FF;   /* Kotlin purple */
+      --font-sans:     'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-serif:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-mono:     'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     }
 
     body {
@@ -68,85 +68,86 @@
         <title id="architecture-title">BranchWorld modules</title>
         <desc id="architecture-desc">The Android, Desktop, Web and iOS apps all use the shared 3D view and interface, which run on one set of deterministic world rules.</desc>
         <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5B4330"/></marker>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5E5E61"/></marker>
+          <linearGradient id="kotlin" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#7F52FF"/><stop offset="0.5" stop-color="#C811E2"/><stop offset="1" stop-color="#E54857"/></linearGradient>
         </defs>
 
-        <rect width="100%" height="100%" fill="#F6E2C2"/>
+        <rect width="100%" height="100%" fill="#FFFFFF"/>
 
         <!-- Zones -->
-        <rect x="40" y="40" width="720" height="104" rx="8" fill="rgba(43,29,18,0.02)" stroke="rgba(43,29,18,0.14)" stroke-width="0.8"/>
-        <rect x="52" y="44" width="80" height="12" rx="2" fill="#F6E2C2"/>
-        <text x="92" y="53" fill="#7A5A3C" font-size="7" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">PLATFORM APPS</text>
+        <rect x="40" y="40" width="720" height="104" rx="8" fill="rgba(25,25,28,0.02)" stroke="rgba(25,25,28,0.24)" stroke-width="1.2"/>
+        <rect x="52" y="44" width="80" height="12" rx="2" fill="#FFFFFF"/>
+        <text x="92" y="53" fill="#6B6B6E" font-size="7" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">PLATFORM APPS</text>
 
-        <rect x="40" y="176" width="720" height="216" rx="8" fill="rgba(43,29,18,0.02)" stroke="rgba(43,29,18,0.14)" stroke-width="0.8"/>
-        <rect x="52" y="180" width="80" height="12" rx="2" fill="#F6E2C2"/>
-        <text x="92" y="189" fill="#7A5A3C" font-size="7" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">SHARED KOTLIN</text>
+        <rect x="40" y="176" width="720" height="216" rx="8" fill="rgba(25,25,28,0.02)" stroke="rgba(25,25,28,0.24)" stroke-width="1.2"/>
+        <rect x="52" y="180" width="80" height="12" rx="2" fill="#FFFFFF"/>
+        <text x="92" y="189" fill="#6B6B6E" font-size="7" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">SHARED KOTLIN</text>
 
         <!-- Arrows (behind nodes) -->
-        <line x1="224" y1="144" x2="224" y2="208" stroke="#5B4330" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <line x1="576" y1="144" x2="576" y2="208" stroke="#5B4330" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <line x1="328" y1="240" x2="472" y2="240" stroke="#5B4330" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <line x1="576" y1="272" x2="576" y2="320" stroke="#5B4330" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="224" y1="144" x2="224" y2="208" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="576" y1="144" x2="576" y2="208" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="328" y1="240" x2="472" y2="240" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="576" y1="272" x2="576" y2="320" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#arrow)"/>
 
         <!-- Platform apps -->
-        <rect x="56" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
-        <rect x="56" y="72" width="160" height="56" rx="6" fill="rgba(43,29,18,0.03)" stroke="rgba(43,29,18,0.30)" stroke-width="1"/>
-        <text x="136" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Android</text>
-        <text x="136" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">androidApp · OpenGL ES</text>
+        <rect x="56" y="72" width="160" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="56" y="72" width="160" height="56" rx="6" fill="rgba(25,25,28,0.03)" stroke="rgba(25,25,28,0.30)" stroke-width="1"/>
+        <text x="136" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Android</text>
+        <text x="136" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">androidApp · OpenGL ES</text>
 
-        <rect x="232" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
-        <rect x="232" y="72" width="160" height="56" rx="6" fill="rgba(43,29,18,0.03)" stroke="rgba(43,29,18,0.30)" stroke-width="1"/>
-        <text x="312" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Desktop</text>
-        <text x="312" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">desktopApp · Vulkan</text>
+        <rect x="232" y="72" width="160" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="232" y="72" width="160" height="56" rx="6" fill="rgba(25,25,28,0.03)" stroke="rgba(25,25,28,0.30)" stroke-width="1"/>
+        <text x="312" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Desktop</text>
+        <text x="312" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">desktopApp · Vulkan</text>
 
-        <rect x="408" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
-        <rect x="408" y="72" width="160" height="56" rx="6" fill="rgba(43,29,18,0.03)" stroke="rgba(43,29,18,0.30)" stroke-width="1"/>
-        <text x="488" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Web</text>
-        <text x="488" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">webApp · WebGL 2</text>
+        <rect x="408" y="72" width="160" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="408" y="72" width="160" height="56" rx="6" fill="rgba(25,25,28,0.03)" stroke="rgba(25,25,28,0.30)" stroke-width="1"/>
+        <text x="488" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Web</text>
+        <text x="488" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">webApp · WebGL 2</text>
 
-        <rect x="584" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
-        <rect x="584" y="72" width="160" height="56" rx="6" fill="rgba(43,29,18,0.03)" stroke="rgba(43,29,18,0.30)" stroke-width="1"/>
-        <text x="664" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">iOS</text>
-        <text x="664" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">iosKit · RealityKit</text>
+        <rect x="584" y="72" width="160" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="584" y="72" width="160" height="56" rx="6" fill="rgba(25,25,28,0.03)" stroke="rgba(25,25,28,0.30)" stroke-width="1"/>
+        <text x="664" y="98" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">iOS</text>
+        <text x="664" y="114" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">iosKit · RealityKit</text>
 
         <!-- Shared Kotlin -->
-        <rect x="120" y="208" width="208" height="64" rx="6" fill="#F6E2C2"/>
-        <rect x="120" y="208" width="208" height="64" rx="6" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
-        <text x="224" y="236" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">3D view</text>
-        <text x="224" y="252" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">renderer · Kool + RealityKit</text>
+        <rect x="120" y="208" width="208" height="64" rx="6" fill="#FFFFFF"/>
+        <rect x="120" y="208" width="208" height="64" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="224" y="236" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">3D view</text>
+        <text x="224" y="252" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">renderer · Kool + RealityKit</text>
 
-        <rect x="472" y="208" width="208" height="64" rx="6" fill="#F6E2C2"/>
-        <rect x="472" y="208" width="208" height="64" rx="6" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
-        <text x="576" y="236" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Interface</text>
-        <text x="576" y="252" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">shared · Compose Multiplatform</text>
+        <rect x="472" y="208" width="208" height="64" rx="6" fill="#FFFFFF"/>
+        <rect x="472" y="208" width="208" height="64" rx="6" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="576" y="236" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Interface</text>
+        <text x="576" y="252" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">shared · Compose Multiplatform</text>
 
         <!-- Focal: the world's rules -->
-        <rect x="472" y="320" width="208" height="56" rx="6" fill="#F6E2C2"/>
-        <rect x="472" y="320" width="208" height="56" rx="6" fill="rgba(161,60,39,0.08)" stroke="#A13C27" stroke-width="1"/>
-        <text x="576" y="346" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">World rules</text>
-        <text x="576" y="362" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">simulation · deterministic</text>
+        <rect x="472" y="320" width="208" height="56" rx="6" fill="#FFFFFF"/>
+        <rect x="472" y="320" width="208" height="56" rx="6" fill="rgba(127,82,255,0.08)" stroke="url(#kotlin)" stroke-width="1.5"/>
+        <text x="576" y="346" fill="#19191C" font-size="12" font-weight="600" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">World rules</text>
+        <text x="576" y="362" fill="#5E5E61" font-size="9" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">simulation · deterministic</text>
 
         <!-- Callout -->
-        <text x="396" y="340" fill="#A13C27" font-size="14" font-style="italic" font-family="'Instrument Serif', Georgia, serif" text-anchor="end">one set of rules, replayed</text>
-        <text x="396" y="358" fill="#A13C27" font-size="14" font-style="italic" font-family="'Instrument Serif', Georgia, serif" text-anchor="end">identically on every platform</text>
-        <path d="M 404 348 Q 436 348 468 348" fill="none" stroke="rgba(161,60,39,0.50)" stroke-width="1" stroke-dasharray="4,3"/>
-        <circle cx="470" cy="348" r="2" fill="#A13C27"/>
+        <text x="396" y="340" fill="#7F52FF" font-size="12" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="end">one set of rules, replayed</text>
+        <text x="396" y="356" fill="#7F52FF" font-size="12" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="end">identically on every platform</text>
+        <path d="M 404 348 Q 436 348 468 348" fill="none" stroke="rgba(127,82,255,0.50)" stroke-width="1" stroke-dasharray="4,3"/>
+        <circle cx="470" cy="348" r="2" fill="#7F52FF"/>
 
         <!-- Legend strip -->
-        <line x1="40" y1="420" x2="760" y2="420" stroke="rgba(43,29,18,0.14)" stroke-width="0.8"/>
-        <text x="40" y="436" fill="#5B4330" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.18em">LEGEND</text>
+        <line x1="40" y1="420" x2="760" y2="420" stroke="rgba(25,25,28,0.14)" stroke-width="0.8"/>
+        <text x="40" y="436" fill="#5E5E61" font-size="8" font-family="'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.18em">LEGEND</text>
 
-        <rect x="40" y="448" width="14" height="10" rx="2" fill="rgba(43,29,18,0.03)" stroke="rgba(43,29,18,0.30)" stroke-width="1"/>
-        <text x="60" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Platform entry point</text>
+        <rect x="40" y="448" width="14" height="10" rx="2" fill="rgba(25,25,28,0.03)" stroke="rgba(25,25,28,0.30)" stroke-width="1"/>
+        <text x="60" y="456" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Platform entry point</text>
 
-        <rect x="200" y="448" width="14" height="10" rx="2" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
-        <text x="220" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Shared module</text>
+        <rect x="200" y="448" width="14" height="10" rx="2" fill="#FFFFFF" stroke="#19191C" stroke-width="1"/>
+        <text x="220" y="456" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Shared module</text>
 
-        <rect x="340" y="448" width="14" height="10" rx="2" fill="rgba(161,60,39,0.08)" stroke="#A13C27" stroke-width="1"/>
-        <text x="360" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Deterministic core</text>
+        <rect x="340" y="448" width="14" height="10" rx="2" fill="rgba(127,82,255,0.08)" stroke="url(#kotlin)" stroke-width="1"/>
+        <text x="360" y="456" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Deterministic core</text>
 
-        <line x1="488" y1="453" x2="516" y2="453" stroke="#5B4330" stroke-width="1.2" marker-end="url(#arrow)"/>
-        <text x="524" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Depends on</text>
+        <line x1="488" y1="453" x2="516" y2="453" stroke="#5E5E61" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="524" y="456" fill="#5E5E61" font-size="8.5" font-family="'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif">Depends on</text>
       </svg>
     </div>
   </div>
