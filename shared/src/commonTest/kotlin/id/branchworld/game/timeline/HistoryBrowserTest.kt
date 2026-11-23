@@ -11,7 +11,7 @@ import id.branchworld.game.simulation.GridCell
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -43,7 +43,7 @@ class HistoryBrowserTest {
     }
 
     @Test
-    fun causesVisitTheirOwningBranchAndRowsExcludeSiblingEvents() = runBlocking {
+    fun causesVisitTheirOwningBranchAndRowsExcludeSiblingEvents() = runSimulationTest {
         val terrain = IslandGenerator.generate(TerrainKey(EmberSeed, WatershedWorldgenVersion))
         val timeline = Timeline.start(terrain, FireRulesVersion, Chapter.EmberSeason)
         while (timeline.state.shaping?.warningAt == null) timeline.advance()

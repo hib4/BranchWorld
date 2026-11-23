@@ -7,7 +7,7 @@ import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.ReplayRequest
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -39,7 +39,7 @@ class LastCrossingTest {
 
     /** Phase 08 gate scenario: one request from the village, three futures for the families and the herd. */
     @Test
-    fun theSamePetitionDividesVillageAndHerd(): Unit = runBlocking {
+    fun theSamePetitionDividesVillageAndHerd() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain, RangeRulesVersion, Chapter.LastCrossing)
         while (timeline.state.shaping?.warningAt == null) assertTrue(timeline.advance())

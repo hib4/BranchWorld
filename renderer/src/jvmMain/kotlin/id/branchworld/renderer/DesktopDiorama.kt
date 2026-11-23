@@ -51,7 +51,7 @@ class DesktopDiorama {
                 factory = ::createPanel,
             )
             if (projection != null) {
-                Box(Modifier.matchParentSize().desktopCameraInput(controller).semantics {
+                Box(Modifier.matchParentSize().pointerCameraInput(controller).semantics {
                     contentDescription = "Island camera. Arrow keys orbit. Shift and arrow keys pan. Plus and minus zoom. Home resets the view."
                 }) {
                     frame?.let {

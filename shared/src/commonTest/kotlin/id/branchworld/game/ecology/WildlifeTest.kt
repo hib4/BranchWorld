@@ -10,7 +10,7 @@ import id.branchworld.game.terrain.Biome
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -132,7 +132,7 @@ class WildlifeTest {
     }
 
     @Test
-    fun plantedAndUntouchedHistoriesReplayAtTheSameTime(): Unit = runBlocking {
+    fun plantedAndUntouchedHistoriesReplayAtTheSameTime() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain, rulesVersion = WildlifeRulesVersion)
         repeat(900) { timeline.advance() }
@@ -179,7 +179,7 @@ class WildlifeTest {
     }
 
     @Test
-    fun legacyAndModernValleysKeepDistinctSessions(): Unit = runBlocking {
+    fun legacyAndModernValleysKeepDistinctSessions() = runSimulationTest {
         val session = IslandSession()
         val terrain = terrain()
         val oldKey = IslandSessionKey(terrain.key, WatershedRulesVersion)

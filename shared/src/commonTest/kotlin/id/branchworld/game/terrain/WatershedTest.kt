@@ -12,7 +12,7 @@ import id.branchworld.game.ecology.seasonAt
 import id.branchworld.game.save.IncompatibleSave
 import id.branchworld.game.save.TimelineSaveCodec
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -95,7 +95,7 @@ class WatershedTest {
     }
 
     @Test
-    fun saveAndReplayPreserveBothHistoriesAcrossRain(): Unit = runBlocking {
+    fun saveAndReplayPreserveBothHistoriesAcrossRain() = runSimulationTest {
         val terrain = IslandGenerator.generate(TerrainKey(104729, 2))
         val timeline = Timeline.start(terrain, WatershedRulesVersion)
         repeat(900) { timeline.advance() }
@@ -123,7 +123,7 @@ class WatershedTest {
     }
 
     @Test
-    fun gallerySwitchKeepsTerrainVersionsAndAlreadyExploredHistoriesDistinct(): Unit = runBlocking {
+    fun gallerySwitchKeepsTerrainVersionsAndAlreadyExploredHistoriesDistinct() = runSimulationTest {
         val session = id.branchworld.game.IslandSession()
         val key = TerrainKey(104729, 2)
         session.open(key)

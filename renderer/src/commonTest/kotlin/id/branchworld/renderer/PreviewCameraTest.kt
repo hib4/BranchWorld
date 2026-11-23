@@ -9,8 +9,8 @@ import id.branchworld.game.simulation.GroundPoint
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.PropKind
 import id.branchworld.game.terrain.TerrainKey
-
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -51,7 +51,7 @@ class PreviewCameraTest {
     }
 
     @Test
-    fun panIsBoundedAndFocusRestoresTheWholePose() {
+    fun panIsBoundedAndFocusRestoresTheWholePose() = runTest {
         val frameClock = object : MonotonicFrameClock {
             private var time = 0L
 
@@ -68,7 +68,7 @@ class PreviewCameraTest {
 
         assertTrue(moved.targetX in -5f..5f && moved.targetZ in -5f..5f)
         assertNotEquals(PreviewCamera(), moved)
-        runBlocking(frameClock) { controller.focus(this).join() }
+        withContext(frameClock) { controller.focus(this).join() }
         assertEquals(PreviewCamera(), controller.camera.value)
     }
 }

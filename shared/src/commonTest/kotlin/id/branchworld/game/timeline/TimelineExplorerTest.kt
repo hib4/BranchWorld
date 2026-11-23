@@ -7,7 +7,7 @@ import id.branchworld.game.simulation.ReforestRegion
 import id.branchworld.game.simulation.SupplementForage
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -17,7 +17,7 @@ import kotlin.test.assertTrue
 
 class TimelineExplorerTest {
     @Test
-    fun northStarComparisonIsCanonicalAndLeavesHistoriesAndQueuesIntact() = runBlocking {
+    fun northStarComparisonIsCanonicalAndLeavesHistoriesAndQueuesIntact() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain)
         timeline.advanceTo(900)
@@ -55,7 +55,7 @@ class TimelineExplorerTest {
     }
 
     @Test
-    fun eventAuditReplaysBeforeAnExactCheckpointAndSurvivesEviction() = runBlocking {
+    fun eventAuditReplaysBeforeAnExactCheckpointAndSurvivesEviction() = runSimulationTest {
         val terrain = terrain()
         val startingState = Timeline.start(terrain).state
         val base = Timeline.restore(terrain, Timeline.root(startingState, listOf(
@@ -84,7 +84,7 @@ class TimelineExplorerTest {
     }
 
     @Test
-    fun treeOrderingRangesAndScrubberRetainEndpoints() = runBlocking {
+    fun treeOrderingRangesAndScrubberRetainEndpoints() = runSimulationTest {
         val timeline = Timeline.start(terrain())
         timeline.advanceTo(600)
         timeline.goTo(1, 300)
@@ -109,7 +109,7 @@ class TimelineExplorerTest {
     }
 
     @Test
-    fun supersededResultsCannotReplacePreviewAndClosingRestoresTheLiveProjection() = runBlocking {
+    fun supersededResultsCannotReplacePreviewAndClosingRestoresTheLiveProjection() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain)
         timeline.advanceTo(600)
@@ -152,7 +152,7 @@ class TimelineExplorerTest {
     }
 
     @Test
-    fun sharedTrailClipsAtTheForkAndAuditsOnlyTheSelectedCommand(): Unit = runBlocking {
+    fun sharedTrailClipsAtTheForkAndAuditsOnlyTheSelectedCommand() = runSimulationTest {
         val terrain = terrain()
         val initial = Timeline.start(terrain).state
         val timeline = Timeline.restore(terrain, Timeline.root(initial, listOf(

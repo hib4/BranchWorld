@@ -7,7 +7,7 @@ import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.ReplayRequest
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -41,7 +41,7 @@ class VillageTest {
 
     /** Phase 07 gate scenario: one warning, three futures, recorded causes, save and full replay. */
     @Test
-    fun theSameWarningLeadsToDifferentVillages(): Unit = runBlocking {
+    fun theSameWarningLeadsToDifferentVillages() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain)
         timeline.advanceTo(240)
@@ -144,7 +144,7 @@ class VillageTest {
     }
 
     @Test
-    fun clearingTheWoodsTradesBrowseForFarmland(): Unit = runBlocking {
+    fun clearingTheWoodsTradesBrowseForFarmland() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain)
         timeline.advanceTo(240)

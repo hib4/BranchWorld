@@ -9,8 +9,9 @@ import id.branchworld.game.terrain.TerrainMap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -24,15 +25,19 @@ import kotlin.time.Duration.Companion.seconds
 
 class WorldClockTest {
     @Test
-    fun equalLegacyTicksAcrossRatesAndRenderSampling() = verifyPlayback(null)
+    fun equalLegacyTicksAcrossRatesAndRenderSampling() = runSimulationTest { verifyPlayback(null) }
 
     @Test
-    fun equalTerrainTicksAcrossRatesAndRenderSampling() = verifyPlayback(IslandGenerator.generate(TerrainKey(104729)))
+    fun equalTerrainTicksAcrossRatesAndRenderSampling() = runSimulationTest {
+        verifyPlayback(IslandGenerator.generate(TerrainKey(104729)))
+    }
 
     @Test
-    fun ecologyPlaybackRatesProduceIdenticalCheckpoints() = IslandSeeds.forEach(::verifyEcologyPlayback)
+    fun ecologyPlaybackRatesProduceIdenticalCheckpoints() = runSimulationTest {
+        IslandSeeds.forEach { verifyEcologyPlayback(it) }
+    }
 
-    private fun verifyEcologyPlayback(seed: Long) = runBlocking {
+    private suspend fun verifyEcologyPlayback(seed: Long) = coroutineScope {
         withTimeout(15.seconds) {
             val terrain = IslandGenerator.generate(TerrainKey(seed))
             val inputs = mapOf(0L to listOf(true), 300L to listOf(true, false), 600L to listOf(true))
@@ -74,7 +79,7 @@ class WorldClockTest {
         }
     }
 
-    private fun verifyPlayback(terrain: TerrainMap?) = runBlocking {
+    private suspend fun verifyPlayback(terrain: TerrainMap?) = coroutineScope {
         withTimeout(10.seconds) {
             val checkpoints = listOf(300L, 600L, 900L)
             val reference = terrain?.let { WorldEngine.onTerrain(it) } ?: WorldEngine(WorldState.start(104729))
@@ -117,7 +122,7 @@ class WorldClockTest {
     }
 
     @Test
-    fun pauseAndInactiveDriverDropPendingPulseAndKeepNextTickCommands() = runBlocking {
+    fun pauseAndInactiveDriverDropPendingPulseAndKeepNextTickCommands() = runSimulationTest {
         withTimeout(10.seconds) {
             val clock = legacyClock(104729)
             val waits = Channel<Wait>()

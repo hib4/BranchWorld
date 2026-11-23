@@ -8,7 +8,7 @@ import id.branchworld.game.save.WorldCheckpoint
 import id.branchworld.game.save.WorldSaveCodec
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -19,7 +19,7 @@ import kotlin.test.assertTrue
 
 class TimelineTest {
     @Test
-    fun rewindReplaysOrderedCommandsAtTheSameHashes() = runBlocking {
+    fun rewindReplaysOrderedCommandsAtTheSameHashes() = runSimulationTest {
         for ((seed, expected) in ReplayHashes) {
             val timeline = Timeline.start(IslandGenerator.generate(TerrainKey(seed)))
             val initial = timeline.state.canonicalHash()
@@ -54,7 +54,7 @@ class TimelineTest {
     }
 
     @Test
-    fun northStarForkAndSaveRemainIndependentAtMatchedTicks() = runBlocking {
+    fun northStarForkAndSaveRemainIndependentAtMatchedTicks() = runSimulationTest {
         val timeline = newTimeline()
         timeline.advanceTo(600)
         val parentBefore = timeline.checkpoint().branches.single()
@@ -111,7 +111,7 @@ class TimelineTest {
     }
 
     @Test
-    fun snapshotsEvictAndRepeatedForksKeepTheirOwnQueues() = runBlocking {
+    fun snapshotsEvictAndRepeatedForksKeepTheirOwnQueues() = runSimulationTest {
         val timeline = newTimeline()
         timeline.steer(left = true)
         timeline.advanceTo(250)
@@ -142,7 +142,7 @@ class TimelineTest {
     }
 
     @Test
-    fun phase06ImportKeepsTheCheckpointAndNextInputs() = runBlocking {
+    fun phase06ImportKeepsTheCheckpointAndNextInputs() = runSimulationTest {
         val live = newTimeline()
         live.advanceTo(353)
         live.steer(left = true)

@@ -18,7 +18,6 @@ import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.WorldCode
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -93,7 +92,7 @@ class AtlasTest {
     }
 
     @Test
-    fun theOriginalSaveIsImportedOnceAndNeverRewritten(): Unit = runBlocking {
+    fun theOriginalSaveIsImportedOnceAndNeverRewritten() = runSimulationTest {
         val terrain = IslandGenerator.generate(Story.FadingGrove.key.terrain)
         val timeline = Timeline.start(terrain)
         while (timeline.state.tick < 300) assertTrue(timeline.advance())
@@ -115,7 +114,7 @@ class AtlasTest {
     }
 
     @Test
-    fun anIslandReopensFromItsSlotAndAutosavesBack(): Unit = runBlocking {
+    fun anIslandReopensFromItsSlotAndAutosavesBack() = runSimulationTest {
         val store = MemoryStore()
         val key = IslandSessionKey(TerrainKey(271828, WatershedWorldgenVersion), RangeRulesVersion, Chapter.LastCrossing)
         val first = IslandSession()
@@ -147,7 +146,7 @@ class AtlasTest {
     }
 
     @Test
-    fun importingAgainReopensTheSharedCopyWithoutReplacingIt(): Unit = runBlocking {
+    fun importingAgainReopensTheSharedCopyWithoutReplacingIt() = runSimulationTest {
         val story = Story.EmberSeason
         val timeline = Timeline.start(IslandGenerator.generate(story.key.terrain), story.key.rules, story.chapter)
         val code = WorldCode.encode(timeline.checkpoint())
@@ -178,7 +177,7 @@ class AtlasTest {
     }
 
     @Test
-    fun chaptersCloseOnlyAfterTheirCrisisAndReportRealOutcomes(): Unit = runBlocking {
+    fun chaptersCloseOnlyAfterTheirCrisisAndReportRealOutcomes() = runSimulationTest {
         val grove = Timeline.start(IslandGenerator.generate(Story.FadingGrove.key.terrain))
         while (grove.state.tick < 300) assertTrue(grove.advance())
         assertTrue(grove.fork("Rain at Hollowmere"))

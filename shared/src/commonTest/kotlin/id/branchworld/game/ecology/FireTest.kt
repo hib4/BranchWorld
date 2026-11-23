@@ -5,7 +5,7 @@ import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.ReplayRequest
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
@@ -46,7 +46,7 @@ class FireTest {
 
     /** Twenty seasons of wildfire and regrowth on every gallery island, with saved-state checks along the way. */
     @Test
-    fun fireAndRegrowthStayBoundedOnEveryGalleryIsland(): Unit = runBlocking {
+    fun fireAndRegrowthStayBoundedOnEveryGalleryIsland() = runSimulationTest {
         val results = mutableListOf<String>()
         for (seed in listOf(FadingGroveSeed, CrossingSeed, EmberSeed)) {
             val terrain = terrain(seed)

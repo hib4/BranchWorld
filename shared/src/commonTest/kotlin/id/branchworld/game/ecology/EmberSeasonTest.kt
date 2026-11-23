@@ -6,7 +6,7 @@ import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.ChapterOutcome
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -46,7 +46,7 @@ class EmberSeasonTest {
     }
 
     @Test
-    fun oneStormFourFutures(): Unit = runBlocking {
+    fun oneStormFourFutures() = runSimulationTest {
         val timeline = Timeline.start(terrain, FireRulesVersion, Chapter.EmberSeason)
         while (timeline.state.shaping?.warningAt == null) assertTrue(timeline.advance())
         val warning = timeline.state.tick
@@ -56,8 +56,8 @@ class EmberSeasonTest {
         val preview = assertNotNull(timeline.preview(Intervention.Firebreak, villageRegion))
         assertTrue(preview.cut.isNotEmpty() && preview.blocked == null)
 
-        fun play(name: String, act: Timeline.() -> Unit): EcologyState {
-            timeline.show(runBlocking { checkNotNull(timeline.seek(mainId, warning)).replay() })
+        suspend fun play(name: String, act: Timeline.() -> Unit): EcologyState {
+            timeline.show(checkNotNull(timeline.seek(mainId, warning)).replay())
             assertTrue(timeline.fork(name))
             timeline.act()
             while (timeline.state.tick < Horizon) assertTrue(timeline.advance())

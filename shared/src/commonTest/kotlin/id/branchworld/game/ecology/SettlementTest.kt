@@ -4,7 +4,7 @@ import id.branchworld.game.save.TimelineSaveCodec
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -67,7 +67,7 @@ class SettlementTest {
     }
 
     @Test
-    fun childReforestationChangesEconomyAndRoundsTripsIndependently() = runBlocking {
+    fun childReforestationChangesEconomyAndRoundsTripsIndependently() = runSimulationTest {
         val timeline = Timeline.start(terrain(), CivilizationRulesVersion)
         timeline.advanceTo(900)
         val original = timeline.checkpoint().branches.single()
@@ -96,7 +96,7 @@ class SettlementTest {
     }
 
     @Test
-    fun releaseCheckpointsAgreeAfterRewindAndRestore() = runBlocking {
+    fun releaseCheckpointsAgreeAfterRewindAndRestore() = runSimulationTest {
         val ticks = listOf(0L, 300L, 600L, 900L)
         val timeline = Timeline.start(terrain(), CivilizationRulesVersion)
         val originals = ticks.associateWith {
@@ -116,7 +116,7 @@ class SettlementTest {
     }
 
     @Test
-    fun tenThousandTicksKeepCohortsAndStocksBounded() = runBlocking {
+    fun tenThousandTicksKeepCohortsAndStocksBounded() = runSimulationTest {
         for (seed in listOf(104729L, 271828L, 424242L)) {
             val terrain = terrain(seed)
             for (rules in listOf(EnvironmentalRulesVersion, CivilizationRulesVersion)) {

@@ -11,7 +11,7 @@ import id.branchworld.game.simulation.SetDestination
 import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.terrain.WatershedWorldgenVersion
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -21,7 +21,7 @@ class WorldCodeTest {
     private val terrain = IslandGenerator.generate(TerrainKey(EmberSeed, WatershedWorldgenVersion))
 
     @Test
-    fun rebuildsForksWithTheirOwnHashesAndPendingEdits() = runBlocking {
+    fun rebuildsForksWithTheirOwnHashesAndPendingEdits() = runSimulationTest {
         val timeline = Timeline.start(terrain, FireRulesVersion, Chapter.EmberSeason)
         repeat(500) { timeline.advance() }
         val branchPoint = timeline.state.tick
@@ -53,7 +53,7 @@ class WorldCodeTest {
     }
 
     @Test
-    fun rejectsEverySingleSymbolCorruption() = runBlocking {
+    fun rejectsEverySingleSymbolCorruption() = runSimulationTest {
         val code = WorldCode.encode(Timeline.start(terrain, FireRulesVersion, Chapter.EmberSeason).checkpoint())
         for (index in 4 until code.length) {
             if (code[index] == '-') continue
@@ -65,7 +65,7 @@ class WorldCodeTest {
     }
 
     @Test
-    fun oldRulesAndExtremeSeedsStillRebuild() = runBlocking {
+    fun oldRulesAndExtremeSeedsStillRebuild() = runSimulationTest {
         for (rules in 5..10) {
             val key = TerrainKey(Long.MIN_VALUE, if (rules == 5) 1 else WatershedWorldgenVersion)
             val original = Timeline.start(IslandGenerator.generate(key), rules)
@@ -78,7 +78,7 @@ class WorldCodeTest {
     }
 
     @Test
-    fun rejectsHistoriesOutsideTheSharingBudget() = runBlocking {
+    fun rejectsHistoriesOutsideTheSharingBudget() = runSimulationTest {
         val checkpoint = Timeline.start(terrain, FireRulesVersion, Chapter.EmberSeason).checkpoint()
         val branch = checkpoint.branches.single()
         val expensive = branch.copy(head = branch.head.copy(tick = 120_001))

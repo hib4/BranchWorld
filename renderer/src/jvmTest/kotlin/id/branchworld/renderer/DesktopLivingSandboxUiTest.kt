@@ -67,7 +67,7 @@ class DesktopLivingSandboxUiTest {
                             width = it.width.toFloat()
                             height = it.height.toFloat()
                             controller.resize(it.width, it.height)
-                        }.testTag("viewport").desktopCameraInput(controller))
+                        }.testTag("viewport").pointerCameraInput(controller))
                     },
                     viewportCamera = {
                         camera = it

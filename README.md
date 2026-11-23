@@ -2,7 +2,7 @@
 
 **Create a world. Fill it with life. Watch what it becomes.**
 
-BranchWorld is a Kotlin Multiplatform living-world sandbox. You create a small 3D island, set down rabbits, wolves, deer, foxes, trees and grass by hand, and watch them live on their own: rabbits graze, dig warrens and raise litters; wolves form packs, howl at dusk and hunt together; populations rise and fall; fire and rain change the land. Nothing is scripted. Every consequence comes from deterministic rules written once in shared Kotlin and run identically on Android, Desktop and iOS.
+BranchWorld is a Kotlin Multiplatform living-world sandbox. You create a small 3D island, set down rabbits, wolves, deer, foxes, trees and grass by hand, and watch them live on their own: rabbits graze, dig warrens and raise litters; wolves form packs, howl at dusk and hunt together; populations rise and fall; fire and rain change the land. Nothing is scripted. Every consequence comes from deterministic rules written once in shared Kotlin and run identically on Android, Desktop, iOS and the web.
 
 ## Build and run
 
@@ -28,6 +28,18 @@ Run the Desktop app in a graphical session.
 ```
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
+
+### Web
+
+The browser build is Kotlin/JS (Kool publishes no Wasm target) and draws with WebGL 2. It needs a current Chrome, Edge, Firefox or Safari.
+
+```sh
+./gradlew :webApp:jsBrowserDevelopmentRun        # opens a development server with live reload
+./gradlew :webApp:jsBrowserDistribution          # static site in webApp/build/dist/js/productionExecutable
+./gradlew :shared:jsNodeTest :renderer:jsNodeTest # the shared rules and replay fixtures under Kotlin/JS
+```
+
+The distribution uses relative paths, so any static host serves it from any folder. Every push to `main` runs `.github/workflows/web.yml`, which checks the shared rules under Kotlin/JS and publishes the bundle to GitHub Pages. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Worlds save in the browser's IndexedDB; photos go to the browser's downloads.
 
 ### Local release builds
 
@@ -74,9 +86,9 @@ Run the shared replay fixtures on a connected device with `./gradlew :shared:con
 
 ## Architecture
 
-- `androidApp` and `desktopApp` own platform startup, input bridges and window or Activity lifetime. The iOS app consumes the shared module with a 2D fallback view; it has no 3D renderer yet.
+- `androidApp`, `desktopApp` and `webApp` own platform startup, input bridges, saving, sound and window, Activity or page lifetime. The iOS app consumes the shared module with a 2D fallback view; it has no 3D renderer yet.
 - `shared/src/commonMain` owns the authoritative simulation and the Compose interface. Living worlds run rules v12 (`ecology/LifeRules.kt`, `ecology/LifeState.kt`): each creature decides from what it could perceive on the previous tick, moves on an eight-way grid with stamina, and draws counter-based random rolls, so the result never depends on processing order. The player's hand is four tick-indexed commands (`PlaceCreature`, `RemoveCreature`, `PlacePlant`, `ClearPlant`), recorded in each history, its saves (schema 10) and its share codes. Weather, wildfire and regrowth run in the same step.
-- `renderer` owns the Kool scene, camera, creature models and platform adapters. Android hosts GLES under Compose; Desktop delivers a Vulkan colour attachment to Compose. `GroundPicking.kt` turns a click or tap into a ground cell or creature in plain Kotlin, and creatures glide between cells at their own simulated pace.
+- `renderer` owns the Kool scene, camera, creature models and platform adapters. Android hosts GLES under Compose; Desktop delivers a Vulkan colour attachment to Compose; the browser draws WebGL 2 on a page canvas beneath a transparent Compose canvas. Desktop and the browser share mouse, touch and keyboard camera input (`renderer/src/skikoMain`). `GroundPicking.kt` turns a click or tap into a ground cell or creature in plain Kotlin, and creatures glide between cells at their own simulated pace.
 - Islands are generated in shared Kotlin from a seed: terrain, drainage, soils, props and walkable ground. Kool builds chunk meshes and instances the bundled trees from a read-only projection.
 - Earlier rule sets remain in the code only so that saves made with them keep replaying exactly.
 

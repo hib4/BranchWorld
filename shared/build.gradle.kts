@@ -19,6 +19,15 @@ kotlin {
         }
     }
     jvm()
+    js {
+        browser {
+            // Shared rules are checked on Node.js; browser runs add nothing for pure logic tests.
+            testTask { enabled = false }
+        }
+        nodejs {
+            testTask { useMocha { timeout = "1200s" } }
+        }
+    }
     android {
        namespace = "id.branchworld.game.shared"
        compileSdk = libs.versions.android.compileSdk.get().toInt()
@@ -57,6 +66,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutinesTest)
         }
         getByName("androidDeviceTest").dependencies {
             implementation(libs.androidx.testRunner)

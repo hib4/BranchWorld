@@ -15,7 +15,10 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerEvent
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isPrimaryPressed
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.isShiftPressed
@@ -24,8 +27,9 @@ import kotlin.math.exp
 
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifier {
+internal fun Modifier.pointerCameraInput(controller: PreviewController): Modifier {
     val drag = remember(controller) { ViewportDrag(controller) }
+    val touch = remember(controller) { TouchCamera(controller) }
     val focus = remember { FocusRequester() }
     val motion = rememberCoroutineScope()
     return focusRequester(focus).onPreviewKeyEvent { event ->
@@ -43,10 +47,11 @@ internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifie
         true
     }.focusable().onPointerEvent(PointerEventType.Scroll) { event ->
         focus.requestFocus()
-        val delta = event.changes.first().scrollDelta.y
+        val delta = event.changes.first().scrollDelta.y / ScrollNotch
         controller.zoom(exp(-0.12f * delta))
         event.changes.forEach { it.consume() }
     }.onPointerEvent(PointerEventType.Press) { event ->
+        if (touch.handle(event, size.width, size.height, density)) return@onPointerEvent
         if (event.buttons.isPrimaryPressed || event.buttons.isSecondaryPressed) {
             focus.requestFocus()
             val change = event.changes.first()
@@ -54,17 +59,20 @@ internal fun Modifier.desktopCameraInput(controller: PreviewController): Modifie
             change.consume()
         }
     }.onPointerEvent(PointerEventType.Move) { event ->
+        if (touch.handle(event, size.width, size.height, density)) return@onPointerEvent
         val change = event.changes.first()
         if (drag.move(change.position, minOf(size.width, size.height))) change.consume()
         else if (!event.buttons.isPrimaryPressed && !event.buttons.isSecondaryPressed) {
             controller.hover(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(), MousePickRadius * density)
         }
     }.onPointerEvent(PointerEventType.Enter) { event ->
+        if (event.isTouch) return@onPointerEvent
         val change = event.changes.first()
         controller.hover(change.position.x, change.position.y, size.width.toFloat(), size.height.toFloat(), MousePickRadius * density)
     }.onPointerEvent(PointerEventType.Exit) {
         controller.hover(null, null, size.width.toFloat(), size.height.toFloat(), 0f)
     }.onPointerEvent(PointerEventType.Release) { event ->
+        if (touch.handle(event, size.width, size.height, density)) return@onPointerEvent
         val change = event.changes.first()
         if (drag.move(change.position, minOf(size.width, size.height))) change.consume()
         // A press and release that barely moved is a click on the world, not a turn of the camera.
@@ -114,5 +122,76 @@ private class ViewportDrag(private val controller: PreviewController) {
     }
 }
 
+/** One wheel notch in the platform's scroll units: lines on Desktop, CSS pixels in the browser. */
+internal expect val ScrollNotch: Float
+
+private val PointerEvent.isTouch get() = changes.any { it.type == PointerType.Touch }
+
+/**
+ * Touch on a browser or touchscreen laptop, matching the Android viewport: one finger turns the camera,
+ * two fingers pan and pinch, and a short tap that stays within the slop picks the ground.
+ */
+private class TouchCamera(private val controller: PreviewController) {
+    private var centroid = Offset.Zero
+    private var span = 0f
+    private var fingers = 0
+    private var origin = Offset.Zero
+    private var downAt = 0L
+    private var gesture = false
+
+    /** Returns false for mouse and pen events, leaving them to the pointer handlers. */
+    fun handle(event: PointerEvent, width: Int, height: Int, density: Float): Boolean {
+        if (!event.isTouch) return false
+        val down = event.changes.filter { it.pressed }
+        when (event.type) {
+            PointerEventType.Press -> {
+                if (fingers == 0 && down.isNotEmpty()) {
+                    origin = down.first().position
+                    downAt = down.first().uptimeMillis
+                    gesture = false
+                }
+                if (down.size >= 2) gesture = true
+            }
+            PointerEventType.Move -> {
+                // Hold the camera still until the finger clearly means to turn it.
+                if (!gesture && down.size == 1 && (down[0].position - origin).getDistance() > TouchSlop * density) {
+                    gesture = true
+                }
+                if (gesture && fingers > 0 && down.size == fingers) {
+                    val (nextCentroid, nextSpan) = shape(down)
+                    val delta = (nextCentroid - centroid) / minOf(width, height).coerceAtLeast(1).toFloat()
+                    if (fingers >= 2) {
+                        controller.pan(delta.x, delta.y)
+                        if (span > 0f && nextSpan > 0f) controller.zoom(nextSpan / span)
+                    } else {
+                        controller.orbit(delta.x, -delta.y)
+                    }
+                }
+            }
+            PointerEventType.Release -> {
+                val lifted = event.changes.firstOrNull { !it.pressed && it.previousPressed }
+                if (down.isEmpty() && !gesture && lifted != null && lifted.uptimeMillis - downAt < TapMillis) {
+                    controller.tap(lifted.position.x, lifted.position.y, width.toFloat(), height.toFloat(), TouchPickRadius * density)
+                }
+                if (down.isEmpty()) gesture = false
+            }
+        }
+        // Rebase on the fingers still down, so adding or lifting one never jumps the camera.
+        fingers = down.size
+        if (down.isNotEmpty()) shape(down).let { (nextCentroid, nextSpan) -> centroid = nextCentroid; span = nextSpan }
+        event.changes.forEach { it.consume() }
+        return true
+    }
+
+    private fun shape(down: List<PointerInputChange>): Pair<Offset, Float> {
+        val a = down[0].position
+        val b = down.getOrNull(1)?.position ?: a
+        return (a + b) / 2f to (b - a).getDistance()
+    }
+}
+
 private const val ClickSlop = 4f
+private const val TouchSlop = 8f
+private const val TapMillis = 350L
+private const val TouchPickRadius = 24f
 private const val MousePickRadius = 16f

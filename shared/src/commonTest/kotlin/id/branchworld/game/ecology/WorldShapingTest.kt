@@ -9,7 +9,7 @@ import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.timeline.ReplayRequest
 import id.branchworld.game.timeline.Timeline
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -21,7 +21,7 @@ class WorldShapingTest {
     private fun terrain() = IslandGenerator.generate(TerrainKey(FadingGroveSeed, 2))
 
     @Test
-    fun droughtHasThreeDistinctHistoriesAndNaturalRecovery(): Unit = runBlocking {
+    fun droughtHasThreeDistinctHistoriesAndNaturalRecovery() = runSimulationTest {
         val terrain = terrain()
         val timeline = Timeline.start(terrain, ShapingRulesVersion)
         assertEquals(ShapeBlock.AwaitWarning, timeline.preview(Intervention.Rain, 5)?.blocked)
@@ -130,7 +130,7 @@ class WorldShapingTest {
     }
 
     @Test
-    fun queueCanBeCancelledAndHistoricalForkInheritsTheSpend(): Unit = runBlocking {
+    fun queueCanBeCancelledAndHistoricalForkInheritsTheSpend() = runSimulationTest {
         val timeline = Timeline.start(terrain(), ShapingRulesVersion)
         repeat(240) { timeline.advance() }
         assertFalse(timeline.intervene(Intervention.Rain, -1))

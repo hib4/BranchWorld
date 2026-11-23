@@ -12,7 +12,7 @@ import id.branchworld.game.terrain.TerrainMap
 import id.branchworld.game.terrain.WatershedWorldgenVersion
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.timeline.WorldCode
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -168,7 +168,7 @@ class LifeRulesTest {
 
     /** The same placements on the same island always give the same world, through saves, replays and share codes. */
     @Test
-    fun aLivingWorldReplaysSavesAndSharesExactly() = runBlocking {
+    fun aLivingWorldReplaysSavesAndSharesExactly() = runSimulationTest {
         val terrain = terrain(EmberSeed)
         val island = IslandEcology(terrain)
         fun history(): Timeline {

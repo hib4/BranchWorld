@@ -4,7 +4,7 @@ import id.branchworld.game.terrain.IslandGenerator
 import id.branchworld.game.terrain.TerrainKey
 import id.branchworld.game.timeline.Timeline
 import id.branchworld.game.ecology.CivilizationRulesVersion
-import kotlinx.coroutines.runBlocking
+import id.branchworld.game.runSimulationTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -13,7 +13,7 @@ import kotlin.test.assertTrue
 
 class TimelineSaveCodecTest {
     @Test
-    fun versionTwoChecksumAndRulesCannotChangeOnRestore() = runBlocking<Unit> {
+    fun versionTwoChecksumAndRulesCannotChangeOnRestore() = runSimulationTest {
         val terrain = IslandGenerator.generate(TerrainKey(104729))
         val legacy = Timeline.start(terrain)
         repeat(900) { legacy.advance() }
@@ -30,7 +30,7 @@ class TimelineSaveCodecTest {
     }
 
     @Test
-    fun rejectsMalformedOrCorruptTimelineBeforeRestore() = runBlocking<Unit> {
+    fun rejectsMalformedOrCorruptTimelineBeforeRestore() = runSimulationTest {
         val timeline = Timeline.start(IslandGenerator.generate(TerrainKey(104729)))
         timeline.steer(left = true)
         timeline.advance()

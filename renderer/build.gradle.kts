@@ -12,12 +12,30 @@ kotlin {
     jvm {
         compilerOptions.jvmTarget = JvmTarget.JVM_17
     }
+    js {
+        browser {
+            // Renderer logic tests run on Node.js; the real browser path is checked by running the web app.
+            testTask { enabled = false }
+        }
+        nodejs {
+            testTask { useMocha { timeout = "300s" } }
+        }
+    }
     android {
         namespace = "id.branchworld.renderer"
         compileSdk = libs.versions.android.compileSdk.get().toInt()
         minSdk = libs.versions.android.minSdk.get().toInt()
         compilerOptions.jvmTarget = JvmTarget.JVM_17
         withHostTest {}
+    }
+    // Desktop and the browser both draw Compose with Skiko and share its pointer and key input.
+    applyDefaultHierarchyTemplate {
+        common {
+            group("skiko") {
+                withJvm()
+                withJs()
+            }
+        }
     }
     sourceSets {
         commonMain.dependencies {
@@ -31,6 +49,7 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutinesTest)
         }
         jvmTest.dependencies {
             implementation(libs.compose.uiTest)

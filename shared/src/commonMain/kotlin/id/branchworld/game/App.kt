@@ -108,6 +108,9 @@ private class WorldSession : ViewModel() {
 private enum class WorldPanel { Inspect, Grove, Village, Timeline, Diagnostics, Settings, Moments }
 private enum class Overlay { Pause, Photo, Closing }
 
+/** The sea-glass teal behind the world while it loads. Web hosts paint it on the page instead. */
+val ShellBackdrop = Color(0xFF4D8585)
+
 @OptIn(FlowPreview::class)
 @Composable
 fun App(
@@ -121,6 +124,8 @@ fun App(
     playInUnfocusedWindow: Boolean = false,
     setAmbience: ((WorldAmbience) -> Unit)? = null,
     savePhoto: (suspend (PhotoMeta) -> PhotoResult)? = null,
+    /** True when the host draws the 3D view beneath this composition (the browser), so the shell stays see-through. */
+    viewportUnderneath: Boolean = false,
 ) {
     var state by rememberSaveable(stateSaver = ShellState.saver) { mutableStateOf(ShellState()) }
     var panelName by rememberSaveable { mutableStateOf<String?>(null) }
@@ -391,7 +396,7 @@ fun App(
 
     val preferences = UiPreferences(settings.interfaceSounds && playSound != null, reducedMotion) { playSound?.invoke(it) }
     GameTheme(settings.textScale, preferences) {
-        BoxWithConstraints(Modifier.fillMaxSize().background(Color(0xFF4D8585)).onPreviewKeyEvent {
+        BoxWithConstraints(Modifier.fillMaxSize().background(if (viewportUnderneath) Color.Transparent else ShellBackdrop).onPreviewKeyEvent {
             if (it.key == Key.Escape && it.type == KeyEventType.KeyUp && (panel != null || isWorld || state.screen != HomeScreen.Title)) {
                 goBack()
                 true

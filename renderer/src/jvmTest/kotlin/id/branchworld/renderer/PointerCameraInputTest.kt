@@ -20,12 +20,12 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 
 @OptIn(ExperimentalTestApi::class)
-class DesktopCameraInputTest {
+class PointerCameraInputTest {
     @Test
     fun focusedViewportHandlesKeyboardOrbitPanZoomAndReset() = runComposeUiTest {
         val controller = PreviewController()
         setContent {
-            Box(Modifier.size(160.dp).testTag("viewport").desktopCameraInput(controller))
+            Box(Modifier.size(160.dp).testTag("viewport").pointerCameraInput(controller))
         }
         val viewport = onNodeWithTag("viewport")
         viewport.performMouseInput {
@@ -56,7 +56,7 @@ class DesktopCameraInputTest {
     fun primaryAndSecondaryMouseDragsReachTheCamera() = runComposeUiTest {
         val controller = PreviewController()
         setContent {
-            Box(Modifier.size(160.dp).testTag("viewport").desktopCameraInput(controller))
+            Box(Modifier.size(160.dp).testTag("viewport").pointerCameraInput(controller))
         }
         onNodeWithTag("viewport").performMouseInput {
             moveTo(center)

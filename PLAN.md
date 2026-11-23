@@ -282,6 +282,8 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 
 **Active phase:** 10 — Living Sandbox: Create, Populate, Observe. Built and verified on Desktop and Android; awaiting human acceptance. Not committed. See Latest Handoff.
 
+**Web (2026-11-23, player request):** BranchWorld also runs in the browser (`webApp`, Kotlin/JS + Kool WebGL 2), verified in Chrome on an Apple M4 at desktop and phone sizes, with `.github/workflows/web.yml` written to publish it to GitHub Pages. This pulls the Phase 14 "evaluate Web" item forward; it does not change Phase 10's scope or acceptance. Not committed. See Latest Handoff → Web.
+
 **Verified foundations:** see §6. Living worlds use **rules v12** and **save schema 10**, adding `life` sections to the state and to each creature only when present, so earlier saves keep their exact bytes and replay hashes. Each world has its own slot (`worlds/world-<n>.json`) beside the player profile.
 
 **Player experience:**
@@ -325,6 +327,11 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | v12 caps rabbits 40, deer 14, foxes 8, wolves 12, island 80 | Provisional, under the measured step budget | p95 step 79–291 µs on the M4 JVM (see E-L1) |
 | 4× and 8× batch 2 and 4 ticks per published frame | The interface is never asked to redraw faster than 40 Hz | WorldClockTest pins identical states at every speed |
 | Screen picking is plain Kotlin on the shared camera | Testable without a GPU; one field of view constant for scene and picks | GroundPickingTest; Desktop clicks and Android taps (touch slop, 350 ms) become taps |
+| **Web target is Kotlin/JS (`js { browser() }`), not Wasm** | Kool 0.19.0 publishes only a `js` (IR) web variant; Compose, coroutines and serialization all support it | `webApp` module; `shared` and `renderer` gain `js` targets |
+| Browser layering: Kool draws WebGL 2 on a page `<canvas>` beneath a transparent Compose canvas | Compose's `HtmlElementView` puts HTML *over* Compose and swallows input, which would hide the HUD over a full-screen world | `App(viewportUnderneath = true)` drops the shell backdrop; the web host clears Skiko's per-frame white fill with `BlendMode.Clear` |
+| Desktop and web share camera input in `renderer/src/skikoMain` (`pointerCameraInput`), with Android-style multi-touch added | One implementation for mouse, keyboard, wheel and touch on both Skiko targets; desktop mouse behaviour unchanged | Wheel notch normalised per platform (`ScrollNotch`: 1 line on JVM, 100 CSS px in browsers) |
+| Web saves: IndexedDB per file plus a synchronous localStorage write-ahead journal | Browsers abort in-flight IndexedDB transactions on unload; closing a tab is how players leave | Journal cleared only by the write that made it (token match); reads prefer a pending journal |
+| Common tests use `runTest` (`runSimulationTest`) instead of `runBlocking` | `runBlocking` does not exist on Kotlin/JS; the same fixtures now run on JVM, Android host, iOS and JS | 30-minute wall-clock limit for soak fixtures |
 
 ### Experiment Ledger
 
@@ -340,8 +347,61 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | E-L1 step cost at the caps | Same final soak, Apple M4 JVM | p50 71–74 µs, p95 140–226 µs per tick, worst single tick 24 ms (one-off, JIT warm-up). Budget 400 µs | Keep caps rabbits 40, deer 14, foxes 8, wolves 12, island 80. Pixel 9 step cost not yet measured |
 | Placement ghost visibility | Desktop capture 1280×800, survey camera | A flat ring sat under the faceted terrain and was invisible; a stake read as a pale sliver | Keep: a raised band, a stake and a painted knob (green or madder) |
 | Capture harness at 4× | Desktop GPU capture with the real App | Compose test idling never settled at 4× with live GPU frames, so any click hung; at 2× with a pause before interface clicks every step completes | Keep for captures; the real app is unaffected (it never waits for idle) |
+| W-1 Shared rules under Kotlin/JS | All 100 common tests (replay hashes, save bytes, world codes, timelines) on Node.js 24 against the JVM pins | 100/100 pass; JS Float-as-double is harmless because the simulation uses integers and Float lives only in render projections | KEEP; CI runs `:shared:jsNodeTest` before every Pages deploy |
+| W-2 Compose over WebGL layering | Chrome 1440×900, title island | First build: Kool frame correct but hidden by an opaque white Compose canvas (Skiko clears to white each frame). With a `BlendMode.Clear` backdrop the island shows under the HUD, scrims and overlays | KEEP |
+| W-3 Wheel zoom scale | Chrome, one wheel event | The desktop formula on raw CSS pixels zoomed fully in from one notch; normalised at 100 px per notch it matches desktop | KEEP |
+| W-4 Unload saves | Place animals while paused, reload 0.3 s later | Without journal: `put` issued 21 ms after `visibilitychange`, never committed, placements lost. With journal: reopened at the exact tick, journal cleared after the next commit | KEEP |
+| W-5 Web performance and size | Apple M4, Chrome headless with Metal ANGLE, Cairnwater, 5 rabbits + 1–2 wolves at 8× | 59.5–60.2 fps, p95 16.7–16.8 ms frames at 1440×900 and 390×844@3×; first asset frame 0.2–1.2 s after load; autosave 5–85 ms up to 280 KB. Production download ≈ 9 MB gzip (JS 1.9 MB, Skiko wasm 3.3 MB, models ~4 MB) | KEEP; measure on a mid-range phone and Safari next |
 
 ### Latest Handoff
+
+#### Web (Kotlin/JS + WebGL 2, GitHub Pages)
+
+```text
+ACTIVE PHASE / STATUS: 10 — awaiting acceptance (unchanged); Web port — COMPLETE on Chrome/macOS, Pages deploy NOT RUN
+PLAYER-VISIBLE CHANGE: BranchWorld runs in a browser with the same shared rules, Compose interface and Kool island as
+  Desktop and Android: title over the live island, New world (typing a name works), placing rabbits and wolves by
+  click or tap with the peg ghost and refusals, Play and 1×–8×, orbit/pan/zoom by mouse, wheel, keys, one-finger drag
+  and pinch, paused menu, photo mode (downloads a clean PNG), Continue after reload (IndexedDB), WebAudio cues and
+  ambience after the first click.
+VISUAL EVIDENCE: build/verification/web-js/ (real Chrome captures: 1440×900 title, new world, placement, 8× run,
+  zoom; 390×844@3× phone title, in-world, placement/orbit/pinch/8× strip; production menu, photo mode,
+  photo-download.png; first-1440.png and layers-kool-only.png show the white-canvas bug and the Kool layer alone)
+CODE CHANGED: settings.gradle.kts (+webApp); shared/build.gradle.kts (js + Node tests, coroutines-test);
+  shared/jsMain (Platform, GestureEdges); App.kt (`viewportUnderneath`, `ShellBackdrop`); shared commonTest ->
+  `runSimulationTest`; renderer/build.gradle.kts (js, Node tests, `skiko` source set); renderer/skikoMain
+  PointerCameraInput.kt (moved from jvmMain DesktopCameraInput, + touch, ScrollNotch); renderer/jsMain WebDiorama.kt,
+  ScrollNotch.js.kt; renderer/jvmMain ScrollNotch.jvm.kt; webApp/ (main.kt, WebWorldSaveStore.kt, WebWorldSounds.kt,
+  index.html; copies the renderer diorama assets into ./assets at build time); kotlin-js-store/yarn.lock;
+  .github/workflows/web.yml; README.md
+BUILDS & TESTS:
+  PASS ./gradlew :shared:jvmTest :shared:jsNodeTest :renderer:jvmTest :renderer:jsNodeTest :desktopApp:test
+       :androidApp:assembleDebug :webApp:jsBrowserDistribution --continue
+       (108 shared JVM, 100 shared JS, 30 renderer JVM, 6 renderer JS, 3 Desktop)
+  PASS interactive walkthroughs of the development and production bundles in Chrome (puppeteer-core with real mouse,
+       keyboard and CDP touch events); production served from a /BranchWorld/ subpath, as on Pages
+  NOT RUN :shared:testAndroidHostTest, iOS tests and Android device tests this session; Firefox and Safari; the
+       GitHub Actions workflow (needs a push and Pages -> Source = GitHub Actions)
+SIMULATION / SAVE / BRANCH: shared fixtures pass identically on JS (W-1). Saves round-trip through IndexedDB across
+  reloads; the localStorage journal keeps changes made just before a reload or tab close (W-4).
+PERFORMANCE: W-5 (Apple M4, Chrome): 60 fps, p95 16.7 ms at desktop and phone sizes; ≈ 9 MB gzip first load.
+PLAYTEST: scripted browser walkthroughs only. NOT TESTED by a player in their own browser or on a real phone.
+DECISIONS / EXPERIMENTS: Decision Log rows from "Web target is Kotlin/JS"; Experiment Ledger W-1 to W-5.
+KNOWN GAPS:
+  1. Only Chrome on macOS was exercised; Safari (WebGL 2 and IndexedDB quirks), Firefox (wheel deltaMode) and real
+     phones are untested. A phone browser renders the full desktop scene with no quality tier.
+  2. The production bundle ships Skiko's wasm twice (8.6 MB each, one fetched) and an 8 MB source map; first load is
+     ≈ 9 MB compressed, with no progress beyond "Setting the island down…".
+  3. Android touch (AndroidDiorama.CameraTouch) and the shared Skiko touch path are parallel copies of the same
+     gesture rules; a shared gesture tracker was planned but not extracted, to leave Android untouched.
+  4. Continue opens a world paused (all platforms); placements made while paused persist through ON_STOP autosave or
+     the journal, not a periodic save.
+  5. The Pages workflow has not run; Linux CI configuration with the Android plugin is unverified.
+NEXT ACTION: Commit and push to main, set Pages -> Source to GitHub Actions, and confirm the workflow publishes
+  https://hib4.github.io/BranchWorld/. Then open it in Safari and on a real phone and fix what differs. Phase 10's
+  NEXT ACTION below is unchanged.
+PHASE APPROVAL: AWAITING (Phase 10)
+```
 
 #### Phase 10 evidence (Living Sandbox: create, populate, observe)
 
