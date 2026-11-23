@@ -286,6 +286,8 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 
 **Architecture refactor (2026-11-23, player request, in progress):** SOLID and layered-architecture clean-up in six reviewed stages; all six stages are done and verified, nothing committed. Player-visible behaviour, saves and replay hashes are unchanged. See Latest Handoff → Architecture refactor.
 
+**iOS (2026-11-23, player request):** the iOS app now draws the live 3D world with RealityKit, driven entirely by the shared Kotlin renderer code. It keeps saves in Application Support, plays the soundscape and cues, and saves photos to the photo library. Menu pages no longer clip under the status bar or home indicator (iOS and Android). Verified on the iPhone 18 Pro simulator (iOS 27.2); not run on a device. Not committed. See Latest Handoff → iOS.
+
 **Verified foundations:** see §6. Living worlds use **rules v12** and **save schema 10**, adding `life` sections to the state and to each creature only when present, so earlier saves keep their exact bytes and replay hashes. Each world has its own slot (`worlds/world-<n>.json`) beside the player profile.
 
 **Player experience:**
@@ -338,6 +340,11 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | **`:shared` is layered ui → data → domain → platform**; hosts pass one `AppServices` (WorldViewport, WorldSoundPlayer, PhotoSaver, WorldSaveStore) | Replaces 11 loose lambdas in `App()`; each host implements small ports and reuses the shared save layout (`KeyedWorldSaveStore` over `BlobStorage`) | Existing desktop and IndexedDB saves verified to open unchanged |
 | **An open world is one `WorldSessionCore` plus role classes joined by interface delegation** (placement, history navigation, branch comparison, earlier chapters) | Interface segregation without changing any caller; earlier-chapter controls are isolated from living worlds | `IslandLoad.Ready` kept as the composed type |
 | **Earlier story mode stays, isolated in `ui/legacy`, `domain/session/ChapterControls` and `ecology/chapters`** | Player decision during the refactor: keep behaviour, remove it from the living-sandbox code paths | Removal remains a separate product decision |
+| **iOS draws the world with RealityKit, behind a Swift `WorldStage` driven entirely from Kotlin** | Kool has no iOS/Metal backend (kool issue #1, open since 2020). SceneKit was rejected by the player as deprecated (WWDC25 soft deprecation); Filament's Kotlin wrapper has one maintainer. RealityKit is Apple's current engine but Swift-only, so Swift stays a thin entity/material layer and Kotlin builds every mesh and pose | No USDZ conversion: Kotlin reads the same glTF files (`assets/gltf`) and uploads arrays; the animals are rigid node hierarchies posed by `ClipSampler` |
+| **Renderer split: engine-free `commonMain` (camera, picking, input, geometry, lighting, creature motion, glTF), Kool in `koolMain`, RealityKit stage in `iosMain`** | Both engines draw the same shared arrays and motion, so iOS matches the other platforms by construction | Kool's terrain, sea, landscape, water, reeds, pines, fire and echo meshes were fingerprinted before and after the move: bit-identical |
+| **RealityKit frames drive the Kotlin session (`StageFrames` from `SceneEvents.Update`)**, not a Compose frame loop | A permanent `withFrameNanos` loop keeps Compose busy and never idle, which hangs UI tests; frames belong to the renderer | Compose only draws the HUD over the `UIKitView` (`interactionMode = null`: every gesture goes through Compose to the shared picking) |
+| **iOS sound uses `AVAudioPlayer` in the ambient category; photos ask for add-only library access** | Ambient audio mixes with the player's music and respects the silent switch, as a calm game should; add-only access never reads the library. Layers fade with the shared `AmbienceGlide` | A refused permission is its own result (`PhotoResult.NotAllowed`) with a message pointing to Settings, not "try again" |
+| **Menu pages scroll the full window height with safe-area insets as padding inside the scroll** | Insets applied outside the scroll clipped content under the iPhone status bar and home indicator | A sky-coloured fade sits behind the status bar on menu pages so scrolled content never collides with the clock |
 | **Rules refactors move code verbatim and must keep every pinned replay hash** | `LifeRules` split into ground, placement, prey, predators and everyday needs; v3–v6 animals in `LegacyCreatureRules`; `advance()` hands each rules era its own finish | All 87 simulation fixtures pass on JVM and JS after each move |
 
 ### Experiment Ledger
@@ -359,8 +366,64 @@ Keep this section accurate and concise. Record what actually ran, with PASS / FA
 | W-3 Wheel zoom scale | Chrome, one wheel event | The desktop formula on raw CSS pixels zoomed fully in from one notch; normalised at 100 px per notch it matches desktop | KEEP |
 | W-4 Unload saves | Place animals while paused, reload 0.3 s later | Without journal: `put` issued 21 ms after `visibilitychange`, never committed, placements lost. With journal: reopened at the exact tick, journal cleared after the next commit | KEEP |
 | W-5 Web performance and size | Apple M4, Chrome headless with Metal ANGLE, Cairnwater, 5 rabbits + 1–2 wolves at 8× | 59.5–60.2 fps, p95 16.7–16.8 ms frames at 1440×900 and 390×844@3×; first asset frame 0.2–1.2 s after load; autosave 5–85 ms up to 280 KB. Production download ≈ 9 MB gzip (JS 1.9 MB, Skiko wasm 3.3 MB, models ~4 MB) | KEEP; measure on a mid-range phone and Safari next |
+| I-1 RealityKit feasibility gate | iPhone 18 Pro simulator (iOS 27.2) on an Apple M4, title island and a seeded living world (Heron Reach, 53 animals) | (1) Coloured terrain renders under the Compose HUD; (2) animals play idle/walk/run/eat posed from Kotlin (`ClipSampler` matches Kool's own animation to 2e-4 on every node); (3) Compose touch taps place rabbits through the shared picking (`IosLivingSandboxUiTest`, iOS simulator); (4) 59.3–59.8 fps in the simulator | KEEP RealityKit. Device frame rate NOT MEASURED |
+| I-2 iOS colour pipeline | Same title island, region means compared with the web build's phone screenshot | Default RealityKit crushed darks (sea red 0 vs 51): its filmic tone curve. A flat `ToneMappingComponent` (iOS 27) gave exact sRGB on a grey ramp, but cyan still lost red: RealityKit works in Display P3. Converting sRGB→P3 in the shaders, then Kool-matched diffuse factors (Blinn 0.82, PBR 0.47), brought the whole island to (99,133,116) vs the web's (98,134,121) | KEEP. iOS 18–26 have no `ToneMappingComponent`, so their darks will read slightly deeper (not measured) |
 
 ### Latest Handoff
+
+#### iOS — menu clipping and a RealityKit 3D world
+
+```text
+ACTIVE PHASE / STATUS: 10 — awaiting acceptance (unchanged); iOS renderer — COMPLETE for living worlds on the simulator
+PLAYER-VISIBLE CHANGE: On iOS the title and world show the live 3D island (terrain, sea, rivers and lakes, pines,
+  stones, flowers, grass, reeds, all four animals with their clips, placement pegs, the selection ring, warrens and
+  dens, ground shadows, rain, fire with flames, smoke, scars and stumps, the dry storm and lightning, comparison
+  echoes) instead of the flat drawn island; taps set animals down; worlds are kept between launches. Menu pages
+  (New world, My worlds, stories) scroll fully clear of the status bar and home indicator on iOS and Android.
+VISUAL EVIDENCE: iPhone 18 Pro simulator 1206x2622 screenshots in the session scratchpad: title before/after the
+  padding fix, New world scrolled to top and bottom, title island vs the web build, in-world Heron Reach, a temporary
+  build with synthetic fire, echo and rain. Not committed to the repository.
+CODE CHANGED:
+  shared ui/home/HomeRoute + MenuScreens: insets inside the menu scroll, status-bar fade.
+  renderer: commonMain geometry/ (IslandGeometry, TerrainGeometry, LandscapeGeometry, EffectsGeometry, LifeShapes,
+  PinePlacement, ShapeBuilder, Matrix), lighting/CoastalLight, motion/CreatureMotion, assets/gltf/ (GltfReader,
+  ClipSampler); Kool moved to koolMain and now builds from those arrays; iosMain IosDiorama, WorldStage, StageFrames,
+  stage/ (StageSession, StageModels, StageEffects, StageData); iosMain joins skikoMain for pointer input.
+  iosKit (new module): the Shared framework, MainViewController(stage:), IosWorldSaveStore over Application Support.
+  iosApp: World/RealityWorldStage.swift, World/WorldShaders.metal, ContentView passes the stage; the Xcode build calls
+  :iosKit:embedAndSignAppleFrameworkForXcode and copies renderer/src/commonMain/resources/diorama into the bundle.
+BUILDS & TESTS:
+  PASS :simulation:jvmTest 87, :simulation:jsNodeTest 82 (FireTest's speed assertion failed once while every target
+       built in parallel; 82/82 when rerun alone), :shared:jvmTest 30, :shared:jsNodeTest 27,
+       :renderer:jvmTest 46 (one desktop UI test timed out under the same parallel load; 46/46 rerun alone),
+       :renderer:jsNodeTest 17, :renderer:testAndroidHostTest 17, :renderer:iosSimulatorArm64Test 18,
+       :iosKit:iosSimulatorArm64Test 3, :desktopApp:test 3, :androidApp:assembleDebug,
+       :androidApp:compileDebugAndroidTestKotlin, :webApp:jsBrowserDistribution, :iosKit:linkDebugFrameworkIosArm64,
+       xcodebuild iosApp for the iPhone simulator.
+  New tests: TerrainGeometryTest, CoastalLightTest (now common), GltfReaderTest, CreatureMotionTest (all on iOS too),
+  GltfReaderAssetsTest (every shipped model; Kool animation parity), DesktopMenuScrollUiTest, IosLivingSandboxUiTest,
+  IosFileStorageTest.
+  NOT RUN: on a physical iPhone; Android device tests; legacy chapters on iOS.
+SIMULATION / SAVE / BRANCH: :simulation untouched. Kool meshes fingerprinted bit-identical before and after every
+  move (4 islands x 2 sizes, plus synthetic fire and echo states). iOS saves use the shared layout in a new folder;
+  nothing to migrate.
+PERFORMANCE: simulator 59.3–59.8 fps with 53 animals (Apple M4 host). Device NOT MEASURED.
+PLAYTEST: NOT TESTED by a person on iOS; the agent could not drive the Simulator, so in-world taps were verified by the
+  iOS Compose UI test and screenshots came from temporary builds (reverted).
+DECISIONS / EXPERIMENTS: Decision Log rows from "iOS draws the world with RealityKit"; Experiment Ledger I-1, I-2.
+KNOWN GAPS:
+  1. Legacy chapters (developer mode) on iOS lack villages and villagers (skinned), shaping effects, region
+     outlines and the herd trail.
+  2. (Resolved: IosPhotos saves to the photo library; verified in the simulator: granted -> IMG_0007.PNG 1206x2622
+     of the 3D frame; revoked -> NotAllowed and nothing saved.)
+  3. (Resolved: IosWorldSounds; verified in the simulator log: surf, wind and rain layers started in a rainy world, and
+     all nine cues played. Heard by a person: NOT TESTED.)
+  4. iOS 18–26 lack ToneMappingComponent, so darks may read deeper than on iOS 27 (not measured).
+  5. Building the iOS app needs Xcode's Metal Toolchain (downloaded this session).
+NEXT ACTION: play it on the simulator (or an iPhone): create a world, place rabbits and wolves, run 8x, inspect,
+  rewind and compare (echo), quit and Continue. Then commit together with the architecture refactor.
+PHASE APPROVAL: AWAITING
+```
 
 #### Architecture refactor (SOLID, layered modules)
 
@@ -517,7 +580,7 @@ KNOWN GAPS:
   2. The Android full device suite was not rerun in one process; it ran out of memory there before Phase 10 (islands kept open across tests).
   3. Placement markers do not show on scrubber; the timeline's "start a new history here" prompt is built but was not
      captured; world codes still cap at 64 commands, so busy worlds cannot be shared.
-  4. iOS keeps its 2D fallback viewport and cannot place animals (no 3D renderer there); shared rules are verified.
+  4. (Resolved 2026-11-23: iOS draws the world with RealityKit and places animals; see Latest Handoff → iOS.)
   5. In the Desktop GPU capture harness, clicks at 4× never let Compose idle; captures use 2× (real app unaffected).
   6. The follow camera can sit very close at dusk; shadows under creatures still follow cells, not the glide.
 NEXT ACTION: Ask the player to accept Phase 10 after creating a world on Desktop and a phone and placing rabbits and

@@ -33,6 +33,7 @@ plugins {
 
 include(":androidApp")
 include(":desktopApp")
+include(":iosKit")
 include(":renderer")
 include(":shared")
 include(":simulation")

@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
@@ -28,9 +29,18 @@ kotlin {
         compilerOptions.jvmTarget = JvmTarget.JVM_17
         withHostTest {}
     }
-    // Desktop and the browser both draw Compose with Skiko and share its pointer and key input.
+    iosArm64()
+    iosSimulatorArm64()
+    // Kool draws the world on Desktop, Android and the browser; iOS has its own backend, so commonMain stays engine-free
+    // (camera, picking, gestures, geometry). Desktop, the browser and iOS draw Compose with Skiko and share pointer input.
     applyDefaultHierarchyTemplate {
         common {
+            group("kool") {
+                withJvm()
+                withJs()
+                // The KMP Android library target has no named matcher of its own.
+                withCompilations { it.target.platformType == KotlinPlatformType.androidJvm }
+            }
             group("skiko") {
                 withJvm()
                 withJs()
@@ -40,16 +50,25 @@ kotlin {
     sourceSets {
         commonMain.dependencies {
             api(project(":shared"))
-            implementation(libs.kool.core)
+            implementation(libs.kotlinx.serializationJson)
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
             implementation(libs.compose.ui)
             implementation(libs.compose.material3)
             implementation(libs.androidx.lifecycle.runtimeCompose)
         }
+        // iOS draws Compose with Skiko too, and shares its pointer input; the default hierarchy cannot express that
+        // diamond, so iosMain is linked by hand.
+        iosMain.get().dependsOn(getByName("skikoMain"))
+        getByName("koolMain").dependencies {
+            implementation(libs.kool.core)
+        }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutinesTest)
+        }
+        iosTest.dependencies {
+            implementation(libs.compose.uiTest)
         }
         jvmTest.dependencies {
             implementation(libs.compose.uiTest)

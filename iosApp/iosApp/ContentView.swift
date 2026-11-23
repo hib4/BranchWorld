@@ -4,7 +4,8 @@ import Shared
 
 struct ComposeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Self.Context) -> UIViewController {
-        MainViewControllerKt.MainViewController()
+        // Shared Kotlin draws the world on this RealityKit stage and the interface over it.
+        MainViewControllerKt.MainViewController(stage: RealityWorldStage())
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Self.Context) {}

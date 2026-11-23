@@ -496,6 +496,7 @@
     <string name="photo_saved">Photo saved to %1$s.</string>
     <string name="photo_view_not_ready">The scene is still loading. Try again in a moment.</string>
     <string name="photo_failed">The photo couldn’t be saved. Try again.</string>
+    <string name="photo_not_allowed">BranchWorld isn’t allowed to add photos. You can allow it in Settings › Privacy › Photos.</string>
     <string name="photo_share">Share photo</string>
     <string name="photo_share_failed">The share menu couldn’t open. Your photo is saved.</string>
     <string name="close_chapter">Close this chapter</string>

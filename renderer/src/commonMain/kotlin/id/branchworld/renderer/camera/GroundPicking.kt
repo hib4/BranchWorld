@@ -1,10 +1,11 @@
 package id.branchworld.renderer.camera
 
-import id.branchworld.renderer.scene.CellSize
-import id.branchworld.renderer.scene.ElevationScale
-import id.branchworld.renderer.scene.SeaLevel
-import id.branchworld.renderer.scene.cellPosition
-import id.branchworld.renderer.scene.heightAt
+import id.branchworld.renderer.geometry.CellSize
+import id.branchworld.renderer.geometry.ElevationScale
+import id.branchworld.renderer.geometry.Point3
+import id.branchworld.renderer.geometry.SeaLevel
+import id.branchworld.renderer.geometry.cellPosition
+import id.branchworld.renderer.geometry.heightAt
 import id.branchworld.simulation.projection.CreaturePose
 import id.branchworld.simulation.projection.GroundPoint
 import id.branchworld.simulation.projection.WorldPick
@@ -14,21 +15,10 @@ import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.sin
-import kotlin.math.sqrt
 import kotlin.math.tan
 
 /** The diorama camera's vertical field of view. The scene and picking share it so a tap lands where it looks. */
 internal const val ViewFovYDegrees = 47f
-
-/** A small value vector for picking. Kept apart from engine types so picking is plain Kotlin and testable without a GPU. */
-internal data class Point3(val x: Float, val y: Float, val z: Float) {
-    operator fun plus(o: Point3) = Point3(x + o.x, y + o.y, z + o.z)
-    operator fun minus(o: Point3) = Point3(x - o.x, y - o.y, z - o.z)
-    operator fun times(s: Float) = Point3(x * s, y * s, z * s)
-    infix fun dot(o: Point3) = x * o.x + y * o.y + z * o.z
-    infix fun cross(o: Point3) = Point3(y * o.z - z * o.y, z * o.x - x * o.z, x * o.y - y * o.x)
-    fun norm(): Point3 = sqrt(this dot this).let { length -> if (length == 0f) this else this * (1f / length) }
-}
 
 internal data class Ray(val origin: Point3, val direction: Point3)
 

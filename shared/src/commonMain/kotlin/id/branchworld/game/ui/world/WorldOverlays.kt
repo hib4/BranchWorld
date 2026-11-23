@@ -119,6 +119,7 @@ internal fun PhotoControls(
             is PhotoResult.Saved -> stringResource(Res.string.photo_saved, result.location)
             PhotoResult.ViewNotReady -> stringResource(Res.string.photo_view_not_ready)
             PhotoResult.CouldNotSave -> stringResource(Res.string.photo_failed)
+            PhotoResult.NotAllowed -> stringResource(Res.string.photo_not_allowed)
             null -> null
         }
         if (status != null) {

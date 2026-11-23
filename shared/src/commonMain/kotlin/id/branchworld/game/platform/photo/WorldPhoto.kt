@@ -12,4 +12,6 @@ sealed interface PhotoResult {
     data class Saved(val location: String, val share: (() -> Boolean)? = null) : PhotoResult
     data object ViewNotReady : PhotoResult
     data object CouldNotSave : PhotoResult
+    /** The player has not allowed the game to add to their photo library. */
+    data object NotAllowed : PhotoResult
 }

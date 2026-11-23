@@ -1,8 +1,9 @@
 package id.branchworld.renderer.camera
 
-import id.branchworld.renderer.scene.CellSize
+import id.branchworld.renderer.geometry.CellSize
+import id.branchworld.renderer.geometry.Point3
+import id.branchworld.renderer.geometry.heightAt
 import id.branchworld.renderer.scene.cellPosition
-import id.branchworld.renderer.scene.heightAt
 import id.branchworld.simulation.core.CreatureHeading
 import id.branchworld.simulation.ecology.CreatureAction
 import id.branchworld.simulation.ecology.Species

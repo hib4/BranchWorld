@@ -30,13 +30,12 @@ import id.branchworld.game.platform.photo.PhotoResult
 import id.branchworld.game.platform.storage.WorldSaveStore
 import id.branchworld.game.platform.viewport.worldViewport
 import id.branchworld.game.ui.app.App
-import id.branchworld.renderer.camera.Point3
 import id.branchworld.renderer.camera.PreviewController
 import id.branchworld.renderer.camera.screenPoint
+import id.branchworld.renderer.geometry.Point3
+import id.branchworld.renderer.geometry.heightAt
 import id.branchworld.renderer.scene.DioramaSession
 import id.branchworld.renderer.scene.cellPosition
-import id.branchworld.renderer.scene.heightAt
-import kotlinx.coroutines.runBlocking
 import java.awt.Canvas
 import java.io.File
 import javax.imageio.ImageIO
@@ -44,6 +43,7 @@ import javax.swing.JFrame
 import javax.swing.SwingUtilities
 import kotlin.concurrent.thread
 import kotlin.test.Test
+import kotlinx.coroutines.runBlocking
 
 /**
  * Captures the real game at Desktop size: the Kool renderer draws the island offscreen and the actual App composes

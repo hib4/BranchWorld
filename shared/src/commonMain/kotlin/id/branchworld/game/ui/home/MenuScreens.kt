@@ -3,11 +3,16 @@ package id.branchworld.game.ui.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +43,7 @@ import id.branchworld.game.ui.components.PegButton
 import id.branchworld.game.ui.components.ScrollColumn
 import id.branchworld.game.ui.components.WoodSwitchRow
 import id.branchworld.game.ui.theme.GameIcons
+import id.branchworld.game.ui.theme.LocalSpacing
 import id.branchworld.game.ui.theme.Wood
 import id.branchworld.game.ui.theme.chapterPaint
 import id.branchworld.game.ui.world.dayOf
@@ -45,7 +51,11 @@ import id.branchworld.game.ui.world.sessionKind
 import id.branchworld.game.ui.world.sessionTitle
 import org.jetbrains.compose.resources.stringResource
 
-/** A titled menu page over the world: back arrow, heading, short introduction and scrolling content. */
+/**
+ * A titled menu page over the world: back arrow, heading, short introduction and scrolling content. The page scrolls
+ * the window's full height and keeps the top and bottom safe areas as padding inside the scroll, so every board can be
+ * scrolled clear of the status bar and the home indicator.
+ */
 @Composable
 internal fun MenuPage(
     title: String,
@@ -53,7 +63,10 @@ internal fun MenuPage(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Column(modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val edge = LocalSpacing.current.edge(16.dp)
+    Column(modifier.verticalScroll(rememberScrollState())
+        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical)).padding(vertical = edge),
+        verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Board(padding = 6.dp) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PegButton(GameIcons.Back, stringResource(Res.string.menu_back), onBack)

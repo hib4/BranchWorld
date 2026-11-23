@@ -9,15 +9,9 @@ plugins {
 }
 
 kotlin {
-    listOf(
-        iosArm64(),
-        iosSimulatorArm64()
-    ).forEach { iosTarget ->
-        iosTarget.binaries.framework {
-            baseName = "Shared"
-            isStatic = true
-        }
-    }
+    // The iOS framework is built by :iosKit, which adds the renderer and the iOS adapters.
+    iosArm64()
+    iosSimulatorArm64()
     jvm()
     js {
         browser {

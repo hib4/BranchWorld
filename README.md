@@ -29,6 +29,15 @@ Run the Desktop app in a graphical session.
 
 For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
 
+### iOS
+
+Open `iosApp/iosApp.xcodeproj` in Xcode and run the `iosApp` scheme, or build from the command line. Xcode's build runs `./gradlew :iosKit:embedAndSignAppleFrameworkForXcode` for the Kotlin framework and copies `renderer/src/commonMain/resources/diorama` into the app. The RealityKit shaders need Xcode's Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`). The app targets iOS 18.2.
+
+```sh
+./gradlew :renderer:iosSimulatorArm64Test :iosKit:iosSimulatorArm64Test
+xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build
+```
+
 ### Web
 
 The browser build is Kotlin/JS (Kool publishes no Wasm target) and draws with WebGL 2. It needs a current Chrome, Edge, Firefox or Safari.
@@ -89,7 +98,7 @@ Run the replay fixtures on a connected device with `./gradlew :simulation:connec
 BranchWorld follows a layered architecture: each layer depends only on the layers below it, and the deterministic rules sit in a module of their own so the compiler keeps the interface out of them.
 
 ```
-androidApp / desktopApp / webApp / iosApp   startup, window or page lifetime, platform adapters
+androidApp / desktopApp / webApp / iosKit+iosApp   startup, window or page lifetime, platform adapters
         │                   │
     :renderer ──────────► :shared            ui ─► data ─► domain ─► platform (ports)
                             │
@@ -129,16 +138,23 @@ Each creature decides from what it could perceive on the previous tick and draws
 
 `App(services, foreground)` is the whole contract with a host. The world screen keeps its momentary state in `WorldScreenState`, and its side effects (clock, taps, sound) live in `WorldEffects`.
 
-### `:renderer` — Kool behind the `WorldViewport` port
+### `:renderer` — the 3D view behind the `WorldViewport` port
 
-| Package | What lives there |
+Kool draws the world on Desktop (Vulkan), Android (GLES) and the web (WebGL 2). Kool has no iOS backend, so iOS draws with RealityKit. Everything that decides what is drawn is shared Kotlin, and both engines draw the same arrays:
+
+| Source set | What lives there |
 |---|---|
-| `camera` | `PreviewController` (camera state, picking, `ViewportStatus`), `PreviewCamera`, `GroundPicking`, `FocusFraming` |
-| `input` | `TouchGestureTracker`, shared by Android and the Skiko targets. `pointerCameraInput` handles mouse, wheel and keys on Desktop and the web |
-| `scene` | `DioramaSession` (per-frame orchestration), `IslandScene`, `PineForest`, terrain, water and light. `scene/life` and `scene/effects` hold creatures, villages, fire and weather details |
-| `hud`, `assets`, `diagnostics` | Status and camera reset, the asset registry, frame timing |
+| `commonMain` (every target, iOS included) | `camera` (`PreviewController`, `PreviewCamera`, `GroundPicking`, `FocusFraming`), `input` (`TouchGestureTracker`), `geometry` (terrain chunks, sea, pines, landscape details, water, reeds, fire, echoes, life shapes as plain arrays), `lighting` (`CoastalLight`), `motion` (`CreatureMotion`, `CreaturePacing`), `assets/gltf` (a glTF reader and `ClipSampler`), `hud` |
+| `koolMain` (jvm, android, js) | `scene`: `DioramaSession` and the Kool meshes and KSL shaders built from the shared geometry; `diagnostics` |
+| `skikoMain` (jvm, js, ios) | `pointerCameraInput`: mouse, wheel, keys and touch through Compose |
+| `iosMain` | `IosDiorama` and `WorldStage`, the interface the Swift RealityKit stage implements, plus `stage/`, which uploads the shared geometry and glTF models and poses every entity each frame |
 
-`DesktopDiorama` (Vulkan into Compose), `AndroidDiorama` (GLES) and `WebDiorama` (WebGL 2 beneath a transparent Compose canvas) each implement `WorldViewport`. The iOS app has no 3D renderer yet and shows a drawn island.
+`DesktopDiorama` (Vulkan into Compose), `AndroidDiorama` (GLES), `WebDiorama` (WebGL 2 beneath a transparent Compose canvas) and `IosDiorama` (RealityKit in a `UIKitView` beneath Compose) each implement `WorldViewport`. The Kool meshes are built from the shared geometry with the exact vertex data they had before. On iOS, `iosApp/iosApp/World/RealityWorldStage.swift` turns the Kotlin data into RealityKit entities, and `WorldShaders.metal` ports the Kool shaders: lighting, haze, sea, rivers, wind, fire. The shaders convert sRGB to Display P3 and flatten RealityKit's tone curve (iOS 27), so the island matches the other platforms.
+
+`:iosKit` builds the `Shared` framework that the Xcode project links. It holds `MainViewController(stage:)` and the iOS adapters:
+- `IosWorldSaveStore` keeps saves in Application Support in the shared layout.
+- `IosWorldSounds` plays the cues and the layered soundscape with `AVAudioPlayer` in the ambient audio category, so it mixes with the player's music and follows the silent switch.
+- `IosPhotos` adds photos to the photo library. It asks only for add-only access (`NSPhotoLibraryAddUsageDescription`) and offers the share sheet afterwards.
 
 ### Where new code goes
 
@@ -149,6 +165,7 @@ Each creature decides from what it could perceive on the previous tick and draws
 | What the interface does with a world | `domain/session` |
 | Storage, sound or photos for a platform | A new adapter for an existing port |
 | A screen | Its feature folder under `ui` |
+| Something new in the 3D world | Its shape in `renderer/commonMain/geometry`, then a Kool mesh in `koolMain/scene` and a stage slot in `iosMain/stage` (plus a shader in `WorldShaders.metal` when it needs one) |
 
 ## Source asset inventory
 
@@ -168,4 +185,4 @@ The eight downloaded packs live under `assets/`. The formats and animation entri
 
 The runtime tree set uses Kenney Nature’s `tree_pineRoundA`, `tree_pineRoundB`, and `tree_pineTallA_detailed`, with in-engine matte materials and normalized ground pivots. The original BranchWorld surf, wind, rain, and bird layers can be regenerated with `python3 assets/audio/branchworld/generate_coast.py`. World Sounds controls the ambience and interaction cues. Reduce Motion holds decorative effects and camera transitions while keeping weather and lighting visible.
 
-Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on Android and Desktop.
+Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on every platform. iOS reads the same `diorama/` folder through the shared glTF reader.

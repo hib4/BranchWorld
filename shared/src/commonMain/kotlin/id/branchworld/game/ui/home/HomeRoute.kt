@@ -1,11 +1,22 @@
 package id.branchworld.game.ui.home
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -55,8 +66,11 @@ internal fun BoxScope.HomeRoute(
     hud: (@Composable () -> Unit)?,
 ) {
     val spacing = LocalSpacing.current
+    // Menu pages scroll the full height of the window; MenuPage pads the top and bottom insets inside the scroll, so
+    // nothing is cut off under the status bar or the home indicator.
     val page = Modifier.align(if (layout.sideIntroduction) Alignment.CenterStart else Alignment.BottomStart)
-        .safeDrawingPadding().padding(if (layout.sideIntroduction) 24.dp else spacing.edge(16.dp))
+        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+        .padding(horizontal = if (layout.sideIntroduction) 24.dp else spacing.edge(16.dp))
     val current = profile ?: PlayerProfile()
     val title = { actions.show(HomeScreen.Title) }
     when (screen) {
@@ -77,6 +91,7 @@ internal fun BoxScope.HomeRoute(
             onBack = title, modifier = page.widthIn(max = 640.dp),
             onImportCode = importCode, onOpenCode = actions::openCode)
     }
+    if (screen != HomeScreen.Title && screen != HomeScreen.Settings) StatusBarFade()
     if (failed) {
         Board(Modifier.align(Alignment.TopCenter).safeDrawingPadding().padding(spacing.edge(16.dp))) {
             Text(stringResource(Res.string.island_generation_failed))
@@ -93,3 +108,15 @@ internal fun BoxScope.HomeRoute(
         Box(Modifier.align(Alignment.TopEnd).safeDrawingPadding().padding(spacing.edge(10.dp))) { hud() }
     }
 }
+
+/** Sky-coloured fade behind the status bar, so a menu page scrolling beneath it never collides with the clock. */
+@Composable
+private fun BoxScope.StatusBarFade() {
+    val top = WindowInsets.safeDrawing.getTop(LocalDensity.current)
+    if (top == 0) return
+    val height = with(LocalDensity.current) { top.toDp() } + 14.dp
+    Box(Modifier.align(Alignment.TopCenter).fillMaxWidth().height(height)
+        .background(Brush.verticalGradient(0f to StatusSky, 0.7f to StatusSky.copy(alpha = 0.85f), 1f to Color.Transparent)))
+}
+
+private val StatusSky = Color(0xFFBEE3DC)

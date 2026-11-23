@@ -20,12 +20,12 @@ import id.branchworld.game.platform.AppServices
 import id.branchworld.game.platform.storage.WorldSaveStore
 import id.branchworld.game.platform.viewport.worldViewport
 import id.branchworld.game.ui.app.App
-import id.branchworld.renderer.camera.Point3
+import id.branchworld.renderer.geometry.Point3
 import id.branchworld.renderer.camera.PreviewController
 import id.branchworld.renderer.camera.screenPoint
 import id.branchworld.renderer.input.pointerCameraInput
 import id.branchworld.renderer.scene.cellPosition
-import id.branchworld.renderer.scene.heightAt
+import id.branchworld.renderer.geometry.heightAt
 import id.branchworld.simulation.ecology.CreatureAction
 import id.branchworld.simulation.ecology.Species
 import id.branchworld.simulation.projection.WorldCamera
