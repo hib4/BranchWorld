@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="800" height="480" viewBox="0 0 800 480" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-title architecture-desc" id="architecture-root">
+        <title id="architecture-title">BranchWorld modules</title>
+        <desc id="architecture-desc">The Android, Desktop, Web and iOS apps all use the shared 3D view and interface, which run on one set of deterministic world rules.</desc>
+        <defs>
+      <style>#architecture-root { --color-paper:   #F6E2C2;   
+      --color-ink:     #2B1D12;   
+      --color-muted:   #5B4330;   
+      --color-accent:  #A13C27;   
+      --font-sans:     'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      --font-serif:    'Instrument Serif', Georgia, serif;
+      --font-mono:     'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+      #architecture-root { font-family: var(--font-sans); color: var(--color-ink); }
+      #architecture-root .diagram-container { width: 100%; overflow-x: auto; }
+      @media print {
+#architecture-root .diagram-container { overflow-x: visible; }
+}</style>
+          <marker id="architecture-arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5B4330"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#F6E2C2"/>
+
+        <!-- Zones -->
+        <rect x="40" y="40" width="720" height="104" rx="8" fill="#2b1d12" stroke="#2b1d12" stroke-width="0.8" fill-opacity="0.02" stroke-opacity="0.14"/>
+        <rect x="52" y="44" width="80" height="12" rx="2" fill="#F6E2C2"/>
+        <text x="92" y="53" fill="#7A5A3C" font-size="7" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">PLATFORM APPS</text>
+
+        <rect x="40" y="176" width="720" height="216" rx="8" fill="#2b1d12" stroke="#2b1d12" stroke-width="0.8" fill-opacity="0.02" stroke-opacity="0.14"/>
+        <rect x="52" y="180" width="80" height="12" rx="2" fill="#F6E2C2"/>
+        <text x="92" y="189" fill="#7A5A3C" font-size="7" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle" letter-spacing="0.14em">SHARED KOTLIN</text>
+
+        <!-- Arrows (behind nodes) -->
+        <line x1="224" y1="144" x2="224" y2="208" stroke="#5B4330" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <line x1="576" y1="144" x2="576" y2="208" stroke="#5B4330" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <line x1="328" y1="240" x2="472" y2="240" stroke="#5B4330" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <line x1="576" y1="272" x2="576" y2="320" stroke="#5B4330" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+
+        <!-- Platform apps -->
+        <rect x="56" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
+        <rect x="56" y="72" width="160" height="56" rx="6" fill="#2b1d12" stroke="#2b1d12" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="136" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Android</text>
+        <text x="136" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">androidApp · OpenGL ES</text>
+
+        <rect x="232" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
+        <rect x="232" y="72" width="160" height="56" rx="6" fill="#2b1d12" stroke="#2b1d12" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="312" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Desktop</text>
+        <text x="312" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">desktopApp · Vulkan</text>
+
+        <rect x="408" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
+        <rect x="408" y="72" width="160" height="56" rx="6" fill="#2b1d12" stroke="#2b1d12" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="488" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Web</text>
+        <text x="488" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">webApp · WebGL 2</text>
+
+        <rect x="584" y="72" width="160" height="56" rx="6" fill="#F6E2C2"/>
+        <rect x="584" y="72" width="160" height="56" rx="6" fill="#2b1d12" stroke="#2b1d12" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="664" y="98" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">iOS</text>
+        <text x="664" y="114" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">iosKit · RealityKit</text>
+
+        <!-- Shared Kotlin -->
+        <rect x="120" y="208" width="208" height="64" rx="6" fill="#F6E2C2"/>
+        <rect x="120" y="208" width="208" height="64" rx="6" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
+        <text x="224" y="236" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">3D view</text>
+        <text x="224" y="252" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">renderer · Kool + RealityKit</text>
+
+        <rect x="472" y="208" width="208" height="64" rx="6" fill="#F6E2C2"/>
+        <rect x="472" y="208" width="208" height="64" rx="6" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
+        <text x="576" y="236" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">Interface</text>
+        <text x="576" y="252" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">shared · Compose Multiplatform</text>
+
+        <!-- Focal: the world's rules -->
+        <rect x="472" y="320" width="208" height="56" rx="6" fill="#F6E2C2"/>
+        <rect x="472" y="320" width="208" height="56" rx="6" fill="#a13c27" stroke="#A13C27" stroke-width="1" fill-opacity="0.08"/>
+        <text x="576" y="346" fill="#2B1D12" font-size="12" font-weight="600" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif" text-anchor="middle">World rules</text>
+        <text x="576" y="362" fill="#5B4330" font-size="9" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle">simulation · deterministic</text>
+
+        <!-- Callout -->
+        <text x="396" y="340" fill="#A13C27" font-size="14" font-style="italic" font-family="'Instrument Serif', Georgia, serif" text-anchor="end">one set of rules, replayed</text>
+        <text x="396" y="358" fill="#A13C27" font-size="14" font-style="italic" font-family="'Instrument Serif', Georgia, serif" text-anchor="end">identically on every platform</text>
+        <path d="M 404 348 Q 436 348 468 348" fill="none" stroke="#a13c27" stroke-width="1" stroke-dasharray="4,3" stroke-opacity="0.50"/>
+        <circle cx="470" cy="348" r="2" fill="#A13C27"/>
+
+        <!-- Legend strip -->
+        <line x1="40" y1="420" x2="760" y2="420" stroke="#2b1d12" stroke-width="0.8" stroke-opacity="0.14"/>
+        <text x="40" y="436" fill="#5B4330" font-size="8" font-family="'Geist Mono', ui-monospace, SFMono-Regular, Menlo, monospace" letter-spacing="0.18em">LEGEND</text>
+
+        <rect x="40" y="448" width="14" height="10" rx="2" fill="#2b1d12" stroke="#2b1d12" stroke-width="1" fill-opacity="0.03" stroke-opacity="0.30"/>
+        <text x="60" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Platform entry point</text>
+
+        <rect x="200" y="448" width="14" height="10" rx="2" fill="#FFFAF2" stroke="#2B1D12" stroke-width="1"/>
+        <text x="220" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Shared module</text>
+
+        <rect x="340" y="448" width="14" height="10" rx="2" fill="#a13c27" stroke="#A13C27" stroke-width="1" fill-opacity="0.08"/>
+        <text x="360" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Deterministic core</text>
+
+        <line x1="488" y1="453" x2="516" y2="453" stroke="#5B4330" stroke-width="1.2" marker-end="url(#architecture-arrow)"/>
+        <text x="524" y="456" fill="#5B4330" font-size="8.5" font-family="'Geist', system-ui, -apple-system, 'Segoe UI', sans-serif">Depends on</text>
+      </svg>

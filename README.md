@@ -1,188 +1,73 @@
+[![Web build](https://github.com/hib4/BranchWorld/actions/workflows/web.yml/badge.svg)](https://github.com/hib4/BranchWorld/actions/workflows/web.yml)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.21-7F52FF.svg?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Compose Multiplatform](https://img.shields.io/badge/Compose%20Multiplatform-1.12.2-4285F4.svg)](https://www.jetbrains.com/compose-multiplatform/)
+[![Platforms](https://img.shields.io/badge/platforms-Android%20%7C%20iOS%20%7C%20Desktop%20%7C%20Web-3B7A57.svg)](#kotlin-multiplatform)
+
 # BranchWorld
 
-**Create a world. Fill it with life. Watch what it becomes.**
+Welcome to BranchWorld! **Create a world. Fill it with life. Watch what it becomes.**
 
-BranchWorld is a Kotlin Multiplatform living-world sandbox. You create a small 3D island, set down rabbits, wolves, deer, foxes, trees and grass by hand, and watch them live on their own: rabbits graze, dig warrens and raise litters; wolves form packs, howl at dusk and hunt together; populations rise and fall; fire and rain change the land. Nothing is scripted. Every consequence comes from deterministic rules written once in shared Kotlin and run identically on Android, Desktop, iOS and the web.
+BranchWorld is a 3D living-world sandbox built with Kotlin Multiplatform. Set down animals and plants on a small island and watch them live on their own. Nothing is scripted.
 
-## Build and run
+Some handy links:
 
-Use the checked-in Gradle wrapper. Its daemon toolchain selects Azul JDK 21. For Android, install the Android 17 / API 37 SDK platform and Platform-Tools through Android Studio. Point `ANDROID_HOME` or the local `sdk.dir` property at the SDK. The app supports API 26 and later.
+* [Play in the browser](https://hib4.github.io/BranchWorld/)
+* [How to play](docs/PLAYING.md)
+* [Building and running](docs/BUILDING.md)
+* [Architecture](docs/ARCHITECTURE.md)
+* [Assets and credits](docs/ASSETS.md)
 
-```sh
-./gradlew :androidApp:assembleDebug :androidApp:lintDebug :desktopApp:assemble
-./gradlew :simulation:jvmTest :simulation:testAndroidHostTest :shared:jvmTest :shared:testAndroidHostTest :renderer:jvmTest :renderer:testAndroidHostTest
-```
+## Features
 
-With one emulator or device connected, install and launch the debug APK. Add `-s <serial>` after `adb` when more than one device is connected.
+* **Create** – Start from a named island or your own seed, empty or already wild.
+* **Populate** – Set down rabbits, wolves, deer, foxes, trees and grass by hand.
+* **Observe** – Animals graze, hunt, form packs and raise young. Tap one to see what it is doing and why.
+* **Experiment** – Rewind to any moment, try another way, and compare the two histories.
+* **Discover** – Every boom, crash and wildfire is recorded, with its causes.
 
-```sh
-adb devices -l
-adb install -r androidApp/build/outputs/apk/debug/androidApp-debug.apk
-adb shell am start -W -n id.branchworld.game/.MainActivity
-```
+## Kotlin Multiplatform
 
-Run the Desktop app in a graphical session.
+<p align="center">
+  <img src="docs/images/architecture.svg" alt="The Android, Desktop, Web and iOS apps use a shared 3D view and interface, which run on one set of deterministic world rules." width="800">
+</p>
 
-```sh
-./gradlew :desktopApp:run
-```
+* **One set of rules** – The world's rules are pure common Kotlin and replay identically on every platform.
+* **One interface** – Every screen is written once with Compose Multiplatform.
+* **One scene** – The 3D world is described once; Kool draws it on Android, Desktop and the web, RealityKit on iOS.
 
-For a macOS app bundle, run `./gradlew :desktopApp:createDistributable` and open `desktopApp/build/compose/binaries/main/app/id.branchworld.game.app`.
+## How to play
 
-### iOS
-
-Open `iosApp/iosApp.xcodeproj` in Xcode and run the `iosApp` scheme, or build from the command line. Xcode's build runs `./gradlew :iosKit:embedAndSignAppleFrameworkForXcode` for the Kotlin framework and copies `renderer/src/commonMain/resources/diorama` into the app. The RealityKit shaders need Xcode's Metal Toolchain (`xcodebuild -downloadComponent MetalToolchain`). The app targets iOS 18.2.
-
-```sh
-./gradlew :renderer:iosSimulatorArm64Test :iosKit:iosSimulatorArm64Test
-xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build
-```
-
-### Web
-
-The browser build is Kotlin/JS (Kool publishes no Wasm target) and draws with WebGL 2. It needs a current Chrome, Edge, Firefox or Safari.
-
-```sh
-./gradlew :webApp:jsBrowserDevelopmentRun        # opens a development server with live reload
-./gradlew :webApp:jsBrowserDistribution          # static site in webApp/build/dist/js/productionExecutable
-./gradlew :simulation:jsNodeTest :shared:jsNodeTest :renderer:jsNodeTest # the rules and replay fixtures under Kotlin/JS
-```
-
-The distribution uses relative paths, so any static host serves it from any folder. Every push to `main` runs `.github/workflows/web.yml`, which checks the shared rules under Kotlin/JS and publishes the bundle to GitHub Pages. In the repository settings, set **Pages → Source** to **GitHub Actions** once. Worlds save in the browser's IndexedDB; photos go to the browser's downloads.
-
-### Local release builds
-
-```sh
-./gradlew :androidApp:assembleRelease :androidApp:lintRelease :desktopApp:packageDmg
-```
-
-On Apple Silicon, mount `desktopApp/build/compose/binaries/main/dmg/id.branchworld.game-1.0.0.dmg`, copy the app out of the image, and open it. The DMG is built for local review and is not notarized.
-
-The Android release task produces an unsigned APK. Use Android Build Tools 36.1.0 and a local signing keystore outside the repository. A fresh emulator or a device with the same signing certificate can install the result.
-
-```sh
-keytool -genkeypair -keystore "$BRANCHWORLD_LOCAL_KEYSTORE" -storetype PKCS12 \
-  -alias branchworld-local -keyalg RSA -keysize 3072 -validity 3650
-tools="$ANDROID_HOME/build-tools/36.1.0"
-mkdir -p build/release
-"$tools/zipalign" -P 16 -f 4 androidApp/build/outputs/apk/release/androidApp-release-unsigned.apk build/release/aligned.apk
-"$tools/apksigner" sign --ks "$BRANCHWORLD_LOCAL_KEYSTORE" --ks-key-alias branchworld-local \
-  --out build/release/BranchWorld-android-local.apk build/release/aligned.apk
-"$tools/apksigner" verify --verbose build/release/BranchWorld-android-local.apk
-adb install build/release/BranchWorld-android-local.apk
-```
-
-### Play
-
-**Create.** On the title choose **New world**. Pick an island (The Fading Grove, Cairnwater or Heron Reach) or type or roll a seed, choose **Empty land** (grass, trees and water, no animals) or **Wild** (rabbits, deer and foxes already live there), give it a name and choose **Create world**. **Continue** reopens your last world; **My worlds** lists every world you have made.
-
-**Populate.** The dock holds a palette of wooden pegs: **Look**, **Rabbit**, **Wolf**, **Deer**, **Fox**, **Tree**, **Grass** and **Lift out**. Choose one, then click or tap the island. A peg on the ground shows where it would go: green where it can, madder where it cannot, and a short note says why (open water, unreachable ground, nothing takes root there, the island is full). Animals set down while time is paused appear at once. **Lift out** removes an animal or something you planted.
-
-**Observe.** Use **Play**/**Pause** and **1×**, **2×**, **4×** or **8×** to set the pace. Choose **Look** and tap an animal to open its card: its name, sex and age, what it is doing and why ("Chasing Clover with the pack", "Hiding from Fern"), its food, water, energy and stamina, its pack and its litters. **Follow** keeps the camera with it. The name board counts every species on the island.
-
-**Experiment and discover.** **What happened** lists the moments the world produced (a pack forming, a first kill, an escape, a first litter, a boom, a crash, an animal that starved, a fire) with **Why?** to follow each back to its causes and **Show me** to go there. **Timeline** lets you go back to any moment and start another history beside the first, compare the two, and share a world as a code. Worlds save automatically.
-
-| Action | Android | Desktop |
+| Action | Touch | Mouse and keyboard |
 | --- | --- | --- |
-| Set down or select | Tap the island | Click the island |
-| Orbit | Drag one finger | Drag the primary mouse button, or focus the viewport and use the arrow keys |
-| Pan | Drag two fingers together | Drag the secondary mouse button, Shift-drag, or Shift and the arrow keys |
-| Zoom | Pinch | Scroll, or `+` and `-` in the focused viewport |
+| Set down or select | Tap | Click |
+| Orbit | Drag one finger | Drag, or arrow keys |
+| Pan | Drag two fingers | Right-drag, or Shift and arrow keys |
+| Zoom | Pinch | Scroll, or `+` and `-` |
 
-**Focus island**, or `Home` in the focused Desktop viewport, returns to the overview. Settings hold sound, Reduce Motion and text size; its developer section holds timeline tick tools.
+Pick an animal or plant from the dock, then tap the island. Worlds save automatically. The full guide is in [docs/PLAYING.md](docs/PLAYING.md).
 
-Run the replay fixtures on a connected device with `./gradlew :simulation:connectedAndroidDeviceTest`, and the phone walkthrough with `./gradlew :androidApp:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=id.branchworld.game.LivingSandboxDeviceTest`.
+## Build environment requirements
 
-## Architecture
+* JDK 21
+* Android SDK (API 37)
+* Xcode with the Metal Toolchain, for iOS
+* Git LFS – run `git lfs pull` after cloning
 
-BranchWorld follows a layered architecture: each layer depends only on the layers below it, and the deterministic rules sit in a module of their own so the compiler keeps the interface out of them.
+## Building
 
-```
-androidApp / desktopApp / webApp / iosKit+iosApp   startup, window or page lifetime, platform adapters
-        │                   │
-    :renderer ──────────► :shared            ui ─► data ─► domain ─► platform (ports)
-                            │
-                       :simulation           deterministic rules, saves and render projections
-```
+### Important Gradle tasks
 
-### `:simulation` — the world's rules (no Compose, no platform code)
+* `./gradlew :desktopApp:run` – runs the Desktop app
+* `./gradlew :androidApp:assembleDebug` – builds the Android APK
+* `./gradlew :webApp:jsBrowserDevelopmentRun` – serves the web app locally
+* `./gradlew :webApp:jsBrowserDistribution` – builds the static website
 
-| Package | What lives there |
-|---|---|
-| `core` | `GridCell`, `SplitMix64`, `CanonicalWriter`, `CreatureHeading`, and `RulesVersions.kt`: every rule set and world generator a save can name |
-| `terrain` | Island generation, drainage, navigation |
-| `ecology` | World state and the rules of each system: `environment`, `wildlife`, `range`, `life` (rules v12), `fire`, `settlement`, `chronicle`, `chapters` (the crafted chapters), `legacy` (rules v3–v6 animals) |
-| `command` | `WorldCommand` and its tick-ordered queue: the player's acts, recorded in every history |
-| `engine` | `EcologyEngine`: one step applies commands, growth and fire, then hands over to the rules era that finishes it (`finishLivingStep` for v12, `finishEarlierStep` for v3–v11) |
-| `timeline` | Branches, replay, seeking and history browsing |
-| `save` | Save codecs (schemas 1–10) and shareable world codes |
-| `projection` | Read-only poses the renderer and interface draw: `WorldRenderProjection`, `LivingEchoProjection`, `WorldCamera`, `WorldPointer` |
-| `runtime` | `WorldClock`, the coroutine that ticks a world at its chosen speed |
-| `legacy` | Rules v1–v2 (the first walking rabbit) |
+For iOS, open `iosApp/iosApp.xcodeproj` in Xcode and run the `iosApp` scheme.
 
-Living worlds run rules v12 in `ecology/life`. `LifeRules` runs each step over its collaborators:
-- `LifeGround` holds what the animals perceive, plus movement.
-- `LifePlacement` checks the player's hand.
-- `PreyBehaviour`, `PredatorBehaviour` and `EverydayNeeds` decide what each animal does.
+See [docs/BUILDING.md](docs/BUILDING.md) for tests, devices and release builds.
 
-Each creature decides from what it could perceive on the previous tick and draws counter-based random rolls, so the result never depends on processing order. Earlier rule sets stay so that saves made with them keep replaying exactly. Their replay hashes are pinned in the tests, so a refactor that changes any history fails the build.
+## Contributing
 
-### `:shared` — the game around the rules
-
-| Layer | What lives there |
-|---|---|
-| `platform` | Ports each host implements, bundled in `AppServices`: `WorldViewport` (3D view), `WorldSoundPlayer`, `PhotoSaver`, `WorldSaveStore`. Also the shared code the hosts reuse: `KeyedWorldSaveStore` over a tiny `BlobStorage`, the save layout (`island-v3.json`, `worlds/<name>`) and `AmbienceGlide` |
-| `domain` | `IslandSessionKey` (which world), autosave and soundscape policy, `WorldInteraction` (what a tap of the hand does), and `session/`. `IslandLoad.Ready` joins one `WorldSessionCore` with role classes: `WorldPlacement`, `HistoryNavigation`, `BranchComparing`, `ChapterControls` |
-| `data` | `WorldRepository` (open, cache, autosave, import), `ProfileRepository`, `PlayerProfile` |
-| `ui` | `app` (`App`, `AppViewModel`, navigation, layout), `theme`, `components`, `home`, `share`, `world` (HUD, panels, inspector, timeline, comparison, echo, history) and `legacy` (the earlier chapters' screens and HUD) |
-
-`App(services, foreground)` is the whole contract with a host. The world screen keeps its momentary state in `WorldScreenState`, and its side effects (clock, taps, sound) live in `WorldEffects`.
-
-### `:renderer` — the 3D view behind the `WorldViewport` port
-
-Kool draws the world on Desktop (Vulkan), Android (GLES) and the web (WebGL 2). Kool has no iOS backend, so iOS draws with RealityKit. Everything that decides what is drawn is shared Kotlin, and both engines draw the same arrays:
-
-| Source set | What lives there |
-|---|---|
-| `commonMain` (every target, iOS included) | `camera` (`PreviewController`, `PreviewCamera`, `GroundPicking`, `FocusFraming`), `input` (`TouchGestureTracker`), `geometry` (terrain chunks, sea, pines, landscape details, water, reeds, fire, echoes, life shapes as plain arrays), `lighting` (`CoastalLight`), `motion` (`CreatureMotion`, `CreaturePacing`), `assets/gltf` (a glTF reader and `ClipSampler`), `hud` |
-| `koolMain` (jvm, android, js) | `scene`: `DioramaSession` and the Kool meshes and KSL shaders built from the shared geometry; `diagnostics` |
-| `skikoMain` (jvm, js, ios) | `pointerCameraInput`: mouse, wheel, keys and touch through Compose |
-| `iosMain` | `IosDiorama` and `WorldStage`, the interface the Swift RealityKit stage implements, plus `stage/`, which uploads the shared geometry and glTF models and poses every entity each frame |
-
-`DesktopDiorama` (Vulkan into Compose), `AndroidDiorama` (GLES), `WebDiorama` (WebGL 2 beneath a transparent Compose canvas) and `IosDiorama` (RealityKit in a `UIKitView` beneath Compose) each implement `WorldViewport`. The Kool meshes are built from the shared geometry with the exact vertex data they had before. On iOS, `iosApp/iosApp/World/RealityWorldStage.swift` turns the Kotlin data into RealityKit entities, and `WorldShaders.metal` ports the Kool shaders: lighting, haze, sea, rivers, wind, fire. The shaders convert sRGB to Display P3 and flatten RealityKit's tone curve (iOS 27), so the island matches the other platforms.
-
-`:iosKit` builds the `Shared` framework that the Xcode project links. It holds `MainViewController(stage:)` and the iOS adapters:
-- `IosWorldSaveStore` keeps saves in Application Support in the shared layout.
-- `IosWorldSounds` plays the cues and the layered soundscape with `AVAudioPlayer` in the ambient audio category, so it mixes with the player's music and follows the silent switch.
-- `IosPhotos` adds photos to the photo library. It asks only for add-only access (`NSPhotoLibraryAddUsageDescription`) and offers the share sheet afterwards.
-
-### Where new code goes
-
-| Change | Where it goes |
-|---|---|
-| A new rule | Its system's package in `:simulation`, behind a new entry in `core/RulesVersions.kt` |
-| A new player act | A `WorldCommand` with an explicit `@SerialName` |
-| What the interface does with a world | `domain/session` |
-| Storage, sound or photos for a platform | A new adapter for an existing port |
-| A screen | Its feature folder under `ui` |
-| Something new in the 3D world | Its shape in `renderer/commonMain/geometry`, then a Kool mesh in `koolMain/scene` and a stage slot in `iosMain/stage` (plus a shader in `WorldShaders.metal` when it needs one) |
-
-## Source asset inventory
-
-The eight downloaded packs live under `assets/`. The formats and animation entries below were inspected in the local files. The intended uses are candidates for later integration.
-
-| Pack | Inspected runtime candidates and alternatives | Animation and intended use |
-| --- | --- | --- |
-| KayKit Forest (`environment/kaykit-forest`) | 105 glTF models with BIN and PNG dependencies. FBX and OBJ/MTL variants. | Static trees, rocks, and vegetation for the diorama and island. |
-| Kenney Nature (`environment/kenney-nature`) | 329 GLB models. FBX, OBJ/MTL, DAE, STL, and PNG previews. | Static rocks, ground props, and vegetation for the diorama and terrain. |
-| Kenney Cube Pets (`animals/kenney-cube-pets`) | 24 GLB models plus FBX and OBJ/MTL. | Runtime rabbit, deer, fox and wolf use the CC0 models and their idle, walk, run and eat clips; the wolf is the dog model with a grey coat applied in the renderer. |
-| Vuena Pets (`animals/vuena-pets`) | Three GLB and FBX models with PNG textures. | Skinned cat, fox, and owl with embedded clips including idle, walk, eat, and sleep. Candidates for additional wildlife. |
-| KayKit Medieval (`buildings/kaykit-medieval`) | 221 glTF/BIN models plus FBX, OBJ/MTL, and PNG textures. | Static buildings and props; candidates for placeable structures. |
-| KayKit Adventurers (`characters/kaykit-adventurers`) | Six skinned character GLBs, two animation GLBs, and glTF/BIN, FBX, OBJ/MTL, and PNG assets. | Separate Rig Medium general and locomotion clips. Candidates for future placeable people. |
-| KayKit Character Animations (`characters/kaykit-character-animations`) | 14 GLB and 14 FBX animation files plus two mannequin variants in each format. | Separate Rig Medium and Rig Large motion clips. Candidate motion library for compatible characters. |
-| Kenney Interface Sounds (`audio/kenney-interface-sounds`) | 100 OGG audio files. | Six clips are bundled as small mono WAVs: fork and save feedback, plus `select_002`, `confirmation_002`, `back_002` and `open_002` for the menus (converted with ffmpeg to 22.05 kHz mono). |
-| Fredoka and Nunito (`assets/fonts`) | Static TTF instances from Google Fonts, SIL Open Font License 1.1 (`Fredoka-OFL.txt`, `Nunito-OFL.txt`). | Fredoka Medium, SemiBold and Bold for titles and controls and Nunito Medium, Bold and ExtraBold for interface text, bundled in `shared/src/commonMain/composeResources/font`. |
-
-The runtime tree set uses Kenney Nature’s `tree_pineRoundA`, `tree_pineRoundB`, and `tree_pineTallA_detailed`, with in-engine matte materials and normalized ground pivots. The original BranchWorld surf, wind, rain, and bird layers can be regenerated with `python3 assets/audio/branchworld/generate_coast.py`. World Sounds controls the ambience and interaction cues. Reduce Motion holds decorative effects and camera transitions while keeping weather and lighting visible.
-
-Keep the original packs in `assets/`. Import only the models, textures, and clips verified for runtime use on every platform. iOS reads the same `diorama/` folder through the shared glTF reader.
+* Read [AGENTS.md](AGENTS.md) and [PLAN.md](PLAN.md) first.
+* Keep the rules deterministic so that every saved world replays exactly.
+* See [where new code goes](docs/ARCHITECTURE.md#where-new-code-goes).
