@@ -1,6 +1,8 @@
 package id.branchworld.web.sound
 
 import id.branchworld.game.platform.sound.AmbienceLayer
+import id.branchworld.game.platform.sound.MusicGlide
+import id.branchworld.game.platform.sound.MusicTrack
 import id.branchworld.game.platform.sound.WorldAmbience
 import id.branchworld.game.platform.sound.WorldSound
 import id.branchworld.game.platform.sound.WorldSoundPlayer
@@ -27,10 +29,19 @@ internal class WebWorldSounds : WorldSoundPlayer {
     private val loops = mutableMapOf<AmbienceLayer, Loop>()
     private val unavailable = mutableSetOf<AmbienceLayer>()
     private var mix = WorldAmbience.Silent
+    private var piece: Piece? = null
+    private var duck = 1f
+    private var waitingForPlayer: Piece? = null
 
     init {
         if (context != null) {
-            val unlock: (Event) -> Unit = { if (context.state == "suspended") context.resume() }
+            val unlock: (Event) -> Unit = {
+                if (context.state == "suspended") context.resume()
+                waitingForPlayer?.let { waiting ->
+                    waitingForPlayer = null
+                    if (waiting === piece) start(waiting)
+                }
+            }
             for (type in listOf("pointerdown", "keydown", "touchend")) document.addEventListener(type, unlock)
         }
     }
@@ -54,12 +65,83 @@ internal class WebWorldSounds : WorldSoundPlayer {
         this.mix = mix
         scope.launch {
             for (layer in AmbienceLayer.entries) {
-                val volume = mix.volume(layer)
+                val volume = mix.volume(layer) * duck
                 val loop = loops[layer] ?: if (volume > 0f && layer !in unavailable) start(layer) else null
                 // The same glide as the desktop mixer, which moves 17% of the way every 42 ms.
                 loop?.gain?.gain?.setTargetAtTime(volume, context.currentTime, GlideSeconds)
             }
         }
+    }
+
+    override fun duckAmbience(level: Float) {
+        if (context == null || duck == level) return
+        duck = level
+        console.log("BranchWorldSound Ambience level $level")
+        for ((layer, loop) in loops) loop.gain.gain.setTargetAtTime(mix.volume(layer) * duck, context.currentTime, GlideSeconds)
+    }
+
+    /**
+     * Music streams through a media element routed into WebAudio, so a piece is never decoded whole into memory and
+     * its gain fades in every browser, Safari included.
+     */
+    override fun playMusic(track: MusicTrack?, ended: () -> Unit) {
+        if (context == null) return
+        piece?.let(::leave)
+        piece = null
+        waitingForPlayer = null
+        if (track == null) return
+        try {
+            val element: dynamic = js("new Audio()")
+            element.preload = "auto"
+            element.src = track.assetUri()
+            val source = context.createMediaElementSource(element)
+            val gain = context.createGain()
+            gain.gain.value = 0
+            source.connect(gain)
+            gain.connect(context.destination)
+            val next = Piece(track, element, gain, ended)
+            element.onended = {
+                if (piece === next) {
+                    piece = null
+                    console.log("BranchWorldSound Music ${track.name} ended")
+                    ended()
+                }
+            }
+            element.onerror = {
+                if (piece === next) {
+                    piece = null
+                    console.warn("BranchWorld could not play music ${track.name}")
+                    ended()
+                }
+            }
+            piece = next
+            start(next)
+        } catch (error: Throwable) {
+            console.warn("BranchWorld could not play music ${track.name}: ${error.message}")
+            ended()
+        }
+    }
+
+    private fun start(next: Piece) {
+        val now = context.currentTime
+        next.gain.gain.setValueAtTime(0, now)
+        next.gain.gain.linearRampToValueAtTime(MusicGlide.Volume, now + MusicGlide.FadeInMillis / 1000.0)
+        val playing = next.element.play()
+        (playing as? Promise<dynamic>)?.then({ _: dynamic -> console.log("BranchWorldSound Music ${next.track.name} started") },
+            { _: dynamic -> waitingForPlayer = next }) // Autoplay waits for the first tap or key press.
+    }
+
+    private fun leave(gone: Piece) {
+        val now = context.currentTime
+        gone.gain.gain.cancelScheduledValues(now)
+        gone.gain.gain.setValueAtTime(gone.gain.gain.value, now)
+        gone.gain.gain.linearRampToValueAtTime(0, now + MusicGlide.FadeOutMillis / 1000.0)
+        gone.element.onended = null
+        window.setTimeout({
+            gone.element.pause()
+            gone.gain.disconnect()
+            console.log("BranchWorldSound Music ${gone.track.name} faded")
+        }, MusicGlide.FadeOutMillis.toInt())
     }
 
     private suspend fun start(layer: AmbienceLayer): Loop? = try {
@@ -97,6 +179,8 @@ internal class WebWorldSounds : WorldSoundPlayer {
     }
 
     private class Loop(val source: dynamic, val gain: dynamic)
+
+    private class Piece(val track: MusicTrack, val element: dynamic, val gain: dynamic, val ended: () -> Unit)
 
     private companion object {
         const val GlideSeconds = 0.23

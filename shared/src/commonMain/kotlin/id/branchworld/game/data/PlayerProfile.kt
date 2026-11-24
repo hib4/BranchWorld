@@ -16,6 +16,7 @@ private const val LivingRules = 12
 internal data class GameSettings(
     val worldSounds: Boolean = true,
     val interfaceSounds: Boolean = true,
+    val music: Boolean = true,
     val reducedMotion: Boolean = false,
     /** Text scale in percent: 100, 115 or 130. */
     val textScale: Int = 100,

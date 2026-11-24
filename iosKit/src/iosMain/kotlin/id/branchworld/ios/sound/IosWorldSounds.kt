@@ -4,6 +4,8 @@ package id.branchworld.ios.sound
 
 import id.branchworld.game.platform.sound.AmbienceGlide
 import id.branchworld.game.platform.sound.AmbienceLayer
+import id.branchworld.game.platform.sound.MusicGlide
+import id.branchworld.game.platform.sound.MusicTrack
 import id.branchworld.game.platform.sound.WorldAmbience
 import id.branchworld.game.platform.sound.WorldSound
 import id.branchworld.game.platform.sound.WorldSoundPlayer
@@ -15,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import platform.AVFAudio.AVAudioPlayer
+import platform.AVFAudio.AVAudioPlayerDelegateProtocol
 import platform.AVFAudio.AVAudioSession
 import platform.AVFAudio.AVAudioSessionCategoryAmbient
 import platform.AVFAudio.AVAudioSessionInterruptionNotification
@@ -25,6 +28,7 @@ import platform.Foundation.NSNotificationCenter
 import platform.Foundation.NSNumber
 import platform.Foundation.NSOperationQueue
 import platform.Foundation.NSURL
+import platform.darwin.NSObject
 
 /**
  * The world's cues and soundscape on iOS with `AVAudioPlayer`, all on the main thread. The ambient audio category
@@ -38,6 +42,8 @@ internal class IosWorldSounds : WorldSoundPlayer {
     private val unavailable = mutableSetOf<Any>()
     private var mix = WorldAmbience.Silent
     private var fading: Job? = null
+    private var piece: Piece? = null
+    private var duck = 1f
 
     init {
         val session = AVAudioSession.sharedInstance()
@@ -77,11 +83,56 @@ internal class IosWorldSounds : WorldSoundPlayer {
         }
     }
 
+    override fun duckAmbience(level: Float) {
+        scope.launch {
+            if (duck == level) return@launch
+            duck = level
+            println("BranchWorldSound Ambience level $level")
+            if (mix != WorldAmbience.Silent) {
+                fading?.cancel()
+                fading = launch { glide() }
+            }
+        }
+    }
+
+    override fun playMusic(track: MusicTrack?, ended: () -> Unit) {
+        scope.launch {
+            piece?.let { gone ->
+                gone.player.delegate = null
+                gone.player.setVolume(0f, fadeDuration = MusicGlide.FadeOutMillis / 1000.0)
+                launch {
+                    delay(MusicGlide.FadeOutMillis)
+                    gone.player.stop()
+                    println("BranchWorldSound Music ${gone.track.name} faded")
+                }
+            }
+            piece = null
+            if (track == null) return@launch
+            val player = open(track.assetUri(), track) ?: return@launch ended()
+            lateinit var next: Piece
+            val finished = Finished {
+                if (piece === next) {
+                    piece = null
+                    println("BranchWorldSound Music ${track.name} ended")
+                    ended()
+                }
+            }
+            next = Piece(track, player, finished)
+            player.delegate = finished
+            player.volume = 0f
+            if (player.play()) {
+                player.setVolume(MusicGlide.Volume, fadeDuration = MusicGlide.FadeInMillis / 1000.0)
+                piece = next
+                println("BranchWorldSound Music ${track.name} started")
+            } else ended()
+        }
+    }
+
     private suspend fun glide() {
         while (true) {
             var moving = false
             for (layer in AmbienceLayer.entries) {
-                val target = mix.volume(layer)
+                val target = mix.volume(layer) * duck
                 if (target > 0f && layer !in loops) {
                     open(layer.assetUri(), layer)?.let { player ->
                         player.numberOfLoops = -1
@@ -117,4 +168,11 @@ internal class IosWorldSounds : WorldSoundPlayer {
     }
 
     private class Loop(val player: AVAudioPlayer, var volume: Float = 0f)
+
+    /** A piece of music; holds its delegate, which the player keeps only weakly. */
+    private class Piece(val track: MusicTrack, val player: AVAudioPlayer, val finished: Finished)
+
+    private class Finished(private val onEnd: () -> Unit) : NSObject(), AVAudioPlayerDelegateProtocol {
+        override fun audioPlayerDidFinishPlaying(player: AVAudioPlayer, successfully: Boolean) = onEnd()
+    }
 }

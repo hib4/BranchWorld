@@ -119,6 +119,8 @@ internal fun SettingsSheet(
             Text(stringResource(Res.string.settings_sound), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
             if (worldSounds) WoodSwitchRow(stringResource(Res.string.world_sounds), stringResource(Res.string.settings_world_sounds_detail),
                 settings.worldSounds) { onChange(settings.copy(worldSounds = it)) }
+            if (worldSounds) WoodSwitchRow(stringResource(Res.string.settings_music), stringResource(Res.string.settings_music_detail),
+                settings.music) { onChange(settings.copy(music = it)) }
             WoodSwitchRow(stringResource(Res.string.settings_ui_sounds), stringResource(Res.string.settings_ui_sounds_detail),
                 settings.interfaceSounds) { onChange(settings.copy(interfaceSounds = it)) }
             Text(stringResource(Res.string.settings_display), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
@@ -138,6 +140,8 @@ internal fun SettingsSheet(
             WoodSwitchRow(stringResource(Res.string.shape_tick_tools), null, settings.tickTools) { onChange(settings.copy(tickTools = it)) }
             WoodSwitchRow(stringResource(Res.string.settings_earlier_stories), stringResource(Res.string.settings_earlier_stories_detail),
                 settings.earlierStories) { onChange(settings.copy(earlierStories = it)) }
+            Text(stringResource(Res.string.settings_credits), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(Res.string.credits_music), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
             Text(stringResource(Res.string.settings_saved), style = MaterialTheme.typography.bodySmall, color = Wood.WalnutSoft)
         }
     }

@@ -17,8 +17,10 @@ kotlinx-coroutines = "1.11.0"
 kotlinx-serialization = "1.13.0"
 material3 = "1.12.0-alpha03"
 kool = "0.19.0"
+javamp3 = "1.0.1"
 
 [libraries]
+javamp3 = { module = "fr.delthas:javamp3", version.ref = "javamp3" }
 kool-core = { module = "de.fabmax.kool:kool-core", version.ref = "kool" }
 kotlinx-coroutinesCore = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutinesTest = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }

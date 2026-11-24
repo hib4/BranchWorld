@@ -466,6 +466,10 @@
     <string name="settings_world_sounds_detail">Wind, water, birds and rain around the island</string>
     <string name="settings_ui_sounds">Interface sounds</string>
     <string name="settings_ui_sounds_detail">Soft clicks when you choose</string>
+    <string name="settings_music">Music</string>
+    <string name="settings_music_detail">Quiet piano now and then, between the sounds of the island</string>
+    <string name="settings_credits">Credits</string>
+    <string name="credits_music">Music: Plains2, Village3 and MysticalForest1 by Tom Feldmann (tomfeldmann.itch.io), from the Free Wild Music Pack, licensed CC BY 4.0 (creativecommons.org/licenses/by/4.0). Converted to MP3, faded and balanced in loudness.</string>
     <string name="settings_display">Display and motion</string>
     <string name="settings_motion_detail">Calmer camera moves and held animal poses</string>
     <string name="settings_text">Text size</string>

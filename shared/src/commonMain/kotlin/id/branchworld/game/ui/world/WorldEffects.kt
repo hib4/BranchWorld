@@ -3,11 +3,15 @@ package id.branchworld.game.ui.world
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import id.branchworld.game.domain.HandResult
+import id.branchworld.game.domain.MusicPolicy
+import id.branchworld.game.domain.playMusic
 import id.branchworld.game.domain.session.ComparisonView
 import id.branchworld.game.domain.session.IslandLoad
 import id.branchworld.game.domain.session.InterventionFeedback
@@ -23,6 +27,7 @@ import id.branchworld.simulation.ecology.chapters.Chapter
 import id.branchworld.simulation.projection.WorldCamera
 import id.branchworld.simulation.projection.WorldRenderProjection
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /** Sound and attention for an open world. */
 internal class WorldSoundState(
@@ -31,6 +36,8 @@ internal class WorldSoundState(
     val enabled: Boolean,
     /** The window is in front and the app is running, so the world may be heard. */
     val active: Boolean,
+    /** The player has music on. */
+    val music: Boolean = false,
 ) {
     fun play(sound: WorldSound) {
         if (enabled) sounds?.play(sound)
@@ -104,6 +111,15 @@ internal fun WorldEffects(
             dryStorm = !fire?.storm.isNullOrEmpty(), burning = !fire?.burning.isNullOrEmpty())
         LaunchedEffect(mix) { sink.setAmbience(mix) }
         DisposableEffect(Unit) { onDispose { sink.setAmbience(WorldAmbience.Silent) } }
+        // Music follows the same weather as the soundscape, even when the soundscape itself is switched off.
+        val weather = worldAmbience(enabled = true, active = true, pose?.climate, calledRain = shower != null,
+            dryStorm = !fire?.storm.isNullOrEmpty(), burning = !fire?.burning.isNullOrEmpty())
+        val mood = MusicPolicy.mood(isWorld, weather)
+        val moods = remember { MutableStateFlow(mood) }
+        SideEffect { moods.value = mood }
+        LaunchedEffect(sounds, sound.music && sound.active, isWorld) {
+            if (sound.music && sound.active) playMusic(sounds, isWorld, moods)
+        }
     }
     LaunchedEffect(clock, lifecycle, isWorld, foreground, playbackState) {
         if (clock != null && isWorld && foreground) {

@@ -19,6 +19,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import id.branchworld.game.platform.AppServices
+import id.branchworld.game.platform.sound.MusicTrack
 import id.branchworld.game.platform.sound.WorldAmbience
 import id.branchworld.game.platform.sound.WorldSound
 import id.branchworld.game.platform.sound.WorldSoundPlayer
@@ -218,12 +219,16 @@ class DesktopEcologyUiTest {
         }
         var mix = WorldAmbience.Silent
         var request = WorldCamera()
+        var musicStopped = 0
         setContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 val heard: (WorldAmbience) -> Unit = { mix = it }
                 val sounds = object : WorldSoundPlayer {
                     override fun play(sound: WorldSound) {}
                     override fun setAmbience(mix: WorldAmbience) = heard(mix)
+                    override fun playMusic(track: MusicTrack?, ended: () -> Unit) {
+                        if (track == null) musicStopped++
+                    }
                 }
                 App(AppServices(viewport = worldViewport(present = { request = it }) { _, _ -> }, sounds = sounds))
             }
@@ -236,6 +241,12 @@ class DesktopEcologyUiTest {
         waitUntil { mix == WorldAmbience.Silent }
         onNodeWithText("World sounds").performClick()
         waitUntil { mix == WorldAmbience.Sunlit }
+        // Music has its own switch, and the music's CC BY credit is in Settings.
+        onNodeWithText("Music").performScrollTo().performClick()
+        waitUntil { musicStopped > 0 }
+        onNodeWithText("Music").performScrollTo().performClick()
+        onNodeWithText("Credits").performScrollTo()
+        onNodeWithText("Tom Feldmann", substring = true).assertExists()
         runOnIdle { owner.lifecycle.currentState = Lifecycle.State.STARTED }
         waitUntil { mix == WorldAmbience.Silent }
         runOnIdle { owner.lifecycle.currentState = Lifecycle.State.RESUMED }

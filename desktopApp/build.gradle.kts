@@ -13,6 +13,8 @@ dependencies {
 
     implementation(compose.desktop.currentOs)
     implementation(libs.kotlinx.coroutinesSwing)
+    // Java Sound reads only PCM; this MIT-licensed pure-Java decoder plays the MP3 music.
+    implementation(libs.javamp3)
 
     implementation(libs.compose.uiToolingPreview)
     testImplementation(libs.kotlin.testJunit)

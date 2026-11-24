@@ -132,7 +132,7 @@ fun App(services: AppServices = AppServices(), foreground: Boolean = true) {
 
     val playbackState = if (shell.playInUnfocusedWindow) Lifecycle.State.STARTED else Lifecycle.State.RESUMED
     val lifecycleState by lifecycle.currentStateAsState()
-    val sound = WorldSoundState(sounds, settings.worldSounds, foreground && lifecycleState.isAtLeast(playbackState))
+    val sound = WorldSoundState(sounds, settings.worldSounds, foreground && lifecycleState.isAtLeast(playbackState), settings.music)
     val messages = HandMessages.current()
     WorldEffects(session, ui, isWorld, pose, comparison, interventions, sound, lifecycle, foreground, playbackState,
         stillShowing = { state.route == ShellRoute.World && state.island == islandKey }, messages,

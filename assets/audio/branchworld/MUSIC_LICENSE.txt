@@ -1,0 +1,19 @@
+Free Wild Music Pack
+by Tom Feldmann
+Source: https://tomfeldmann.itch.io/free-wild-music-pack
+Retrieved: 2026-11-23
+
+License: Creative Commons Attribution 4.0 International (CC BY 4.0)
+https://creativecommons.org/licenses/by/4.0/
+The pack page states: "License: CC-BY-4, full commercial use, but credit is required."
+The pack page also asks, as its condition of use: "please rate this asset pack" (done on itch.io by the
+project owner when downloading).
+
+Used in BranchWorld: Plains2, Village3 and MysticalForest1.
+Changes: converted to 112 kbps stereo MP3, loudness balanced to about -20 LUFS, and given 2-second fades at
+each end (assets/audio/branchworld/convert_music.sh). The original WAVs stay in this local folder, unchanged and
+out of git like the other downloaded packs; the converted MP3s ship in shared/src/commonMain/composeResources/files/music/.
+
+Credit shown in the game (Settings > Credits) and in docs/ASSETS.md:
+Music: Plains2, Village3 and MysticalForest1 by Tom Feldmann (tomfeldmann.itch.io), from the Free Wild Music
+Pack, licensed CC BY 4.0 (creativecommons.org/licenses/by/4.0). Converted to MP3, faded and balanced in loudness.

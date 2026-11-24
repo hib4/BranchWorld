@@ -2,6 +2,7 @@ package id.branchworld.desktop.sound
 
 import id.branchworld.game.platform.sound.AmbienceGlide
 import id.branchworld.game.platform.sound.AmbienceLayer
+import id.branchworld.game.platform.sound.MusicTrack
 import id.branchworld.game.platform.sound.WorldAmbience
 import id.branchworld.game.platform.sound.WorldSound
 import id.branchworld.game.platform.sound.WorldSoundPlayer
@@ -25,6 +26,8 @@ internal class DesktopWorldSounds : WorldSoundPlayer {
     private val unavailable = mutableSetOf<AmbienceLayer>()
     private var mix = WorldAmbience.Silent
     private var update: ScheduledFuture<*>? = null
+    private val music = DesktopMusic()
+    private var duck = 1f
 
     override fun play(sound: WorldSound) {
         if (audio.isShutdown) return
@@ -56,10 +59,25 @@ internal class DesktopWorldSounds : WorldSoundPlayer {
         }
     }
 
+    override fun playMusic(track: MusicTrack?, ended: () -> Unit) = music.play(track, ended)
+
+    override fun duckAmbience(level: Float) {
+        if (audio.isShutdown) return
+        audio.execute {
+            if (duck == level) return@execute
+            duck = level
+            println("BranchWorldSound Ambience level $level")
+            if (mix != WorldAmbience.Silent) {
+                update?.cancel(false)
+                updateLoops()
+            }
+        }
+    }
+
     private fun updateLoops() {
         var moving = false
         for (layer in AmbienceLayer.entries) {
-            val target = mix.volume(layer)
+            val target = mix.volume(layer) * duck
             if (target > 0f && layer !in loops && layer !in unavailable) {
                 try {
                     val clip = openClip(layer.assetUri())
@@ -100,6 +118,7 @@ internal class DesktopWorldSounds : WorldSoundPlayer {
     }
 
     fun close() {
+        music.close()
         if (audio.isShutdown) return
         audio.execute {
             update?.cancel(false)
